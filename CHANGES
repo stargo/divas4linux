@@ -1,0 +1,77 @@
+
+3.1.6-109.75-1
+--------------
+- adapted to new kernels 3.x
+- update driver Divatty.ko
+- scripts need bash
+
+3.1.5-109.75-1
+--------------
+- adapted to new kernel 2.6.34
+
+3.1.4-109.75-1
+--------------
+- updated firmware
+- minor line-interconnect changes
+
+3.1.3-109.50-1
+--------------
+- adapted to new PROC API changes of kernel 2.6.30
+
+3.1.2-109.50-1
+--------------
+- re-activated older cards
+
+3.1.1-109.50-1
+--------------
+- Fixed cross board line interconnect
+- Support for new PCIe cards (PRI, 2PRI, 4PRI)
+- Added TTY driver (ttyds nodes with AT commands)
+
+3.1.0-109.42-1
+--------------
+- Complete update to new Dialogic 9.0 package
+- removed support for kernel 2.4.x
+- removed support for older cards
+
+3.0.11-107.884-1
+----------------
+- Adaptions for kernels until 2.6.28
+
+3.0.10-107.884-1
+----------------
+- Adaptions for kernels 2.6.22
+- Support for new PCIe cards.
+- Fixed /proc path.
+- Minor feature fixes.
+- Firmware update.
+
+3.0.9-107.775-1
+---------------
+- fixed install of non-existent kernelcapi modules with kernel 2.6
+- firmware update
+- kernel 2.4 driver update
+- copyright/vendor changes
+
+3.0.8-107.755-1
+---------------
+- firmware update
+- divactrl capi-management debug
+- kernel 2.6.20 adaptions
+- copyright/vendor changes 
+
+3.0.7-107.725-1
+---------------
+- Removed warning on card startup about missing index.html
+
+3.0.6-107.725-1
+---------------
+- Adaptions for kernel 2.6.19
+- Newest available CAPI common code
+- New firmware to fix 4BRI Rev. 1 startup
+- One or more ports of 4BRI Rev. 2 adapter can be used for 1TR6 in the time other ports are used with other protocols.
+  * Configuration automatically uses V.14 protocol code in this case.
+    Please note that use of V.14 protocol code introduces following limitation:
+    + Cross board line interconnect is not compatible with V.15 protocol code or newer
+    + Only set of features supported by V.14 protocol code is provided
+

@@ -1,0 +1,1294 @@
+#! /bin/bash
+
+# --------------------------------------------------------------------------
+#  DIVA TRACE WIZARD
+#  Copyright by Dialogic 1993-2008
+# --------------------------------------------------------------------------
+
+kernel_name=$(uname -r)
+kernel_major=$(echo $kernel_name | sed -e "s/\..*$//" -)
+kernel_minor=$(echo $kernel_name | sed -e "s/${kernel_major}\.//" -e "s/\..*$//" -)
+
+
+opendiva=0
+diva_dir="/usr/lib/divas"
+dialog="${diva_dir}/dialog"
+check_diva_device_nodes=0
+monitor_fax_dir=0
+fax_trace_pid=0
+
+if [ $((kernel_minor)) -le $((4)) ]
+then
+diva_proc="/proc/net/isdn/eicon"
+drv_suffix="o"
+else
+diva_proc="/proc/net/eicon"
+drv_suffix="ko"
+check_diva_device_nodes=1
+fi
+
+load_maint_drv="insmod -f ${diva_dir}/diva_mnt.${drv_suffix}"
+
+modinfo ${diva_dir}/diva_mnt.${drv_suffix} 2>/dev/null | grep diva_register_notifier > /dev/null 2>&1
+if [ $(($?)) -eq $((0)) ]
+then
+	load_maint_drv="$load_maint_drv diva_register_notifier=1"
+fi
+
+load_didd_drv="insmod -f ${diva_dir}/divadidd.${drv_suffix}"
+unload_maint_drv="rmmod diva_mnt"
+log_dir="/var/log"
+ditrace="${diva_dir}/divactrl ditrace"
+mlog="${diva_dir}/divactrl mlog"
+tmp="${diva_dir}/trace.tmp"
+dlg="${diva_dir}/trace.dlg"
+hlp="${diva_dir}/trace.hlp"
+trace_bin_file="ditrace"
+strc="${log_dir}/${trace_bin_file}"
+trc="${strc}.bin"
+help=""
+hlp_base="${diva_dir}/help.txt"
+
+extern_execution=0
+extern_profile="s"
+extern_rb_size=16
+extern_trace_filter='*'
+search=""
+sourced=0
+
+mantool="${diva_dir}/divactrl mantool -b -WDog -Exclusive"
+
+if [ ! -f ${hlp_base} ]
+then
+	echo > ${hlp_base}
+fi
+
+exit_message="none"
+unload_maint=0
+backtitle="Diva Trace Assistant Copyright (c) by Dialogic 1993 - 2008"
+trace_length=32
+trace_pid=0
+
+set_help_id()
+{
+	ident="$1"
+	help=""
+
+	sed -ne "/<$ident>/,/<$ident\/>/p" ${hlp_base} | sed -e "/<$ident>/d" -e "/<$ident\/>/d" - > ${hlp}
+	if [ $(($?)) -eq 0 ]
+	then
+		if [ -s ${hlp} ]
+		then
+			help="--helptag ${hlp}"
+		fi
+	fi
+
+}
+set_ss7_debug_trace_mask()
+{
+
+if [ $((sourced)) -eq 0 ]
+then
+sed -ne "/SHELL_CFG_START/,/SHELL_CFG_END/p;" ${diva_dir}/divas_cfg.rc 2>/dev/null | grep CDebugTrace \
+  > Trace.cfg.tmp.$$ 2>/dev/null
+source Trace.cfg.tmp.$$
+rm -f Trace.cfg.tmp.$$
+cat ${diva_dir}/config.xml | awk -f ${diva_dir}/diva.trace.awk > Trace.cfg.tmp.$$
+source Trace.cfg.tmp.$$
+rm -f Trace.cfg.tmp.$$
+sourced=1
+fi
+
+	if [ ! -z $"CDebugTraceSSDD" ]
+	then
+		/usr/lib/divas/divactrl mantool -b -WDog -Exclusive -c $((1021)) -eDebug/DebugStart > /dev/null 2>&1
+		/usr/lib/divas/divactrl mantool -b -WDog -Exclusive -c $((1021)) -wDebug/debug_mask=$(printf "0x%x" $CDebugTraceSSDD) > /dev/null 2>&1
+	fi
+	if [ ! -z $"CDebugTraceDVSCC" ]
+	then
+		/usr/lib/divas/divactrl mantool -b -WDog -Exclusive -c $((1022)) -eDebug/DebugStart > /dev/null 2>&1
+		/usr/lib/divas/divactrl mantool -b -WDog -Exclusive -c $((1022)) -wDebug/debug_mask=$(printf "0x%x" $CDebugTraceDVSCC) > /dev/null 2>&1
+	fi
+}
+
+# -------------------------------------------------------------------
+#  Returns device major as decimal number
+# -------------------------------------------------------------------
+diva_get_device_major()
+{
+  if [ -c "$1" ]
+	then
+		return $((0x$(stat --format "%t" "$1")))
+	fi
+
+	return 0
+}
+
+diva_get_driver_major()
+{
+	if [ -f "/proc/devices" ]
+	then
+		return $(($(cat /proc/devices | grep " *$1 *$" | sed -e "s/^ //g;" -e "s/ .*$//" -)))
+	fi
+
+	return 0
+}
+
+#
+# Check Diva driver device node
+# Parameter 1 - driver name
+# Parameter 2 - device node name
+#
+check_diva_device_node_file()
+{
+	diva_get_driver_major "$1"
+	drv_major=$(($?))
+
+	diva_get_device_major "$2"
+	dev_major=$(($?))
+
+	dev_minor=$(($3))
+
+	if [ $((drv_major)) -le $((0)) ]
+	then
+		exit_message="Failed to locate $1 driver"
+		fatal_exit
+	fi
+
+	if [ $((drv_major)) -ne $((dev_major)) ]
+	then
+		rm -f "$2"
+		mknod "$2" c $((drv_major)) $((dev_minor))
+		if [ $(($?)) -ne 0 ]
+		then
+			exit_message="Failed to create $2 file"
+			fatal_exit
+		fi
+	fi
+}
+
+# -------------------------------------------------------------------
+
+clean_files()
+{
+  rm -f ${diva_dir}/trace.dlg ${diva_dir}/trace.tmp
+
+  if [ $((unload_maint)) -eq 1 ]
+  then
+		idi_nr_list=$(${mantool} -L 2>/dev/null | sed -e "/help/d;" - | sed -e "s/^.*{//" -e "s/,/ /g;" -e "s/}//" - 2>/dev/null)
+		for idi_nr in ${idi_nr_list}
+		do
+			${mantool} -c $((idi_nr)) -eDebug/DebugStop > /dev/null 2>&1
+		done
+		${unload_maint_drv}
+  fi
+}
+
+fatal_exit()
+{
+	if [ $((extern_execution)) -eq 1 ]
+	then
+		echo ${exit_message}
+		exit 2
+	fi
+  $dialog --title "Trace configuration aborted" --backtitle "$backtitle" \
+      --clear --msgbox "$exit_message" 5 70
+
+  setterm -default
+  setterm -clear
+
+  clean_files
+
+  exit 1
+}
+
+ok_exit()
+{
+	if [ $((extern_execution)) -eq 1 ]
+	then
+		echo ${exit_message}
+		exit 0
+	fi
+
+  $dialog --title "Operation success" --backtitle "$backtitle" \
+      --clear --msgbox "$exit_message" 5 70
+
+  setterm -default
+  setterm -clear
+
+  clean_files
+
+  exit 0
+}
+
+detect_trace_running()
+{
+	trace_pid=0
+	running=$(pidof divactrl)
+
+	for cur in ${running}
+	do
+		ls -l /proc/${cur}/fd | grep "/var/log/ditrace\.bin" > /dev/null 2>&1
+		if [ $(($?)) -eq $((0)) ]
+		then
+			trace_pid=$((cur))
+			break
+		fi
+	done
+}
+
+detect_fax_trace_running()
+{
+	if [ -s ${diva_dir}/fax_trace.pid ]
+	then
+    fax_trace_pid=$(cat ${diva_dir}/fax_trace.pid)
+		if [ $((fax_trace_pid)) -gt $((0)) ]
+		then
+			if [ -d /proc/$((fax_trace_pid)) ]
+			then
+				ls -l /proc/$((fax_trace_pid))/fd | grep "${diva_dir}/fax_trace" > /dev/null 2>&1
+				if [ $(($?)) -eq $((0)) ]
+				then
+					return 1
+				fi
+			fi
+		fi
+	fi
+
+  rm -f ${diva_dir}/fax_trace.pid
+
+	return 0
+}
+
+#
+# Save state of management interface of all found
+# MTPX adapters
+#
+create_mtpx_log()
+{
+  cur_mtpx=101
+
+	rm -f ${log_dir}/divamtpx*.log
+	rm -f ${log_dir}/divacapi.log
+	rm -f ${log_dir}/divatty.log
+	rm -f ${log_dir}/divamgnt*.log
+
+	while [ $((cur_mtpx)) -lt $((201)) ]
+	do
+		${mantool} -c $((cur_mtpx)) -r > /dev/null 2>&1
+		if [ $(($?)) -eq $((0)) ]
+		then
+			echo "$(date)" > ${log_dir}/divamtpx$((cur_mtpx)).log
+			${mantool} -c $((cur_mtpx)) -r -Recursive >> ${log_dir}/divamtpx$((cur_mtpx)).log 2>&1
+		fi
+		cur_mtpx=$(($cur_mtpx+1))
+	done
+
+	if [ $(($?)) -eq  0 ]
+	then
+
+		cur_mtpx=1
+		while [ $((cur_mtpx)) -lt $((101)) ]
+		do
+			${mantool} -c $((cur_mtpx)) -r > /dev/null 2>&1
+			if [ $(($?)) -eq $((0)) ]
+			then
+				echo "$(date)" > ${log_dir}/divamgnt$((cur_mtpx)).log
+				${mantool} -c $((cur_mtpx)) -r -Recursive >> ${log_dir}/divamgnt$((cur_mtpx)).log 2>&1
+			fi
+			cur_mtpx=$(($cur_mtpx+1))
+		done
+
+	fi
+
+	${mantool} -c $((1000)) -r > /dev/null 2>&1
+	if [ $(($?)) -eq 0 ]
+	then
+		echo "$(date)" > ${log_dir}/divacapi.log
+		${mantool} -c $((1000)) -r -Recursive >> ${log_dir}/divacapi.log 2>&1
+	fi
+	
+	${mantool} -c $((1001)) -r > /dev/null 2>&1
+	if [ $(($?)) -eq 0 ]
+	then
+		echo "$(date)" > ${log_dir}/divatty.log
+		${mantool} -c $((1001)) -r -Recursive >> ${log_dir}/divatty.log 2>&1
+	fi
+}
+
+# ----------------------------------------------------
+# ENTRY POINT FOR THE EXTERNAL TOOLS
+# ----------------------------------------------------
+if [ $(($#)) -ge 1 ]
+then
+
+	dlg="false"
+	extern_execution=1
+
+	case "$1" in
+		'running') detect_trace_running
+				if [ $((trace_pid)) -ne 0 ]
+				then
+					exit 0
+				else
+					exit 1
+				fi
+			;;
+
+		'notrunning') detect_trace_running
+				if [ $((trace_pid)) -ne 0 ]
+				then
+					set_ss7_debug_trace_mask
+					exit 1
+				else
+					exit 0
+				fi
+			;;
+
+		'stop') extern_profile="U"
+			;;
+
+		'start') if [ $(($#)) -lt 3 ]
+				then
+					exit 1
+				fi
+				# Receives trace profile as second argument
+				extern_profile=$2
+				# Receives trace ring buffer size as third argument
+				extern_rb_size=$(($3))
+				if [ $((extern_rb_size)) -lt 1 ]
+				then
+					exit 1
+				fi
+				if [ $(($#)) -gt 3 ]
+				then
+					if [ $4 = "-search" ]
+					then
+						search="-search"
+					else
+						extern_trace_filter=$4
+					fi
+				fi
+				if [ $(($#)) -gt 4 ]
+				then
+					if [ -a $5 = "-search" ]
+					then
+						search="-search"
+					fi
+				fi
+			;;
+
+		*)
+			exit 1
+			;;
+	esac
+fi
+
+
+# -----------------------------------------------------
+#   Look if trace daemon already running
+# -----------------------------------------------------
+detect_fax_trace_running
+if [ $(($?)) -ne 0 -a $((fax_trace_pid)) -ne 0 ]
+then
+  if [ $((extern_execution)) -eq 0 ]
+ 	then
+ 		msg=""
+ 		msg="$msg\"S\" \"Stop cumulative trace process\" on "
+ 		msg="$msg\"X\" \"Exit without changes\" off "
+ 		set_help_id trace_stop
+ 		msg="$dialog ${help} \
+ 							--title \"Cumulative trace process is active\" --backtitle \"$backtitle\" \
+ 							--clear --radiolist \"Terminate trace process ?\" 10 70 3 $msg"
+ 		echo "$msg 2>${tmp}" > ${dlg}
+ 		sh ${dlg}
+ 		if [ $(($?)) -ne 0 ]
+ 		then
+ 			exit_message="Trace configuration aborted by user"
+ 			fatal_exit
+ 		fi
+ 		msg=$(cat ${tmp})
+ 	else
+ 		msg="S"
+  fi
+
+	if [ "$msg" = "S" ]
+	then
+		kill $((fax_trace_pid))
+		rm -f ${diva_dir}/fax_trace.pid
+		if [ $((extern_execution)) -eq 0 ]
+		then
+			echo "" > ${tmp}
+			echo "Cumulative trace process terminated" >> ${tmp}
+			if [ -f /var/log/diva_trace1.tgz ]
+      then
+				echo "Compressed trace files:" >> ${tmp}
+				ls -1d /var/log/diva_trace*.tgz >> ${tmp}
+				echo "" >> ${tmp}
+				echo "You can use comressed trace files" >> ${tmp}
+				echo "for support requests." >> ${tmp}
+				echo "" >> ${tmp}
+				echo "You can call 'tar -zxvf file.tgz' to" >> ${tmp}
+				echo "extract trace files from archive and" >> ${tmp}
+				echo "'${ditrace} -i ${log_dir}/file.bin'" >> ${tmp}
+				echo "to read and to filter trace messages." >>  ${tmp}
+      else
+				echo "No compressed trace files were found" >> ${tmp}
+				echo "(no events of interest occured)." >> ${tmp}
+      fi
+
+			$dialog --title "Trace process complete" \
+											--backtitle "$backtitle" \
+											--clear --textbox ${tmp} 18 70
+			setterm -default
+			setterm -clear
+			echo -e "Shutdown MAINT driver ...\c"
+			detect_trace_running
+			while [ $((trace_pid)) -ne 0 ]
+			do
+				sleep 1
+				detect_trace_running
+				echo -e ".\c"
+			done
+			setterm -clear
+
+			unload_maint=1
+			clean_files
+		fi
+	fi
+
+	exit 0
+fi
+
+detect_trace_running
+if [ $((trace_pid)) -ne 0 ]
+then
+	compress_file=0
+	unused_input=0
+	if [ $((extern_execution)) -eq 0 ]
+	then
+		msg=""
+		msg="$msg\"S\" \"Stop trace process and compress trace file\" on "
+		msg="$msg\"X\" \"Exit without changes\" off "
+		set_help_id trace_stop
+		msg="$dialog ${help} \
+							--title \"Trace process is already running\" --backtitle \"$backtitle\" \
+							--clear --radiolist \"Terminate trace process ?\" 10 70 3 $msg"
+		echo "$msg 2>${tmp}" > ${dlg}
+		sh ${dlg}
+		if [ $(($?)) -ne 0 ]
+		then
+			exit_message="Trace configuration aborted by user"
+			fatal_exit
+		fi
+		msg=$(cat ${tmp})
+	else
+		msg="S"
+	fi
+
+	case "${msg}" in
+		'S') compress_file=1
+			;;
+		*) exit_message="Trace configuration aborted by user"
+			 fatal_exit
+			;;
+	esac
+#
+# Save MTPX adapter status so trace process can add
+# this information to the end of trace buffer
+#
+	create_mtpx_log 1
+
+	kill ${trace_pid} 2>&1
+	if [ $(($?)) -ne 0 ]
+	then
+		exit_message="Can't stop trace daemon"
+		fatal_exit
+	fi
+  sleep 5
+
+
+	if [ $((compress_file)) -eq 1 ]
+	then
+		rm -f ${trc}.gz
+		rm -f ${trc}.bz2
+		rm -f ${strc}.tar.gz
+
+		if [ $((extern_execution)) -eq 0 ]
+		then
+			$dialog --backtitle "$backtitle" \
+						--infobox "Compress trace file ..." 3 70
+		fi
+
+		hmp_trace_files=""
+		if [ -d "/usr/dialogic/log" ]
+		then
+			rtf_log_files=$(ls /usr/dialogic/log/rtf* 2>/dev/null)
+			if [ ! -z "$rtf_log_files" ]
+			then
+				hmp_trace_files=" $rtf_log_files"
+			fi
+		fi
+		if [ -s "/usr/dialogic/cfg/buildinfo" ]
+		then
+			hmp_trace_files="$hmp_trace_files /usr/dialogic/cfg/buildinfo"
+		fi
+
+		tar -zcf ${strc}.tar.gz -C ${log_dir} ${trace_bin_file}.bin ${hmp_trace_files} > /dev/null 2>&1
+		if [ $(($?)) -ne 0 ]
+		then
+			exit_message="Failed to compress trace files"
+			fatal_exit
+		fi
+		trc="${strc}.tar.gz"
+	fi
+	sync
+	idi_nr_list=$(${mantool} -L 2>/dev/null | sed -e "/help/d;" - | sed -e "s/^.*{//" -e "s/,/ /g;" -e "s/}//" - 2>/dev/null)
+	for idi_nr in ${idi_nr_list}
+	do
+		${mantool} -c $((idi_nr)) -eDebug/DebugStop > /dev/null 2>&1
+	done
+	${unload_maint_drv}
+
+	if [ $((extern_execution)) -eq 1 ]
+	then
+		exit 0
+	fi
+
+	echo "" > ${tmp}
+	echo "Compressed trace file: '${trc}'" >> ${tmp}
+	echo "Binary trace file    : '${log_dir}/${trace_bin_file}.bin'" >> ${tmp}
+	echo "" >> ${tmp}
+	echo "You can use comressed trace file '${trc}'" >> ${tmp}
+	echo "for support requests." >> ${tmp}
+	echo "" >> ${tmp}
+	echo "You can call 'tar -zxvf ${trc}' to" >> ${tmp}
+	echo "extract trace files from archive and" >> ${tmp}
+	echo "'${ditrace} -i ${log_dir}/${trace_bin_file}.bin'" >> ${tmp}
+	echo "to read and to filter trace messages." >>  ${tmp}
+
+	$dialog --title "Trace process complete" \
+					--backtitle "$backtitle" \
+					--clear --textbox ${tmp} 18 70
+	setterm -default
+	setterm -clear
+
+	clean_files
+	exit 0
+fi
+
+# -----------------------------------------------------
+#   Proceed with driver start procedure
+# -----------------------------------------------------
+if [ ! -f ${diva_proc}/divadidd ]
+then
+  if [ $((extern_execution)) -eq 0 ]
+  then
+    $dialog --backtitle "$backtitle" \
+            --infobox "Load DIDD driver ..." 3 70
+  fi
+	${load_didd_drv}
+fi
+if [ $(($?)) -ne 0 ]
+then
+	exit_message="Failed to load DIDD driver"
+	fatal_exit
+fi
+if [ ! -f ${diva_proc}/divadidd ]
+then
+	exit_message="Failed to load DIDD driver"
+	fatal_exit
+fi
+
+sync
+if [ ! -f ${diva_proc}/maint ]
+then
+  if [ $((extern_execution)) -eq 0 ]
+  then
+    $dialog --backtitle "$backtitle" \
+            --infobox "Load MAINT driver ..." 3 70
+  fi
+  ${load_maint_drv} > /dev/null 2>&1
+  if [ $(($?)) -ne 0 ]
+  then
+		exit_message="Failed to load MAINT driver"
+		fatal_exit
+  fi
+fi
+if [ $((check_diva_device_nodes)) -ne $((0)) ]
+then
+	check_diva_device_node_file "DivasMAINT" "/dev/DivasMAINT"  0
+	check_diva_device_node_file "DivasMAINT" "/dev/DivasDBG"    1
+	check_diva_device_node_file "DivasMAINT" "/dev/DivasDBGIFC" 2
+fi
+
+idi_nr_list=$(${mantool} -L 2>/dev/null | sed -e "/help/d;" - | sed -e "s/^.*{//" -e "s/,/ /g;" -e "s/}//" - 2>/dev/null)
+for idi_nr in ${idi_nr_list}
+do
+	${mantool} -c $((idi_nr)) -eDebug/DebugStart > /dev/null 2>&1
+done
+set_ss7_debug_trace_mask
+
+# -----------------------------------------------------------------
+#  NOW COUNT REGISTERED DEVICE DRIVERS
+# -----------------------------------------------------------------
+capi_present=0
+tty_present=0
+adapter_present=0
+softip_present=0
+ss7_isup_present=0
+ss7_mtp3_present=0
+ssdd_present=0
+dvscc_present=0
+
+${ditrace} -l 2>/dev/null > /tmp/ditrace_l
+
+cat /tmp/ditrace_l | grep "ADAPTER" > /dev/null 2>&1
+if [ $(($?)) -eq 0 ]
+then
+	adapter_present=1
+fi
+cat /tmp/ditrace_l | grep "SoftIP" > /dev/null 2>&1
+if [ $(($?)) -eq 0 ]
+then
+	adapter_present=1
+	softip_present=1
+fi
+cat /tmp/ditrace_l | grep "SOFTIP" > /dev/null 2>&1
+if [ $(($?)) -eq 0 ]
+then
+	adapter_present=1
+	softip_present=1
+fi
+cat /tmp/ditrace_l | grep "CAPI" > /dev/null 2>&1
+if [ $(($?)) -eq 0 ]
+then
+	capi_present=1
+fi
+cat /tmp/ditrace_l | grep "TTY" > /dev/null 2>&1
+if [ $(($?)) -eq 0 ]
+then
+	tty_present=1
+fi
+cat /tmp/ditrace_l | grep "SS7ISUPCC" > /dev/null 2>&1
+if [ $(($?)) -eq 0 ]
+then
+	ss7_isup_present=1
+fi
+cat /tmp/ditrace_l | grep "SS7MTP3CMTP2" > /dev/null 2>&1
+if [ $(($?)) -eq 0 ]
+then
+	ss7_mtp3_present=1
+fi
+cat /tmp/ditrace_l | grep "SSDD" > /dev/null 2>&1
+if [ $(($?)) -eq 0 ]
+then
+	ssdd_present=1
+fi
+cat /tmp/ditrace_l | grep "DVSCC" > /dev/null 2>&1
+if [ $(($?)) -eq 0 ]
+then
+	dvscc_present=1
+fi
+
+# ----------------------------------------------------------------
+#   Trace filter selection
+# ----------------------------------------------------------------
+set_trace_filter()
+{
+  trace_filter=${extern_trace_filter}
+
+if [ $((extern_execution)) -eq 0 ]
+then
+  $dialog --clear --title "Trace only specific calls ?" --backtitle "$backtitle" \
+    --yesno "Activate selective trace" 7 70 3>$tmp
+  if [ $(($?)) -eq 0 ]
+	then
+    $dialog --clear --title "Trace single call at the time ?" --backtitle "$backtitle" \
+      --yesno "Please activate this option if requested by Dialogic support" 7 70 3>$tmp
+    if [ $(($?)) -eq 0 ]
+    then
+   	  trace_filter="Csingle"
+  	else
+  		$dialog --clear --title "Please enter CPN or CiPN for selective tracing" \
+  		  --backtitle "$backtitle" \
+  		  --inputbox "To trace all calls please use *" 8 70 "${trace_filter}" 2>${tmp}
+  		if [ $(($?)) -ne 0 ]
+  		then
+  			exit_message="Trace configuration aborted by user"
+  			fatal_exit
+  		fi
+   	 	trace_filter=$(cat ${tmp})
+   	 	if [ -z "${trace_filter}" ]
+   	 	then
+   	 	  trace_filter="*"
+   	 	fi
+  	fi
+	else
+		trace_filter="*"
+	fi
+fi
+
+  ${ditrace} -f "$trace_filter" > /dev/null 2>&1
+}
+
+# ----------------------------------------------------------------
+#   Trace mask selection
+# ----------------------------------------------------------------
+set_debug_trace_mask()
+{
+	key_name="$1"
+	if [ $1 == $"CDebugTraceDVSCC" ]
+	then
+		sed -e "s/^CDebugTraceDVSCC_OWNER=.*/CDebugTraceDVSCC_OWNER=\"1\"/" divas_cfg.rc > divas_cfg.rc.Trace.$$ 2>&1
+		if [ $(($?)) -eq 0 ]
+		then
+			cp -f divas_cfg.rc.Trace.$$ divas_cfg.rc > /dev/null 2>&1
+		fi
+		rm -f divas_cfg.rc.Trace.$$
+	fi
+	if [ $1 == $"CDebugTraceSSDD" ]
+	then
+		sed -e "s/^CDebugTraceSSDD_OWNER=.*/CDebugTraceSSDD_OWNER=\"1\"/" divas_cfg.rc > divas_cfg.rc.Trace.$$ 2>&1
+		if [ $(($?)) -eq 0 ]
+		then
+			cp -f divas_cfg.rc.Trace.$$ divas_cfg.rc > /dev/null 2>&1
+		fi
+		rm -f divas_cfg.rc.Trace.$$
+	fi
+	if [ ! -z "${key_name}" ]
+	then
+		new_key="${key_name}=\"$(printf "0x%x" $2)\""
+		sed -e "s/^${key_name}=.*/${new_key}/" divas_cfg.rc > divas_cfg.rc.Trace.$$ 2>&1
+		if [ $(($?)) -eq 0 ]
+		then
+			cp -f divas_cfg.rc.Trace.$$ divas_cfg.rc > /dev/null 2>&1
+		fi
+		rm -f divas_cfg.rc.Trace.$$
+	fi
+}
+
+custom_driver_level()
+{
+	drivername="$1"
+	driverdesc="$2"
+	eval custom_level="\${${drivername}}"
+	msg=""
+	i=0
+	
+	j=0
+	while [ "${custom_entry_name[$(($j))]}" != "" ]
+	do
+		if [ "${custom_entry_driver[$(($j))]}" == "${drivername}" ]
+		then
+			msg="$msg\"${custom_entry_short[$(($j))]}\" \"${custom_entry_name[$(($j))]}\" "
+			if [ $(($custom_level & custom_entry_value[$(($j))])) -eq $((custom_entry_value[$(($j))])) ]
+			then
+				msg="$msg on "
+			else
+				msg="$msg off "
+			fi
+			i=$(($i+1))
+		fi
+		j=$(($j+1))
+	done
+	
+	j=0
+	while [ "${custom_extraentry_name[$(($j))]}" != "" ]
+	do
+		if [ "${custom_extraentry_driver[$(($j))]}" == "${drivername}" ]
+		then
+			eval extra_level="\${${custom_extraentry_param[$(($j))]}}"
+			msg="$msg\"${custom_extraentry_short[$(($j))]}\" \"${custom_extraentry_name[$(($j))]}\" "
+			if [ $(($extra_level)) -ne 0 ]
+			then
+				msg="$msg on "
+			else
+				msg="$msg off "
+			fi
+			i=$(($i+1))
+		fi
+		j=$(($j+1))
+	done
+	
+	set_help_id capi_trace_levels
+  msg="$dialog ${help} --clear \
+     --title \"${driverdesc} trace level\" --backtitle \"$backtitle\" \
+      --separate-output \
+      --checklist \"Please select trace level\" $((i+7)) 70 $(($i)) $msg"
+
+  echo "$msg 2>${tmp}" > ${dlg}
+  sh ${dlg}
+	if [ $(($?)) -ne 0 ]
+	then
+		return
+	fi
+
+	custom_trace_level=0
+
+	j=0
+	while [ "${custom_entry_name[$(($j))]}" != "" ]
+	do
+		if [ "${custom_entry_driver[$(($j))]}" == "${drivername}" ]
+		then
+			grep "^${custom_entry_short[$(($j))]}$" $tmp > /dev/null 2>&1
+			if [ $(($?)) -eq $((0)) ]
+			then
+				custom_trace_level=$(($custom_trace_level|$((custom_entry_value[$(($j))]))))
+			fi
+		fi
+		j=$(($j+1))
+	done
+	j=0
+	while [ "${custom_extraentry_name[$(($j))]}" != "" ]
+	do
+		if [ "${custom_extraentry_driver[$(($j))]}" == "${drivername}" ]
+		then
+			grep "^${custom_extraentry_short[$(($j))]}$" $tmp > /dev/null 2>&1
+			if [ $(($?)) -eq $((0)) ]
+			then
+				eval "${custom_extraentry_param[$(($j))]}=$((custom_extraentry_value[$(($j))]))"
+			else
+				eval "${custom_extraentry_param[$(($j))]}=$((0))"
+			fi
+		fi
+		j=$(($j+1))
+	done
+	eval "${drivername}=$((custom_trace_level))"
+}
+
+set_custom_driver_trace_levels()
+{
+	continue_custom_driver_trace_level=1
+
+	while [ $((continue_custom_driver_trace_level)) -eq 1 ]
+	do
+		msg=""
+		i=0
+
+		msg="$msg\"S\" \"Start debug/trace\" on "
+		i=$((i+1))
+		
+		j=0
+		k=1
+		while [ "${custom_driver[$(($j))]}" != "" ]
+		do
+			if [[ "${custom_required[$(($j))]}" == "" ]] || \
+			     ( [ "${custom_required[$(($j))]}" != "TTY" -o $((tty_present)) -eq 1 ] && \
+			       [ "${custom_required[$(($j))]}" != "CAPI" -o $((capi_present)) -eq 1 ] && \
+			       [ "${custom_required[$(($j))]}" != "softIP" -o $((softip_present)) -eq 1 ] && \
+			       [ "${custom_required[$(($j))]}" != "ADAPTER" -o $((adapter_present)) -eq 1 ] && \
+			       [ "${custom_required[$(($j))]}" != "SS7_ISUP" -o $((ss7_isup_present)) -eq 1 ] && \
+			       [ "${custom_required[$(($j))]}" != "SS7_MTP3" -o $((ss7_mtp3_present)) -eq 1 ] && \
+			       [ "${custom_required[$(($j))]}" != "SSDD" -o $((ssdd_present)) -eq 1 ] && \
+			       [ "${custom_required[$(($j))]}" != "DVSCC" -o $((dvscc_present)) -eq 1 ] )
+			then
+				msg="$msg\"$((k))\" \"${custom_driver[$(($j))]}\" off "
+				custom_nr_driver[$(($k))]="${custom_name[$(($j))]}"
+				custom_nr_name[$(($k))]="${custom_driver[$(($j))]}"
+				k=$(($k+1))
+				i=$(($i+1))
+			fi
+			j=$(($j+1))
+		done
+
+		set_help_id custom_driver_trace_levels
+		msg="$dialog ${help} \
+						 --title \"Please select driver\" --backtitle \"$backtitle\" \
+						 --clear --radiolist \"Available drivers\" $(($i+7)) 70 $((i)) $msg"
+		echo "$msg 2>${tmp}" > ${dlg}
+		sh ${dlg}
+		if [ $(($?)) -ne 0 ]
+		then
+			exit_message="Trace configuration aborted by user"
+			fatal_exit
+		fi
+		if [ "${custom_nr_driver[$(($(cat $tmp)))]}" != "" ]
+		then
+			custom_driver_level "${custom_nr_driver[$(($(cat $tmp)))]}"  "${custom_nr_name[$(($(cat $tmp)))]}"
+		else
+			return
+		fi
+	done
+}
+
+sourced=1
+# ------------------------------------------------
+# Read custom trace levels
+# ------------------------------------------------
+sed -ne "/SHELL_CFG_START/,/SHELL_CFG_END/p;" ${diva_dir}/divas_cfg.rc 2>/dev/null | grep CDebugTrace \
+  > Trace.cfg.tmp.$$ 2>/dev/null
+source Trace.cfg.tmp.$$
+rm -f Trace.cfg.tmp.$$
+cat ${diva_dir}/config.xml | awk -f ${diva_dir}/diva.trace.awk > Trace.cfg.tmp.$$
+source Trace.cfg.tmp.$$
+rm -f Trace.cfg.tmp.$$
+
+if [ $((extern_execution)) -eq 0 ]
+then
+	# ----------------------------------------------------------------
+	#   Select Debug Profile
+	# ----------------------------------------------------------------
+	msg=""
+	i=1
+
+	msg="$msg\"L\" \"Load MAINT driver and exit\" off "
+	msg="$msg\"U\" \"Unload MAINT driver and exit\" off "
+	i=$((i+2))
+	
+	j=0
+	while [ "${trace_short[$(($j))]}" != "" ]
+	do
+		if [[ "${trace_required[$(($j))]}" == "" ]] || \
+		     ( [ "${trace_required[$(($j))]}" != "TTY" -o $((tty_present)) -eq 1 ] && \
+		       [ "${trace_required[$(($j))]}" != "CAPI" -o $((capi_present)) -eq 1 ] )
+		then
+			msg="$msg\"${trace_short[$(($j))]}\" \"${trace_name[$(($j))]}\" "
+			if [ $(($j)) -eq $((0)) ]
+			then
+				msg="$msg on "
+			else
+				msg="$msg off "
+			fi
+			i=$((i+1))
+		fi
+		j=$(($j+1))
+	done
+
+	msg="$msg\"1\" \"Accumulate protocol traces\" off "
+	msg="$msg\"2\" \"Accumulate modulation traces\" off "
+
+	msg="$msg\"*\" \"Custom trace level\" off "
+	
+	set_help_id trace_profile
+	msg="$dialog ${help} \
+						 --title \"Please select trace profile\" --backtitle \"$backtitle\" \
+						 --clear --radiolist \"Available trace profiles\" $(($i+7)) 70 $((i)) $msg"
+	echo "$msg 2>${tmp}" > ${dlg}
+	sh ${dlg}
+	if [ $(($?)) -ne 0 ]
+	then
+		exit_message="Trace configuration aborted by user"
+		fatal_exit
+	fi
+	trace_profile=$(cat $tmp)
+else
+	trace_profile=${extern_profile}
+fi
+
+case "$trace_profile" in
+	'L') unload_maint=0
+       set_ss7_debug_trace_mask
+       exit_message="MAINT driver successfully loaded"
+			 ok_exit
+       exit 0
+		;;
+	'U') idi_nr_list=$(${mantool} -L 2>/dev/null | sed -e "/help/d;" - | sed -e "s/^.*{//" -e "s/,/ /g;" -e "s/}//" - 2>/dev/null)
+			 for idi_nr in ${idi_nr_list}
+			 do
+				 ${mantool} -c $((idi_nr)) -eDebug/DebugStop > /dev/null 2>&1
+			 done
+			 ${unload_maint_drv}
+       if [ -f ${diva_proc}/maint ]
+			 then
+         exit_message="Failed to unload MAINT driver"
+         fatal_exit
+       fi
+       unload_maint=0
+       exit_message="MAINT driver successfully unloaded"
+			 ok_exit
+			 exit 0
+		;;
+	'1')
+			set_debug_trace_mask "CDebugTraceTTY"    "0xa03"
+			set_debug_trace_mask "CDebugTraceCAPI" "0xa03"
+			set_debug_trace_mask "CDebugTraceXDI"  "0xa03"
+			set_debug_trace_mask "CDebugTraceADAPTER" "0x7ff"
+			monitor_fax_dir=1
+			trace_length=64
+			set_debug_trace_mask "CDebugTraceMTPX"   "0xa03"
+		;;
+
+	'2')
+			set_debug_trace_mask "CDebugTraceTTY"    "0xe03"
+			set_debug_trace_mask "CDebugTraceCAPI" "0xe03"
+			set_debug_trace_mask "CDebugTraceXDI"  "0xe03"
+			set_debug_trace_mask "CDebugTraceADAPTER" "0x7ff"
+			monitor_fax_dir=1
+			trace_length=64
+			set_debug_trace_mask "CDebugTraceMTPX"   "0xe03"
+		;;
+	'*')
+		set_trace_filter
+		if [ $((extern_execution)) -eq 0 ]
+		then
+			set_custom_driver_trace_levels
+			j=0
+			while [ "${custom_driver[$(($j))]}" != "" ]
+			do
+				if [[ "${custom_required[$(($j))]}" == "" ]] || \
+				     ( [ "${custom_required[$(($j))]}" != "TTY" -o $((tty_present)) -eq 1 ] && \
+				       [ "${custom_required[$(($j))]}" != "CAPI" -o $((capi_present)) -eq 1 ] && \
+				       [ "${custom_required[$(($j))]}" != "softIP" -o $((softip_present)) -eq 1 ] && \
+				       [ "${custom_required[$(($j))]}" != "ADAPTER" -o $((adapter_present)) -eq 1 ] && \
+				       [ "${custom_required[$(($j))]}" != "SS7_ISUP" -o $((ss7_isup_present)) -eq 1 ] && \
+				       [ "${custom_required[$(($j))]}" != "SS7_MTP3" -o $((ss7_mtp3_present)) -eq 1 ] && \
+				       [ "${custom_required[$(($j))]}" != "SSDD" -o $((ssdd_present)) -eq 1 ] && \
+				       [ "${custom_required[$(($j))]}" != "DVSCC" -o $((dvscc_present)) -eq 1 ] )
+				then
+					eval custom_level="\${${custom_name[$(($j))]}}"
+					set_debug_trace_mask "${custom_name[$(($j))]}" "${custom_level}"
+				fi
+				j=$(($j+1))
+			done
+			j=0
+			while [ "${custom_extraentry_name[$(($j))]}" != "" ]
+			do
+				eval extra_level="\${${custom_extraentry_param[$(($j))]}}"
+				set_debug_trace_mask "${custom_extraentry_param[$(($j))]}" "${extra_level}"
+				j=$(($j+1))
+			done
+		fi
+			;;
+	*) 	
+		set_trace_filter
+		if [ "${trace_profile}" != "none" ]
+		then
+			mask=0
+			found=0
+			while [ "${mask_short[$((mask))]}" != "" ]
+			do
+				if [ "${mask_short[$((mask))]}" == "$trace_profile" ]
+				then
+					found=1
+					set_debug_trace_mask "${mask_name[$((mask))]}" "${mask_value[$((mask))]}"
+				fi
+				mask=$(($mask+1))
+			done
+			if [ $(($found)) -eq $((0)) -a $((extern_execution)) -eq 1 ]
+			then
+				exit_message="Wrong trace profile: '${trace_profile}'"
+				fatal_exit
+			fi
+		fi
+		;;
+esac
+
+# -------------------------------------------
+#  Store profile
+# -------------------------------------------
+if [ "${trace_profile}" != "none" ]
+then
+	sed -e "s/^CDebugTraceProfile=.*/CDebugTraceProfile=\"${trace_profile}\"/" divas_cfg.rc > divas_cfg.rc.Trace.$$ 2>&1
+	if [ $(($?)) -eq 0 ]
+	then
+		cp -f divas_cfg.rc.Trace.$$ divas_cfg.rc > /dev/null 2>&1
+	fi
+	rm -f divas_cfg.rc.Trace.$$
+fi
+
+# -------------------------------------------
+#  Update configuration
+# -------------------------------------------
+${diva_dir}/Config.dlg 1 > /dev/null 2>&1
+
+# -------------------------------------------
+#  Update debug/trace mask
+# -------------------------------------------
+${diva_dir}/divas_cfg.rc restart -1 > /dev/null 2>&1
+
+if [ "${trace_profile}" == "none" ]
+then
+	exit
+fi
+
+# --------------------------------------------
+#  Create MTPX log files just befor trace
+#  process started
+# --------------------------------------------
+create_mtpx_log 0
+
+# ------------------------------------
+#  Select ring buffer length
+# ------------------------------------
+if [ $((extern_execution)) -eq 0 ]
+then
+	len1=0
+	while [ $((len1)) -eq  0 ]
+	do
+		$dialog --clear --title "Please enter trace ring buffer size in megabytes" \
+			  --backtitle "$backtitle" \
+			  --inputbox "Suggested value: 16" 8 70 ${trace_length} 2>${tmp}
+		if [ $(($?)) -ne 0 ]
+		then
+			exit_message="Trace configuration aborted by user"
+			fatal_exit
+		fi
+		len1=$(cat ${tmp})
+		if [ $((len1)) -lt 4 ]
+		then
+			len1=0
+		fi
+		if [ $((len1)) -gt 500 ]
+		then
+			len1=500
+		fi
+	done
+	trace_length=$((len1))
+else
+	trace_length=$((extern_rb_size))
+fi
+
+if [ $((extern_execution)) -eq 0 ]
+then
+  $dialog --clear --title "Stop trace automatically?" --backtitle "$backtitle" \
+    --yesno "Select Yes to start a search for a unexpected condition or event." 7 70 3>$tmp
+  if [ $(($?)) -eq 0 ]
+  then
+	search="-search"
+  fi
+fi
+
+# -------------------------------------
+#  Start Trace Utility
+# -------------------------------------
+rm -f ${trc}
+if [ -f ${trc} ]
+then
+	exit_message="Can't create trace log file '${trc}'"
+	fatal_exit
+fi
+
+if [ $((monitor_fax_dir)) -eq $((0)) ]
+then
+
+${ditrace} -w $(($trace_length*1024)) -File ${trc} -p -Silent ${search} > /dev/null 2>&1 &
+if [ $(($?)) -ne 0 ]
+then
+	exit_message="Failed to start trace daemon"
+	fatal_exit
+fi
+
+if [ $((extern_execution)) -eq 0 ]
+then
+	$dialog --backtitle "$backtitle" \
+				--infobox "Start trace process ..." 3 70
+else
+	sleep 1
+fi
+
+detect_trace_running
+if [ $((trace_pid)) -eq 0 ]
+then
+	exit_message="Failed to start trace process"
+	fatal_exit
+fi
+
+fi
+
+if [ $((monitor_fax_dir)) -ne $((0)) ]
+then
+#
+# Start monitoring process for Statistics/FAX directory
+#
+
+echo '#! /bin/bash' > ${diva_dir}/fax_trace
+echo ""           >> ${diva_dir}/fax_trace
+echo 'rm -f /var/log/diva_trace*.tgz /var/log/diva_trace*.bin' >> ${diva_dir}/fax_trace
+echo ""           >> ${diva_dir}/fax_trace
+echo "trace_cmd=\"${ditrace} -w $(($trace_length*1024)) -File ${trc} -p -Silent ${search} > /dev/null 2>&1\"" >> ${diva_dir}/fax_trace
+echo 'trace_nr=1' >> ${diva_dir}/fax_trace
+echo ""           >> ${diva_dir}/fax_trace
+echo "trace_file=\"${trc}\"" >> ${diva_dir}/fax_trace
+echo "${ditrace} -w $(($trace_length*1024)) -File ${trc} -p -Silent > /dev/null 2>&1 &" >> ${diva_dir}/fax_trace
+echo 'trace_pid=$(($!))' >> ${diva_dir}/fax_trace
+echo 'trap "kill $((trace_pid)); exit 0" 1 2 15' >> ${diva_dir}/fax_trace
+echo "sleep 5"           >> ${diva_dir}/fax_trace
+echo ""           >> ${diva_dir}/fax_trace
+echo 'get_fax_statistics()' >> ${diva_dir}/fax_trace
+echo '{' >> ${diva_dir}/fax_trace
+echo ""           >> ${diva_dir}/fax_trace
+echo 'adapter_nr=$1' >> ${diva_dir}/fax_trace
+echo 'list=$('"${diva_dir}/divactrl mantool -b -c "'$((adapter_nr)) -rStatistics/FAX | sed -e "/Disc Normal/d;"  -e "/Clear Values/d;" -e "s/^.*= //" -e "s/ //g;" -e "/^$/d;" -)' >> ${diva_dir}/fax_trace
+echo "total=0" >> ${diva_dir}/fax_trace
+echo 'for value in $list' >> ${diva_dir}/fax_trace
+echo 'do' >> ${diva_dir}/fax_trace
+echo '  total=$(($total+$value))' >> ${diva_dir}/fax_trace
+echo 'done' >> ${diva_dir}/fax_trace
+echo ""           >> ${diva_dir}/fax_trace
+echo 'return $((total))' >> ${diva_dir}/fax_trace
+echo '}' >> ${diva_dir}/fax_trace
+echo ""           >> ${diva_dir}/fax_trace
+echo 'get_statistics()' >> ${diva_dir}/fax_trace
+echo '{' >> ${diva_dir}/fax_trace
+echo '  nr=1' >> ${diva_dir}/fax_trace
+echo '	count=0' >> ${diva_dir}/fax_trace
+echo '' >> ${diva_dir}/fax_trace
+echo '  while [ -f '"${diva_proc}"'/adapter$((nr))/info ]' >> ${diva_dir}/fax_trace
+echo '	do' >> ${diva_dir}/fax_trace
+echo '		get_fax_statistics $((nr))' >> ${diva_dir}/fax_trace
+echo '		count=$(($count+$?))' >> ${diva_dir}/fax_trace
+echo '		nr=$(($nr+1))' >> ${diva_dir}/fax_trace
+echo '	done' >> ${diva_dir}/fax_trace
+echo '' >> ${diva_dir}/fax_trace
+echo '	return $((count))' >> ${diva_dir}/fax_trace
+echo '}' >> ${diva_dir}/fax_trace
+echo ""           >> ${diva_dir}/fax_trace
+echo 'get_statistics' >> ${diva_dir}/fax_trace
+echo 'start=$(($?))'  >> ${diva_dir}/fax_trace
+echo 'while [ $((1)) -eq $((1)) ]'  >> ${diva_dir}/fax_trace
+echo 'do'  >> ${diva_dir}/fax_trace
+echo '  get_statistics' >> ${diva_dir}/fax_trace
+echo '  i=$(($?))'  >> ${diva_dir}/fax_trace
+echo '  if [ $((i)) -ne $((start)) ]'  >> ${diva_dir}/fax_trace
+echo '  then'  >> ${diva_dir}/fax_trace
+echo '    sleep 1'  >> ${diva_dir}/fax_trace
+echo '    kill $((trace_pid))'  >> ${diva_dir}/fax_trace
+echo '    wait $((trace_pid))' >> ${diva_dir}/fax_trace
+echo "    mv ${trc} /var/log/diva_trace"'$((trace_nr))'".bin" >> ${diva_dir}/fax_trace
+echo "    tar -zcf /var/log/diva_trace"'$((trace_nr))'".tgz -C /var/log diva_trace"'$((trace_nr))'".bin" >> ${diva_dir}/fax_trace
+echo "    rm -f /var/log/diva_trace"'$((trace_nr))'".bin" >> ${diva_dir}/fax_trace
+echo '    trace_nr=$(($trace_nr+1))' >> ${diva_dir}/fax_trace
+echo "    sleep 1" >> ${diva_dir}/fax_trace
+echo "    ${ditrace} -w $(($trace_length*1024)) -File ${trc} -p -Silent > /dev/null 2>&1 &" >> ${diva_dir}/fax_trace
+echo '    trace_pid=$(($!))' >> ${diva_dir}/fax_trace
+echo '    trap "kill $((trace_pid)); exit 0" 1 2 15' >> ${diva_dir}/fax_trace
+echo "    sleep 5" >> ${diva_dir}/fax_trace
+echo '    get_statistics' >> ${diva_dir}/fax_trace
+echo '    start=$(($?))'  >> ${diva_dir}/fax_trace
+echo '  fi'  >> ${diva_dir}/fax_trace
+echo '  sleep 10'  >> ${diva_dir}/fax_trace
+echo 'done'  >> ${diva_dir}/fax_trace
+echo "" >> ${diva_dir}/fax_trace
+chmod 755 fax_trace
+./fax_trace > /dev/null 2>&1 &
+fax_trace_pid=$!
+echo $fax_trace_pid > ${diva_dir}/fax_trace.pid
+
+fi
+
+if [ $((extern_execution)) -eq 1 ]
+then
+	exit 0
+fi
+
+if [ $((monitor_fax_dir)) -eq $((0)) ]
+then
+echo "Trace file       : '${trc}'" > ${tmp}
+echo "Trace process pid: '$((trace_pid))'" >> ${tmp}
+echo "" >> ${tmp}
+else
+echo "Cumulative trace process running" > ${tmp}
+fi
+echo "Please use 'Trace' to stop trace process and to" >>  ${tmp}
+echo "save trace file." >>  ${tmp}
+
+$dialog --title "Trace process activated" \
+				--backtitle "$backtitle" \
+				--clear --textbox ${tmp} 18 70
+setterm -default
+setterm -clear
+
+clean_files
+exit 0
+

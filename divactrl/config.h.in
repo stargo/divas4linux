@@ -1,0 +1,12 @@
+/* Define if you have the <curses.h> header file.  */
+#undef HAVE_CURSES_H
+
+/* Define if you have the <curses/ncurses.h> header file.  */
+#undef HAVE_CURSES_NCURSES_H
+
+/* Define if you have the <ncurses.h> header file.  */
+#undef HAVE_NCURSES_H
+
+/* Define if you have the <ncurses/curses.h> header file.  */
+#undef HAVE_NCURSES_CURSES_H
+

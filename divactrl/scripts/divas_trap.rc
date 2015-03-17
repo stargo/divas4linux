@@ -1,0 +1,19 @@
+#!/bin/sh
+#
+# This script is stated by divas module if card has trapped.
+# parameters :
+# $1 = "trap"  (reserved for future use)
+# $2 = <card number>
+
+# A core dump of the card's sdram can help
+divactrl ctrl -c $2 -CoreDump -File /tmp/divas_core_$2.txt
+
+
+# Example to restart the trapped card
+# divactrl ctrl -c $2 -ResetCard
+# sleep 1 
+# divactrl load -c $2
+
+# Maybe you want to receive an email when this happens,
+# you can do this here
+

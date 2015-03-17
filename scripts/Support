@@ -1,0 +1,1773 @@
+#! /bin/bash
+
+# --------------------------------------------------------------------------
+#  DIVA SUPPORT WIZARD
+#  Copyright by Dialogic Corporation 1993-2007
+# --------------------------------------------------------------------------
+
+backtitle="Diva Support Assistant Copyright (c) by Dialogic Corp. 1993 - 2007"
+diva_dir="/usr/lib/divas"
+diva_proc="/proc/net/isdn/eicon"
+report="${diva_dir}/report.txt"
+divactrl="${diva_dir}/divactrl"
+dialog="${diva_dir}/dialog"
+setterm="setterm"
+tmp=${diva_dir}/support.tmp
+object_suffix="o"
+check_device_nodes=0
+ksymoops="ksymoops -o ${diva_dir} < "
+
+if [ -f ${diva_dir}/divadidd.ko ]
+then
+object_suffix="ko"
+diva_proc="/proc/net/eicon"
+check_device_nodes=1
+ksymoops="cat"
+fi
+
+i=1
+CardNAME[$((i))]="54"
+CardMEMORY[$((i))]=7000
+CardFPGA[$((i))]=""
+CardIO[$((i))]="0"
+i=$(($i+1))
+CardNAME[$((i))]="56"
+CardMEMORY[$((i))]=7000
+CardFPGA[$((i))]=""
+CardIO[$((i))]="0"
+i=$(($i+1))
+CardNAME[$((i))]="23"
+CardMEMORY[$((i))]=3000
+CardFPGA[$((i))]=""
+CardIO[$((i))]="0"
+i=$(($i+1))
+CardNAME[$((i))]="70"
+CardMEMORY[$((i))]=7000
+CardFPGA[$((i))]="dspri331.bit"
+CardIO[$((i))]="2"
+i=$(($i+1))
+CardNAME[$((i))]="71"
+CardMEMORY[$((i))]=7000
+CardFPGA[$((i))]="dspri331.bit"
+CardIO[$((i))]="2"
+i=$(($i+1))
+CardNAME[$((i))]="72"
+CardMEMORY[$((i))]=7000
+CardFPGA[$((i))]="dspri331.bit"
+CardIO[$((i))]="2"
+i=$(($i+1))
+CardNAME[$((i))]="73"
+CardMEMORY[$((i))]=7000
+CardFPGA[$((i))]="dspri331.bit"
+CardIO[$((i))]="2"
+i=$(($i+1))
+CardNAME[$((i))]="74"
+CardMEMORY[$((i))]=7000
+CardFPGA[$((i))]="dspri331.bit"
+CardIO[$((i))]="2"
+i=$(($i+1))
+CardNAME[$((i))]="75"
+CardMEMORY[$((i))]=7000
+CardFPGA[$((i))]="dspri331.bit"
+CardIO[$((i))]="2"
+i=$(($i+1))
+CardNAME[$((i))]="98"
+CardMEMORY[$((i))]=7000
+CardFPGA[$((i))]="dsprie31.bit"
+CardIO[$((i))]="2"
+i=$(($i+1))
+CardNAME[$((i))]="96"
+CardMEMORY[$((i))]=7000
+CardFPGA[$((i))]="dsprie31.bit"
+CardIO[$((i))]="2"
+i=$(($i+1))
+CardNAME[$((i))]="97"
+CardMEMORY[$((i))]=7000
+CardFPGA[$((i))]="dsprie31.bit"
+CardIO[$((i))]="2"
+i=$(($i+1))
+CardNAME[$((i))]="94"
+CardMEMORY[$((i))]=7000
+CardFPGA[$((i))]="dsprie31.bit"
+CardIO[$((i))]="2"
+i=$(($i+1))
+CardNAME[$((i))]="95"
+CardMEMORY[$((i))]=7000
+CardFPGA[$((i))]="dsprie31.bit"
+CardIO[$((i))]="2"
+i=$(($i+1))
+if [ -s "${diva_dir}/pri4_newreset2.bit" ]
+then
+CardNAME[$((i))]="81"
+CardMEMORY[$((i))]=7000
+CardFPGA[$((i))]="pri4_newreset2.bit"
+CardIO[$((i))]="2"
+i=$(($i+1))
+fi
+CardMEMORY[$((i))]=0
+i=$(($i+1))
+
+
+get_adapter_index()
+{
+	adapter_index=1
+
+	while [ $((${CardMEMORY[$((adapter_index))]})) -gt $((0)) ]
+	do
+		if [ "${CardNAME[$((adapter_index))]}" = "$1" ]
+		then
+			return $((adapter_index))
+		fi
+
+		adapter_index=$(($adapter_index+1))
+	done
+
+	return 0
+}
+
+trace_start_cmd="${diva_dir}/Trace start L 4"
+trace_stop_cmd="${diva_dir}/Trace  stop"
+stop_command="${diva_dir}/Stop"
+ditrace_cmd="${diva_dir}/divactrl ditrace"
+
+need_final_reboot=0
+
+diva_get_device_major()
+{
+  if [ -c "$1" ]
+	then
+		return $((0x$(stat --format "%t" "$1")))
+	fi
+
+	return 0
+}
+
+diva_get_driver_major()
+{
+	if [ -f "/proc/devices" ]
+	then
+		return $(($(cat /proc/devices | grep " *$1 *$" | sed -e "s/^ //g;" -e "s/ .*$//" -)))
+	fi
+
+	return 0
+}
+
+# ------------------------------------------------------------------------------
+#  Sync file system
+# ------------------------------------------------------------------------------
+check_point()
+{
+  sync
+  sync
+  sync
+}
+
+
+report_string()
+{
+	echo "$1" >> ${report} 2>&1
+	check_point
+}
+
+report_command()
+{
+	report_string "+COMMAND START: $1"
+
+	$1 > ${report}.cmd.tmp.1 2>${report}.cmd.tmp.2
+	cmd_ret=$(($?))
+	report_string "++------------ output start -------------------"
+	cat ${report}.cmd.tmp.1 >> ${report} 2>&1
+	report_string "++------------ output end   -------------------"
+	report_string "++------- error output start-------------------"
+	cat ${report}.cmd.tmp.2 >> ${report} 2>&1
+	report_string "++-------- error output end -------------------"
+	if [ $((cmd_ret)) -ne 0 ]
+	then
+		report_string "+COMMAND END: FAILED ERROR $((cmd_ret))"
+	else
+		report_string "+COMMAND END: SUCCESS"
+	fi
+	rm -f ${report}.cmd.tmp.1 ${report}.cmd.tmp.2 > /dev/null 2>&1
+
+	return $((cmd_ret))
+}
+
+check_diva_device_node_file()
+{
+  if [ $((check_device_nodes)) -eq $((0)) ]
+	then
+		return 0
+	fi
+
+	diva_get_driver_major "$1"
+	drv_major=$(($?))
+
+	diva_get_device_major "$2"
+	dev_major=$(($?))
+
+	if [ $((drv_major)) -le $((0)) ]
+	then
+		return 1
+	fi
+
+	if [ $((drv_major)) -ne $((dev_major)) ]
+	then
+		rm -f "$2"
+		mknod "$2" c $((drv_major)) 0
+		if [ $(($?)) -ne 0 ]
+		then
+			return 1
+		fi
+	fi
+
+  return 0
+}
+
+
+# ------------------------------------------------------------
+# VARIABLES USED IF EXECUTED AS EXTERNAL HELPER
+# ------------------------------------------------------------
+bin="${diva_dir}/report.tgz"
+txt="${report}"
+support_profile=0
+
+# ------------------------------------------------------------
+# FUNCTIONS USED IF EXECUTED AS EXTERNAL HELPER
+# ------------------------------------------------------------
+
+captureInformation()
+{
+	rm -rf ${bin} ${txt}
+
+	echo "# ---------------------------------"	>> ${txt} 2>&1
+	echo "# Diva Server Report File"						>> ${txt} 2>&1
+	echo "# Support profile: ${support_profile}" >> ${txt} 2>&1
+	echo "# ---------------------------------"	>> ${txt} 2>&1
+	echo ""                                   	>> ${txt} 2>&1
+
+	echo "# date:"                            	>> ${txt} 2>&1
+	date 																				>> ${txt} 2>&1
+	echo ""                                   	>> ${txt} 2>&1
+
+	echo "# host:"                            	>> ${txt} 2>&1
+	hostname 																		>> ${txt} 2>&1
+	echo ""                                   	>> ${txt} 2>&1
+
+	echo "# release:"                          	>> ${txt} 2>&1
+	ls /etc/*-release  													>> ${txt} 2>&1
+  cat /etc/*-release 													>> ${txt} 2>&1
+	echo ""                                   	>> ${txt} 2>&1
+
+	echo "# id:"																>> ${txt} 2>&1
+	id 																	 				>> ${txt} 2>&1
+	echo ""                                   	>> ${txt} 2>&1
+
+	echo "# uname -r:"                        	>> ${txt} 2>&1
+	uname -r 																		>> ${txt} 2>&1
+	echo ""                                   	>> ${txt} 2>&1
+
+	echo "# uname -a:"                        	>> ${txt} 2>&1
+	uname -r 																		>> ${txt} 2>&1
+	echo ""                                   	>> ${txt} 2>&1
+
+	echo "# cat /proc/version:"               	>> ${txt} 2>&1
+	cat /proc/version 													>> ${txt} 2>&1
+	echo ""                                   	>> ${txt} 2>&1
+
+	echo "# cat /proc/modules:"               	>> ${txt} 2>&1
+	cat /proc/modules 													>> ${txt} 2>&1
+	echo ""                                   	>> ${txt} 2>&1
+
+	echo "# cat /proc/devices:"               	>> ${txt} 2>&1
+	cat /proc/devices 													>> ${txt} 2>&1
+	echo ""                                   	>> ${txt} 2>&1
+
+	echo "# cat /proc/cpuinfo:"               	>> ${txt} 2>&1
+	cat /proc/cpuinfo														>> ${txt} 2>&1
+	echo ""                                   	>> ${txt} 2>&1
+
+	echo "# cat /proc/interrupts:"             	>> ${txt} 2>&1
+	cat /proc/interrupts												>> ${txt} 2>&1
+	echo ""                                   	>> ${txt} 2>&1
+
+	echo "# cat /proc/ioports:"             		>> ${txt} 2>&1
+	cat /proc/ioports														>> ${txt} 2>&1
+	echo ""                                   	>> ${txt} 2>&1
+
+	echo "# cat /proc/iomem:"             			>> ${txt} 2>&1
+	cat /proc/iomem															>> ${txt} 2>&1
+	echo ""                                   	>> ${txt} 2>&1
+
+	echo "# cat /proc/bus/pci/divices:"       	>> ${txt} 2>&1
+	cat /proc/bus/pci/devices										>> ${txt} 2>&1
+	echo ""                                   	>> ${txt} 2>&1
+
+	echo "# cat /proc/pci:"       							>> ${txt} 2>&1
+	cat /proc/pci 															>> ${txt} 2>&1
+	echo ""                                   	>> ${txt} 2>&1
+
+	echo "# lspci -vv:"       									>> ${txt} 2>&1
+	lspci -vv 																	>> ${txt} 2>&1
+	echo ""                                   	>> ${txt} 2>&1
+
+	echo "# lspci -t -vv:"     									>> ${txt} 2>&1
+	lspci -t -vv 																>> ${txt} 2>&1
+	echo ""                                   	>> ${txt} 2>&1
+
+	echo "# dmesg:"        											>> ${txt} 2>&1
+	dmesg 																			>> ${txt} 2>&1
+	echo ""                                   	>> ${txt} 2>&1
+
+	echo "# cat /var/log/boot.msg:"							>> ${txt} 2>&1
+	cat /var/log/boot.msg 											>> ${txt} 2>&1
+	echo ""                                   	>> ${txt} 2>&1
+
+	echo "# cat /var/log/boot.log:"							>> ${txt} 2>&1
+	cat /var/log/boot.log 											>> ${txt} 2>&1
+	echo ""                                   	>> ${txt} 2>&1
+
+	echo "# cat /var/log/boot.omsg:"						>> ${txt} 2>&1
+	cat /var/log/boot.omsg 											>> ${txt} 2>&1
+	echo ""                                   	>> ${txt} 2>&1
+
+	echo "# cat /var/log/warn:"									>> ${txt} 2>&1
+	cat /var/log/warn														>> ${txt} 2>&1
+	echo ""                                   	>> ${txt} 2>&1
+
+	echo "# ls -l /dev/*:" 								>> ${txt} 2>&1
+	ls -l /dev/*  													>> ${txt} 2>&1
+	echo ""                                   	>> ${txt} 2>&1
+
+	echo "# ls -l /dev/capi*:" 									>> ${txt} 2>&1
+	ls -l /dev/capi*  													>> ${txt} 2>&1
+	echo ""                                   	>> ${txt} 2>&1
+
+	echo "# ls -l ${diva_dir}" 									>> ${txt} 2>&1
+	ls -laR ${diva_dir} 												>> ${txt} 2>&1
+	echo ""                                   	>> ${txt} 2>&1
+
+	echo "# rpm -qa | grep divas" 									>> ${txt} 2>&1
+    rpm -qa | grep divas 												>> ${txt} 2>&1
+	echo ""                                   	>> ${txt} 2>&1
+
+	echo "# cat /var/log/diva*.log"							>> ${txt} 2>&1
+	cat /var/log/diva*.log 											>> ${txt} 2>&1
+	echo ""                                   	>> ${txt} 2>&1
+
+	echo "# cat ${diva_dir}/divas_cfg.rc:"			>> ${txt} 2>&1
+	cat ${diva_dir}/divas_cfg.rc 								>> ${txt} 2>&1
+	echo ""                                   	>> ${txt} 2>&1
+
+	echo "# cat ${diva_dir}/divas_cfg.rc:"			>> ${txt} 2>&1
+	cat ${diva_dir}/divas_cfg.rc 								>> ${txt} 2>&1
+	echo ""                                   	>> ${txt} 2>&1
+
+	echo "# ---------------------------------"	>> ${txt}
+	echo "# END OF REPORT"					 						>> ${txt}
+	echo "# ---------------------------------"	>> ${txt}
+}
+
+captureEnvironment()
+{
+	rm -rf ${bin} ${txt}
+
+	captureInformation
+
+	file_list="${diva_dir}/*.${object_suffix} ${diva_dir}/divactrl /boot /var/log/messages \
+						/lib/modules/$(uname -r) /etc/*.conf"
+
+  tar -zcf ${bin} ${txt} ${file_list} > /dev/null 2>&1
+}
+
+debug_procedure_error_exit()
+{
+	echo "SUPPORT PROCEDURE ABORTED" > $tmp
+	echo ""   >> $tmp
+	echo -e $1 >> $tmp
+	echo ""   >> $tmp
+
+	title="Diva Support Assistant"
+	$dialog --title "$title" --backtitle "$backtitle" --clear --textbox $tmp 18 70
+	rm -f ${tmp} ${diva_dir}/support.dlg ${report}
+	$setterm -default > /dev/null 2>&1
+	$setterm -clear > /dev/null 2>&1
+
+	exit 1
+}
+
+debug_procedure()
+{
+	adapter=$(($1))
+
+  echo "ATTENTION: IMPORTANT INFORMATION" > $tmp
+  echo "           PLEASE READ CAREFULLY IN ORDER TO PREVENT" >> $tmp
+  echo "           SEVERE SYSTEM DAMAGE" >> $tmp
+  echo "" >> $tmp
+	echo "This support procedure will stop Diva Server adapter" >> $tmp
+	echo "number $adapter and turn system in debug mode." >> $tmp
+	echo "" >> $tmp
+	echo "Please follow with procedure only if requested by Dialogic" >> $tmp
+	echo "support." >> $tmp
+	echo "" >> $tmp
+	echo "Please ensure that Diva drivers are loaded and running" >> $tmp
+	echo "before you will proceed with the rest of the procedure." >> $tmp
+	echo "" >> $tmp
+	echo "Please note that you can't use 'Start' and 'Stop' commands" >> $tmp
+	echo "or start selected adapter until this procedure is terminated." >> $tmp
+	echo "" >> $tmp
+	echo 'You can terminate debug procedure by system reboot' >> $tmp
+	echo 'or by "rmmod diva_mnt" command.' >> $tmp
+	echo "" >> $tmp
+	echo "" >> $tmp
+	echo "Please note that this procedure will:" >> $tmp
+	echo "- Deactivate and reset Diva Server adapter Nr:$adapter" >> $tmp
+  echo "  Please ensure that you do not plan to use this adapter" >> $tmp
+  echo "  for different purposes." >> $tmp
+	echo "- Advise MAIN debug driver (diva_mnt.${object_suffix}) to store all captured" >> $tmp
+	echo "  debug/trace data to the memory of the selected adapter" >> $tmp
+	echo "  to be able to recover this information after system reboot." >> $tmp
+  echo "- Prepare your system to reboot atomatically in case of system" >> $tmp
+  echo "  failure." >> $tmp
+	echo "" >> $tmp
+
+  title="Diva Support Assistant"
+	$dialog --title "$title" --backtitle "$backtitle" --clear --textbox $tmp 18 70
+
+  msg="Continue with support procedure ?"
+  title="Diva Support Assistant"
+  $dialog --clear --title "$title" --backtitle "$backtitle" --yesno "$msg" 5 70 2>$tmp
+  if [ $(($?)) -ne 0 ]
+  then
+    rm -f ${tmp} ${diva_dir}/support.dlg ${report}
+    $setterm -default > /dev/null 2>&1
+    $setterm -clear > /dev/null 2>&1
+    exit 1
+  fi
+
+
+	adapter_type=0
+#
+# Try to detect adapter if no adapter was specified
+#
+	if [ $((adapter)) -lt $((1)) ]
+	then
+		adapter=1
+		while [ $((1)) -eq $((1)) ]
+		do
+			${diva_dir}/divactrl load -c $((adapter)) -CardName > /dev/null 2>&1
+			if [ $(($?)) -ne 0 ]
+			then
+				break;
+			fi
+
+			card_name=$(${diva_dir}/divactrl load -c $((adapter)) -CardName)
+			lcard_name=$(${diva_dir}/divactrl load -c $((adapter)) -CardOrdinal)
+
+			get_adapter_index "$lcard_name"
+			adapter_type=$(($?))
+
+			if [ $((adapter_type)) -gt $((0)) ]
+			then
+				break;
+			fi
+
+			adapter=$(($adapter+1))
+		done
+	fi
+
+	${diva_dir}/divactrl load -c $((adapter)) -CardName > /dev/null 2>&1
+	if [ $(($?)) -ne 0 ]
+	then
+		debug_procedure_error_exit "Diva Server adapter Nr:$((adapter)) was not found"
+	fi
+
+	card_name=$(${diva_dir}/divactrl load -c $((adapter)) -CardName)
+	lcard_name=$(${diva_dir}/divactrl load -c $((adapter)) -CardOrdinal)
+
+	get_adapter_index "$lcard_name"
+	adapter_type=$(($?))
+	if [ $((adapter_type)) -le $((0)) ]
+	then
+		debug_procedure_error_exit "Wrong adapter type.\nOnly Diva Server PRI 1.0 2.0 or 3.0 PCI are supported."
+	fi
+
+	adapter_trace_memory_length=$((${CardMEMORY[$((adapter_type))]}))
+
+	sync
+	sync
+	sync
+
+	if [ -f ${diva_proc}/maint ]
+	then
+		debug_procedure_error_exit "MAINT driver already running.\nPlease remove first (rmmod diva_mnt)."
+	fi
+
+	# ------------------------------------------------
+	#  Ensure system will restart after kernel panic
+	# ------------------------------------------------
+	for procpath in panic panic_on_oops
+	do
+		if [ -a /proc/sys/kernel/$procpath ]
+		then
+			echo "1" > /proc/sys/kernel/$procpath 2>/dev/null
+		fi
+	done
+
+ 
+	# ------------------------------------------------
+	#  Stop and reset selected Diva Server Adapter
+	# ------------------------------------------------
+
+	${diva_dir}/divactrl load -c $((adapter)) -StopCard  > /dev/null 2>&1
+	${diva_dir}/divactrl load -c $((adapter)) -ResetCard > /dev/null 2>&1
+	if [ $(($?)) -ne 0 ]
+	then
+		debug_procedure_error_exit "Can't reset Diva adapter Nr:$((adapter))"
+	fi
+
+	if [ ! -z "${CardFPGA[$((adapter_type))]}" ]
+	then
+		${diva_dir}/divactrl load -c $((adapter)) -LoadFPGA "${diva_dir}/${CardFPGA[$((adapter_type))]}" > /dev/null 2>&1
+		if [ $(($?)) -ne 0 ]
+		then
+			debug_procedure_error_exit "Failed to load FPGA for Diva adapter Nr:$((adapter))"
+		fi
+	fi
+
+	sync
+	sync
+	sync
+
+	address=$(cat ${diva_proc}/adapter$((adapter))/info | grep "Mem */ *I/O *${CardIO[$((adapter_type))]}" | sed -e "s/^.*: //" -)
+	if [ -z "$address" ]
+	then
+		debug_procedure_error_exit "Can't retrieve adapter address"
+	fi
+
+  final_address=$(($address+0x1000))
+
+	sync
+	sync
+	sync
+
+#
+# Automatically disable selected afapter
+#
+  sed -e "s/^CCard_DISABLED\[$((adapter))\]=.*/CCard_DISABLED\[$((adapter))\]=\"1\"/" \
+        ${diva_dir}/divas_cfg.rc > ${diva_dir}/diva_cfg.rc.support.tmp 2>/dev/null
+
+  cp -f ${diva_dir}/diva_cfg.rc.support.tmp ${diva_dir}/divas_cfg.rc 2>/dev/null
+	rm -f ${diva_dir}/diva_cfg.rc.support.tmp
+
+	sync
+	sync
+	sync
+
+	${diva_dir}/Config.dlg 1 > /dev/null 2>&1
+
+	sync
+	sync
+	sync
+
+	load_command="insmod ${diva_dir}/diva_mnt.${object_suffix} diva_dbg_mem=$(printf "0x%x" $final_address) buffer_length=$((adapter_trace_memory_length))"
+
+	modinfo ${diva_dir}/diva_mnt.${object_suffix} 2>/dev/null | grep diva_register_notifier > /dev/null 2>&1
+	if [ $(($?)) -eq $((0)) ]
+	then
+		load_command="${load_command} diva_register_notifier=1"
+	fi
+
+	$load_command > /dev/null 2>&1
+	if [ $(($?)) -ne 0 ]
+	then
+		debug_procedure_error_exit "Failed to load MAINT driver\n($load_command)\nPlease reboot your system."
+	fi
+
+	check_diva_device_node_file "DivasMAINT" "/dev/DivasMAINT"
+	if [ $(($?)) -ne 0 ]
+	then
+ 		echo "ERROR: Failed to create /dev/DivasMAINT file" >> ${report} 2>&1
+	fi
+
+	sync
+	sync
+	sync
+
+	tty_id=$(${diva_dir}/divactrl ditrace -l | grep TTY | sed -e "s/ *- *.*$//" -e "s/^.* //g" -e "s/^0//g" -)
+	capi_id=$(${diva_dir}/divactrl ditrace -l | grep CAPI20 | sed -e "s/ *- *.*$//" -e "s/^.* //g" -e "s/^0//g" -)
+	um_idi_id=$(${diva_dir}/divactrl ditrace -l | grep "User IDI" | sed -e "s/ *- *.*$//" -e "s/^.* //g" -e "s/^0//g" -)
+	mtpx_id=$(${diva_dir}/divactrl ditrace -l | grep MTPX | sed -e "s/ *- *.*$//" -e "s/^.* //g" -e "s/^0//g" -)
+
+	if [ $((tty_id)) -ne $((0)) -a $((capi_id)) -ne $((0)) ]
+	then
+  	msg="Trace Diva TTY driver ?"
+  	title="Diva Support Assistant"
+  	$dialog --clear --title "$title" --backtitle "$backtitle" --yesno "$msg" 5 70 2>$tmp
+  	if [ $(($?)) -ne $((0)) ]
+  	then
+			tty_id=0
+	  fi
+
+  	msg="Trace Diva CAPI driver ?"
+  	title="Diva Support Assistant"
+  	$dialog --clear --title "$title" --backtitle "$backtitle" --yesno "$msg" 5 70 2>$tmp
+  	if [ $(($?)) -ne $((0)) ]
+  	then
+		  ${diva_dir}/divactrl ditrace -d $((capi_id)) -m 0 > /dev/null 2>&1
+			capi_id=0
+	  fi
+	fi
+	if [ $((mtpx_id)) -ne 0 ]
+	then
+  	msg="Trace Diva MTPX driver ?"
+  	title="Diva Support Assistant"
+  	$dialog --clear --title "$title" --backtitle "$backtitle" --yesno "$msg" 5 70 2>$tmp
+  	if [ $(($?)) -ne $((0)) ]
+  	then
+			mtpx_id=0
+	  fi
+	fi
+
+	echo "SUPPORT PROCEDURE STARTED FOR:" > $tmp
+	echo "" >> $tmp
+
+	if [ $((mtpx_id)) -ne 0 ]
+	then
+		echo "Diva MTPX driver, trace id:$((mtpx_id))" >> $tmp
+		${diva_dir}/divactrl ditrace -d $((mtpx_id)) -m 0x7fffffff > /dev/null 2>&1
+	fi
+	if [ $((tty_id)) -ne 0 ]
+	then
+		echo "Diva TTY driver, trace id:$((tty_id))" >> $tmp
+		${diva_dir}/divactrl ditrace -d $((tty_id)) -m 0x7fffffff > /dev/null 2>&1
+	fi
+	if [ $((capi_id)) -ne 0 ]
+	then
+		echo "Diva CAPI driver, trace id:$((capi_id))" >> $tmp
+		${diva_dir}/divactrl ditrace -d $((capi_id)) -m 0x7fffffff > /dev/null 2>&1
+	fi
+	if [ $((um_idi_id)) -ne 0 ]
+	then
+		divalog=$(pidof divalogd)
+		divasnmp=$(pidof divasnmpx)
+
+		if [ ! -z "$divalog" ]
+		then
+			echo "  INFO: 'divalogd' is active" >> $tmp
+		fi
+		if [ ! -z "$divasnmp" ]
+		then
+			echo "  INFO: 'divasnmpx' is active" >> $tmp
+		fi
+		if [ ! -z "$divalog" -o ! -z "$divasnmp" ]
+		then
+			echo "Diva User mode IDI driver, trace id:$((um_idi_id))" >> $tmp
+			${diva_dir}/divactrl ditrace -d $((um_idi_id)) -m 0x7fffffff > /dev/null 2>&1
+    else
+			${diva_dir}/divactrl ditrace -d $((um_idi_id)) -m 0 > /dev/null 2>&1
+		fi
+	fi
+
+	echo "" >> $tmp
+	echo "IMPORTANT:" >> $tmp
+	echo "In case of system failure your system will reboot, recover" >> $tmp
+	echo "captured trace information from the memory of Diva adapter" >> $tmp
+  echo "and store this information to the file" >> $tmp
+	echo "'/var/log/trace.bin'." >> $tmp
+	echo "Please provide this file to Dialogic support." >> $tmp
+	echo "" >> $tmp
+	echo "You can adjust trace levels and activate/deacticate" >> $tmp
+	echo "additional drivers by command 'divactrl ditrace'."   >> $tmp
+	echo "Please call './divactrl ditrace -?' or look in product"  >> $tmp
+	echo "reference guide for help on 'divactrl ditrace'."  >> $tmp
+	echo "" >> $tmp
+	${diva_dir}/divactrl ditrace -l >> $tmp
+	echo "" >> $tmp
+	echo "---------------------------------------------" >> $tmp
+	echo "  HELP" >> $tmp
+	echo "---------------------------------------------" >> $tmp
+	${diva_dir}/divactrl ditrace -? >> $tmp
+	echo "---------------------------------------------" >> $tmp
+	echo "" >> $tmp
+	$dialog --title "$title" --backtitle "$backtitle" --clear --textbox $tmp 18 70
+
+	rm -f ${tmp} ${diva_dir}/support.dlg ${report}
+	$setterm -default > /dev/null 2>&1
+	$setterm -clear > /dev/null 2>&1
+
+	sync
+	sync
+	sync
+}
+
+# ------------------------------------------------------------------------------
+#  Capture as much as possible info (commpn step)
+# ------------------------------------------------------------------------------
+capture_config()
+{
+  $dialog --backtitle "$backtitle" \
+					 --infobox "Extract RPM name ..." 3 70
+
+	report_string "# RETRIEVE PRODUCT VERSION START"
+	report_command "grep -i diva ${diva_dir}/httpd/index.html"
+	report_string "# RETRIEVE PRODUCT VERSION END"
+
+  $dialog --backtitle "$backtitle" \
+					 --infobox "Process system environment ..." 3 70
+
+	report_string "# SYSTEM INFORMATION START"
+	report_command "uname -r"
+	report_command "uname -a"
+	report_command "cat /proc/version"
+	report_command "ls  -l /etc/*-release"
+	report_command "cat /etc/*-release"
+	report_command "ls -lR /dev/*"
+	report_command "ls -lR  /udev/*"
+	report_command "ls -lR /sys/*"
+	report_string "# SYSTEM INFORMATION END"
+
+  $dialog --backtitle "$backtitle" \
+					 --infobox "Process Oops ..." 3 70
+
+	report_string "# Oops in /VAR/LOG/MESSAGES"
+  report_command "${ksymoops} /var/log/messages"
+	report_string "# Oops in /VAR/LOG/MESSAGES END"
+
+	if [ -s "/var/log/messages.1" ]
+	then
+		$dialog --backtitle "$backtitle" \
+								--infobox "Process Oops pass 2 ..." 3 70
+
+		report_string "# Oops in /VAR/LOG/MESSAGES.1"
+		report_command "${ksymoops} /var/log/messages.1"
+		report_string "# Oops in /VAR/LOG/MESSAGES.1 END"
+	fi
+
+  $dialog --backtitle "$backtitle" \
+					 --infobox "Process module info ..." 3 70
+
+	report_string "# SYSTEM ENVIRONMENT"
+	report_command "lsmod"
+	report_command "cat /proc/modules"
+	report_command "cat /proc/devices"
+	report_string "# SYSTEM ENVIRONMENT END"
+
+  $dialog --backtitle "$backtitle" \
+					 --infobox "Process hardware info ..." 3 70
+
+	report_string "# HARDWARE INFO"
+	report_command "cat /proc/cpuinfo"
+	report_command "cat /proc/interrupts"
+	report_command "cat /proc/ioports"
+	report_command "cat /proc/iomem"
+	report_command "cat /proc/pci"
+	report_command "lspci"
+	report_command "lspci -t -vv"
+	report_command "lspci -vv"
+	report_command "lspci -vvx"
+	report_command "lspci -vvn"
+	report_command "lspci -vvb"
+	report_string "# HARDWARE INFO END"
+
+  $dialog --backtitle "$backtitle" \
+					 --infobox "Process adapter configuration ..." 3 70
+
+	report_string "# ADAPTER CONFIGURATION"
+  report_command "cat ${diva_dir}/divas_cfg.rc"
+	report_string "# ADAPTER CONFIGURATION END"
+
+  $dialog --backtitle "$backtitle" \
+					 --infobox "Process adapter log ..." 3 70
+
+	report_string "# ADAPTER INITIAL XLOG"
+	report_command "cat /var/log/diva*.log"
+	report_string "# ADAPTER INITIAL XLOG END"
+
+  $dialog --backtitle "$backtitle" \
+					 --infobox "Process dmesg ..." 3 70
+
+	report_string "# INITIAL DMESG"
+	report_command "dmesg"
+	report_string "# INITIAL DMESG END"
+
+	report_string "# INITIAL DMESG OOPS"
+	dmesg > ${report}.dmesg 2>&1
+	report_command "${ksymoops} ${report}.dmesg"
+	rm -f ${report}.dmesg 2>&1
+	report_string "# INITIAL DMESG OOPS END"
+
+  report_string "----------------------------------------------------------"
+  report_string "END SYSTEM INFO CAPTURE"
+  report_string "----------------------------------------------------------"
+}
+
+capture_config_hwonly()
+{
+  $dialog --backtitle "$backtitle" \
+					 --infobox "Process system environment ..." 3 70
+
+  report_string "----------------------------------------------------------"
+  report_string "START SYSTEM INFO CAPTURE"
+  report_string "----------------------------------------------------------"
+	report_command "grep -i diva ${diva_dir}/httpd/index.html"
+	report_command "cat /proc/version"
+	report_command "ls  -l /etc/*-release"
+	report_command "cat /etc/*-release"
+	report_command "lsmod"
+	report_command "cat /proc/modules"
+	report_command "cat /proc/devices"
+	report_command "cat /proc/cpuinfo"
+	report_command "cat /proc/interrupts"
+	report_command "cat /proc/ioports"
+	report_command "cat /proc/iomem"
+	report_command "cat /proc/pci"
+	report_command "lspci -vvx"
+  report_command "cat ${diva_dir}/divas_cfg.rc"
+	report_command "cat /var/log/diva*.log"
+	report_command "dmesg"
+
+  report_string "----------------------------------------------------------"
+  report_string "END SYSTEM INFO CAPTURE"
+  report_string "----------------------------------------------------------"
+}
+
+
+# ------------------------------------------------------------------------------
+#  Capture binary system information
+# ------------------------------------------------------------------------------
+capture_binary_information()
+{
+	report_string "----------------------------------------------------------"
+  report_string "CAPTURE SYSTEM INFORMATION"
+	report_string "----------------------------------------------------------"
+
+	rm -f ${diva_dir}/report.tgz > /dev/null 2>&1
+
+  capture_config
+
+  $dialog --backtitle "$backtitle" \
+						--infobox "Create file list ..." 3 70
+
+	file_list="${diva_dir}/report.txt /dev"
+	if [ -d "/boot" ]
+	then
+		file_list="${file_list} /boot"
+	fi
+	if [ -s "/var/log/messages" ]
+	then
+		file_list="${file_list} /var/log/messages"
+	fi
+	if [ -s "${diva_dir}/divas_cfg.rc" ]
+	then
+		file_list="${file_list} ${diva_dir}/divas_cfg.rc"
+	fi
+	if [ -s "${diva_dir}/divadidd.${object_suffix}" ]
+	then
+		file_list="${file_list} ${diva_dir}/*.${object_suffix}"
+	fi
+	if [ -s "/lib/modules/$(uname -r)" ]
+	then
+		file_list="${file_list} /lib/modules/$(uname -r)"
+	fi
+
+	report_command "ls -l /usr/src"
+
+	kernel_src_name=""
+	if [ -d "/lib/modules/$(uname -r)/build" ]
+	then
+		if [ ! -L "/lib/modules/$(uname -r)/build" ]
+		then
+			report_string "INFO: kernel source tree in /lib/modules/$(uname -r)/build directory"
+		else
+			report_string "INFO: kernel source tree in /lib/modules/$(uname -r)/build directory, link"
+			file_list="${file_list} /lib/modules/$(uname -r)/build/."
+		fi
+	else
+		if [ -d "/usr/src/linux" ]
+		then
+			file_list="${file_list} /usr/src/linux/."
+		else
+			if [ -d "/usr/src/linux-$(uname -r)" ]
+			then
+				file_list="${file_list} /usr/src/linux-$(uname -r)/."
+			fi
+		fi
+	fi
+
+	report_string "file list: ${file_list}"
+	report_string "# --------------------------------------------------"
+	report_string "# REPORT FILE END"
+	report_string "# --------------------------------------------------"
+
+  $dialog --backtitle "$backtitle" \
+						--infobox "Create report.tgz. Please be patient ..." 3 70
+
+	tar -zcf ${diva_dir}/report.tgz ${file_list} > /dev/null 2>&1
+  if [ $(($?)) -ne 0 ]
+  then
+    $dialog --title "Operation Failed" --backtitle "$backtitle" \
+      --clear --msgbox "Failed to create file '${diva_dir}/report.tgz'" 7 70
+    $setterm -default > /dev/null 2>&1
+    $setterm -clear > /dev/null 2>&1
+    exit 1
+  fi
+  check_point
+
+  $dialog --title "Report complete" --backtitle "$backtitle" \
+      --clear --msgbox "Please add file '${diva_dir}/report.tgz' to your support request." 7 70
+
+  $setterm -default > /dev/null 2>&1
+  $setterm -clear > /dev/null 2>&1
+
+	rm -f ${report} > /dev/null 2>&1
+
+	exit 0
+}
+
+# ------------------------------------------------------------
+#  ENTRY POINT FOR THE EXTERNAL INVOCATION
+# ------------------------------------------------------------
+if [ $(($#)) -gt 0 ]
+then
+	support_profile=$(($1))
+
+	if [ $(($#)) -gt 0 ]
+	then
+		case "$1" in
+			'debug') debug_procedure $(($2))
+               exit 0
+							;;
+						*)
+							;;
+		esac
+	fi
+
+
+	case "${support_profile}" in
+	'1') rm -f ${bin} ${txt} > /dev/null 2>&1
+			 setterm="true"
+			 dialog="true"
+			capture_config
+			tar -zcf ${bin} ${txt} > /dev/null 2>&1
+			exit 0
+		;;
+
+	'2') rm -f ${bin} ${txt} > /dev/null 2>&1
+			 setterm="true"
+			 dialog="true"
+			 capture_binary_information
+			 exit 0
+		;;
+
+		*) exit 2
+			;;
+	esac
+
+	exit 2
+fi
+
+# ------------------------------------------------------------
+#  ENTRY POINT FOR THE MANUAL INVOCATION
+# ------------------------------------------------------------
+
+#------------------------------------------------------------
+# Problem description table
+#------------------------------------------------------------
+i=1
+Problem[$i]="Driver start failed"
+i=$(($i+1))
+Problem[$i]="Kernel crash (Oops, lockup) after driver start"
+i=$(($i+1))
+Problem[$i]="No Dialogic Diva adapter detected"
+i=$(($i+1))
+Problem[$i]="Dialogic Diva adapter start failed"
+i=$(($i+1))
+Problem[$i]="Dialogic Diva driver load failed (space consuming)"
+i=$(($i+1))
+Problem[$i]="Dialogic Diva adapter fast memory test"
+i=$(($i+1))
+Problem[$i]="Dialogic Diva adapter cpu test"
+i=$(($i+1))
+Problem[$i]="Dialogic Diva adapter memory test"
+i=$(($i+1))
+Problem[$i]="Dialogic Diva adapter full test (time consuming)"
+i=$(($i+1))
+Problem[$i]="Fast Dialogic Diva adapter crash dump"
+i=$(($i+1))
+Problem[$i]="Full Dialogic Diva adapter crash dump"
+i=$(($i+1))
+Problem[$i]=none
+
+maint_pid=0
+
+#------------------------------------------------------------
+help=""
+hlp_base="${diva_dir}/help.txt"
+hlp="${diva_dir}/support.hlp"
+if [ ! -f ${hlp_base} ]
+then
+	echo > ${hlp_base}
+fi
+
+set_help_id()
+{
+	ident="$1"
+	help=""
+
+	sed -ne "/<$ident>/,/<$ident\/>/p" ${hlp_base} | sed -e "/<$ident>/d" -e "/<$ident\/>/d" - > ${hlp}
+	if [ $(($?)) -eq 0 ]
+	then
+		if [ -s ${hlp} ]
+		then
+			help="--helptag ${hlp}"
+		fi
+	fi
+
+}
+
+#------------------------------------------------------------
+# Execution abort
+#------------------------------------------------------------
+exit_aborted()
+{
+  $dialog --title "Operation aborted" --backtitle "$backtitle" \
+      --clear --msgbox "Operation aborted by user." 5 70
+
+  $setterm -default > /dev/null 2>&1
+  $setterm -clear > /dev/null 2>&1
+
+  rm -f ${diva_dir}/support.dlg ${tmp} ${report}
+
+  exit 1
+}
+
+#------------------------------------------------------------
+# Show final screen
+#------------------------------------------------------------
+show_complete()
+{
+  $dialog --clear --title "Report complete" --backtitle "$backtitle" \
+				--yesno "View '${report}' file" 7 70 2>$tmp
+  if [ $(($?)) -eq 0 ]
+  then
+    $dialog --title "${report}" --backtitle "$backtitle" \
+        --clear --textbox ${report} 18 70
+  fi
+
+  $dialog --title "Report complete" --backtitle "$backtitle" \
+      --clear --msgbox "Please add file '${report}' to your support request." 7 70
+
+	if [ $((need_final_reboot)) -ne 0 ]
+	then
+		$dialog --title "Report complete" --backtitle "$backtitle" \
+			--clear --msgbox "Please reboot your system." 7 70
+	fi
+
+  $setterm -default > /dev/null 2>&1
+  $setterm -clear > /dev/null 2>&1
+
+  rm -f ${diva_dir}/support.dlg ${tmp} maint.bin
+
+  exit 0
+}
+
+#------------------------------------------------------------
+# Ask to start
+#------------------------------------------------------------
+display_purpose()
+{
+  msg="You can use the Dialogic Diva Support Assistant to generate problem reports for Dialogic Diva adapters."
+  title="Activate Diva Support Assistant ?"
+  $dialog --clear --title "$title" --backtitle "$backtitle" \
+    --yesno "$msg" 7 70 3>$tmp
+  if [ $(($?)) -ne 0 ]
+  then
+    rm -f ${tmp} ${diva_dir}/support.dlg ${report}
+    $setterm -default > /dev/null 2>&1
+    $setterm -clear > /dev/null 2>&1
+    exit 1
+  fi
+}
+
+# ------------------------------------------------------------------------------
+#  Warn user about possible system failure
+# ------------------------------------------------------------------------------
+warning_fail()
+{
+  msg="It is possible that your system will stop to respond. Please reboot in \
+this case and use '${report}' file for your support request."
+  title="Continue ?"
+  $dialog --clear --title "$title" --backtitle "$backtitle" \
+    --yesno "$msg" 9 70 5>$tmp
+  if [ $(($?)) -ne 0 ]
+  then
+    return 1
+  else
+    return 0
+  fi
+}
+
+# ------------------------------------------------------------------------------
+#  Ask user for failure profile
+# ------------------------------------------------------------------------------
+select_cause()
+{
+  msg=""
+  i=1
+
+  while [ "${Problem[${i}]}" != none ]
+  do
+    msg="$msg \"$((i))\" \" - ${Problem[$i]}\" off"
+    i=$(($i+1))
+  done
+
+	set_help_id support_cause
+  msg="$dialog ${help} --title \"Please select problem profile\" \
+       --backtitle \"$backtitle\" \
+			 --clear --radiolist \"Possible profiles\" $((7+$i-1)) 70 $(($i-1)) $msg"
+    echo "$msg 2>$tmp" > ${diva_dir}/support.dlg
+  sh ${diva_dir}/support.dlg
+  if [ $(($?)) -ne 0 ]
+  then
+    exit_aborted
+  fi
+
+  problem_profile=$(cat $tmp)
+}
+
+stop_and_unload()
+{
+	report_string "# STOP AND UNLOAD START"
+	if [ $(($1)) -ne 0 ]
+	then
+		need_final_reboot=1
+		report_string "+++ERROR: FAILED TO EXECURE COMMAND, RETURN CODE:$1"
+	fi
+	report_command "dmesg"
+	dmesg > ${report}.dmesg
+	report_command "${ksymoops} ${report}.dmesg"
+	rm -f ${report}.dmesg > /dev/null 2>&1
+	report_command "${ditrace_cmd}"
+	report_string "+ STOP DRIVERS NOW"
+	report_command "${stop_command}"
+	ret=$(($?))
+	if [ $((ret)) -ne 0 ]
+	then
+		report_string "+++ERROR: ${stop_command} FAILED, RETURN CODE:$((ret))"
+		need_final_reboot=1
+		report_command "dmesg"
+		dmesg > ${report}.dmesg
+		report_command "${ksymoops} ${report}.dmesg"
+		rm -f ${report}.dmesg > /dev/null 2>&1
+		report_command "lsmod"
+		report_command "${ditrace_cmd}"
+	fi
+	report_string "+ STOP DRIVERS COMPLETE"
+	report_string "# STOP AND UNLOAD END"
+}
+
+report_ditrace()
+{
+  $dialog --backtitle "$backtitle" \
+					 --infobox "Read traces ..." 3 70
+	report_string "+ READ MAINT TRACES START"
+	report_command "${ditrace_cmd}"
+	ditrace_ret=$(($?))
+	if [ $((ditrace_ret)) -ne 0 ]
+	then
+		stop_and_unload $((ret))
+		return $((ditrace_ret))
+	fi
+	report_string "+ READ MAINT TRACES END"
+
+	return 0
+}
+
+read_mgmt_int()
+{
+${diva_dir}/divactrl mantool -c $(($1)) -b -r"$2" -Exclusive -WDog > /dev/null 2>&1
+if [ $(($?)) -ne 0 ]
+then
+	return 0
+fi
+ret=$(${diva_dir}/divactrl mantool -b -Exclusive -WDog -c $(($1)) -r"$2" 2>/dev/null | sed -e "s/^.*= //" -e "/^$/d;" -)
+return $((ret))
+}
+
+set_ditrace_levels()
+{
+	report_string "+++INFO: set trace mask start"
+	driver_list=$(${ditrace_cmd} -l 2>>${report} | sed -e "/-----------/d;" -e "/^$/d" -e "/ditrace/d" -e "s/ - .*$//" -e "s/^ *.*:.*:.*\..* //" -e "s/^0//" -)
+	if [ ! -z "${driver_list}" ]
+	then
+		driver_list=$(echo ${driver_list} | sed -e "s/ /,/g;" -)
+		report_command "${ditrace_cmd} -d ${driver_list} -m 0x7fffffff"
+	fi
+	report_string "+++INFO: set trace mask end"
+}
+
+# ------------------------------------------------------------------------------
+#  Trace system that is failed to load
+# ------------------------------------------------------------------------------
+failed_to_load()
+{
+	start_all_adapters=$(($1))
+	if [ $((start_all_adapters)) -eq 2 ]
+	then
+		test_cmd="$2"
+	else
+		test_cmd=""
+	fi
+	system_unstale=0
+  check_point
+  capture_config
+  warning_fail
+  if [ $(($?)) -ne 0 ]
+  then
+    report_string "----------------------------------------------------------"
+    report_string "WARNING: ABORTED BY USER"
+    report_string "----------------------------------------------------------"
+    return
+  fi
+  
+  report_string "# -------------------------------------------------------------"
+  report_string "# START DEBUG LOAD PROBLEMS"
+  report_string "# -------------------------------------------------------------"
+
+	$dialog --backtitle "$backtitle" \
+			--infobox "Look for recent Oops ..." 3 70
+
+	report_string "# REMOVE STARTUP LINKS START"
+	report_command "sh ${diva_dir}/cfg_util.sh 2"
+	report_string "# REMOVE STARTUP LINKS END"
+
+	report_string "# CHECK FOR OOPS START"
+  dmesg | grep "^Oops:" > /dev/null 2>&1
+	if [ $(($?)) -eq 0 ]
+	then
+		report_string "+ INFO: Oops found, system unstable, needs reboot"
+		system_unstable=1
+	fi
+	report_string "# CHECK FOR OOPS END"
+
+	if [ $((system_unstable)) -eq 0 ]
+	then
+		$dialog --backtitle "$backtitle" \
+				--infobox "Stop and unload Diva drivers ..." 3 70
+
+		report_string "# INITIAL STOP AND UNLOAD START"
+		report_command "${stop_command}"
+		if [ $(($?)) -ne 0 ]
+		then
+			report_string "+ INFO: can no and unload diva drivers, system unstable, needs reboot"
+			system_unstable=1
+		fi
+		report_string "# INITIAL STOP AND UNLOAD END"
+	fi
+
+	if [ $((system_unstable)) -ne 0 ]
+	then
+    $dialog --clear --title "Reboot now ?" \
+      --backtitle "$backtitle" \
+      --yesno "System is not stable. System reboot is necessary to receive reliable results. Please restart 'Support' after reboot." 7 70 4>$tmp
+    if [ $(($?)) -eq 0 ]
+    then
+      report_string "NEED REBOOT"
+      $dialog --title "Reboot" --backtitle "$backtitle" \
+        --clear --msgbox "Your system will reboot now." 5 70
+      reboot
+      exit 0
+    fi
+    report_string "WARNING: NEED REBOOT - NOT REBOOTED" >> ${report}
+		$dialog --title "Not rebooted" --backtitle "$backtitle" \
+        --clear --msgbox "Operation aborted by user. Please use '${report}' file for your support request." 5 70
+		exit 1
+	fi
+
+	$dialog --backtitle "$backtitle" \
+			--infobox "Try to start DIDD and MAINT drivers ..." 3 70
+
+	report_string "+ LOAD DIDD AND MAINT DRIVERS START"
+	report_command "${trace_start_cmd}"
+	ret=$(($?))
+	set_ditrace_levels
+	if [ $((ret)) -ne 0 ]
+	then
+		stop_and_unload $((ret))
+		return
+	fi
+	report_string "+ LOAD DIDD AND MAINT DRIVERS END"
+
+	report_ditrace
+	if [ $(($?)) -ne 0 ]
+	then
+		return
+	fi
+
+  $dialog --backtitle "$backtitle" \
+					 --infobox "Try to load XDI driver ..." 3 70
+	report_string "+ LOAD XDI DRIVER START"
+	report_command "${diva_dir}/divas_cfg.rc restart -1"
+	report_ditrace
+	set_ditrace_levels
+  $dialog --backtitle "$backtitle" \
+					 --infobox "Try to unload XDI driver ..." 3 70
+	sleep 1
+	report_command "rmmod divas"
+	report_ditrace
+  $dialog --backtitle "$backtitle" \
+					 --infobox "Try to load XDI driver ..." 3 70
+	sleep 1
+	report_command "${diva_dir}/divas_cfg.rc restart -1"
+	ret=$(($?))
+	set_ditrace_levels
+	if [ $((ret)) -ne 0 ]
+	then
+		stop_and_unload $((ret))
+		return
+	fi
+	report_string "+ LOAD XDI DRIVER END"
+
+	report_ditrace
+	if [ $(($?)) -ne 0 ]
+	then
+		return
+	fi
+
+	if [ $((start_all_adapters)) -eq 2 ]
+	then
+		report_string "# ADAPTER TEST MODE START, TEST COMMAND: ${test_cmd}"
+		i=1
+		while [ $((1)) -eq $((1)) ]
+		do
+			report_string "+ADAPTER:$((i)) START"
+			report_command "${diva_dir}/divactrl load -c $((i)) -CardName"
+			if [ $(($?)) -ne 0 ]
+			then
+				report_string "+++INFO: ADAPTER $((i)) NOT FOUND"
+				break
+			fi
+
+			report_string "+++ check state start"
+			adapter_state=$(${diva_dir}/divactrl load -c $((i)) -CardState 2>>${report})
+			report_string "+++ adapter state: ${adapter_state}"
+			if [ "${adapter_state}" = "ready" ]
+			then
+				$dialog --backtitle "$backtitle" \
+					 --infobox "Test Dialogic Diva adapter Nr:$((i)). Please be patient ..." 3 70
+				report_command "${diva_dir}/divactrl load -c $((i)) -CardTest ${test_cmd}"
+				if [ $(($?)) -eq 0 ]
+				then
+					$dialog --backtitle "$backtitle" \
+					 	--infobox "SUCCESS: Test of Dialogic Diva adapter Nr:$((i))" 3 70
+				else
+					$dialog --title "Operation failed" --backtitle "$backtitle" \
+								--clear --msgbox "ERROR: Test of Dialogic Diva adapter Nr:$((i))" 5 70
+				fi
+				report_command "${diva_dir}/divactrl load -c $((i)) -ResetCard"
+			fi
+			report_string "+++ check state end"
+			report_ditrace
+			if [ $(($?)) -ne 0 ]
+			then
+				return
+			fi
+			report_string "+ADAPTER:$((i)) END"
+			i=$(($i+1))
+		done
+		report_string "# ADAPTER TEST MODE END"
+
+  	$dialog --backtitle "$backtitle" \
+							--infobox "Stop and unload Diva drivers ..." 3 70
+
+		report_string "+INFO: FINAL STOP AND UNLOAD START"
+		stop_and_unload 0
+		report_string "+INFO: FINAL STOP AND UNLOAD END"
+
+		return
+	fi
+
+	if [ $((start_all_adapters)) -eq 0 ]
+	then
+		$dialog --backtitle "$backtitle" \
+				--infobox "Start first Diva adapter and load Diva drivers ..." 3 70
+
+		report_string "+ XDI ADAPTER START"
+		report_command "${diva_dir}/divas_cfg.rc restart 1"
+		ret=$(($?))
+		set_ditrace_levels
+		if [ $((ret)) -ne 0 ]
+		then
+			stop_and_unload $((ret))
+			return
+		fi
+		report_string "+ XDI ADAPTER START END"
+	else
+		$dialog --backtitle "$backtitle" \
+				--infobox "Start first Diva adapter and load Diva drivers ..." 3 70
+
+		report_string "+ START XDI ADAPTERS START"
+		sleep 2
+		report_command "${diva_dir}/Start"
+		ret=$(($?))
+		set_ditrace_levels
+		if [ $((ret)) -ne 0 ]
+		then
+			stop_and_unload $((ret))
+			return
+		fi
+		report_string "+ START XDI ADAPTER START COMPLETE"
+	fi
+
+	report_ditrace
+	if [ $(($?)) -ne 0 ]
+	then
+		return
+	fi
+
+  $dialog --backtitle "$backtitle" \
+					 --infobox "Read XLOG ..." 3 70
+	report_command "cat /var/log/diva*.log"
+
+  $dialog --backtitle "$backtitle" \
+					 --infobox "Capture adapter information ..." 3 70
+	report_string "# CAPTURE PROC INFO START"
+	find /proc/net -type f -a -name "info" 2>>${report} | xargs cat >> ${report} 2>&1
+	report_string "# CAPTURE PROC INFO END"
+
+	report_ditrace
+	if [ $(($?)) -ne 0 ]
+	then
+		return
+	fi
+
+	report_string "+ ACCESS XDI ADAPTER MANAGEMENT INTERFACE START"
+	i=1
+	found_diva_adapters=0
+	ret=0
+	while [ $((ret)) -eq 0 ]
+	do
+		$dialog --backtitle "$backtitle" \
+					 --infobox "Access management interface of adapter Nr:$((i)) ..." 3 70
+		report_command "${diva_dir}/divactrl mantool -c $((i)) -r -Exclusive -WDog"
+		report_command "${diva_dir}/divactrl mantool -c $((i)) -b -r -Recursive -Exclusive -WDog"
+		ret=$(($?))
+		report_ditrace
+		if [ $((ret)) -ne 0 ]
+		then
+			break
+		fi
+		found_diva_adapters=i
+		i=$(($i+1))
+	done
+	report_string "+++INFO: found $((found_diva_adapters)) Diva adapters"
+	report_string "+ ACCESS XDI ADAPTER MANAGEMENT INTERFACE END"
+
+	report_string "+ ACCESS MTPX INTERFACE START"
+	$dialog --backtitle "$backtitle" \
+					 --infobox "Access MTPX driver management interface ..." 3 70
+	report_command "${diva_dir}/divactrl mantool -c 1004 -b -r -Recursive -Exclusive -WDog"
+	report_string "+ ACCESS MTPX INTERFACE END"
+	report_ditrace
+	if [ $(($?)) -ne 0 ]
+	then
+		return
+	fi
+
+	report_string "+ ACCESS MTPX ADAPTER INTERFACE START"
+	$dialog --backtitle "$backtitle" --infobox "Determine number of MTPX adapters ..." 3 70
+	read_mgmt_int 1004 "Count"
+	nr_mtpx_adapters=$(($?))
+	report_string "+++INFO: Found $((nr_mtpx_adapters)) MTPX adapters"
+	report_ditrace
+	if [ $(($?)) -ne 0 ]
+	then
+		return
+	fi
+
+	i=1
+	while [ $((i)) -le $((nr_mtpx_adapters)) ]
+	do
+		$dialog --backtitle "$backtitle" --infobox "Access management interface of MTPX adapter Nr:$((i)) ..." 3 70
+		report_command "${diva_dir}/divactrl mantool -c $((i+100)) -b -r -Recursive -Exclusive -WDog"
+		ret=$(($?))
+		report_ditrace
+		if [ $(($?)) -ne 0 -o $((ret)) -ne 0 ]
+		then
+			return
+		fi
+		i=$(($i+1))
+	done
+
+	report_string "+ ACCESS MTPX ADAPTER INTERFACE END"
+
+	report_string "+ ACCESS CAPI MANAGEMENT INTERFACE START"
+	$dialog --backtitle "$backtitle" --infobox "Access management interface of CAPI driver ..." 3 70
+	report_command "${diva_dir}/divactrl mantool -c $((1000)) -b -r -Recursive -Exclusive -WDog"
+	if [ $(($?)) -eq 0 ]
+	then
+		capi_present=1
+		report_string "+++INFO: CAPI present"
+	else
+		capi_present=0
+		report_string "+++INFO: CAPI not found"
+	fi
+	report_ditrace
+	if [ $(($?)) -ne 0 ]
+	then
+		return
+	fi
+	report_string "+ ACCESS CAPI MANAGEMENT INTERFACE END"
+
+	report_string "+ ACCESS TTY DRIVER MANAGEMENT INTERFACE START"
+	$dialog --backtitle "$backtitle" --infobox "Access management interface of Diva TTY driver ..." 3 70
+	report_command "${diva_dir}/divactrl mantool -c $((1001)) -b -r -Recursive -Exclusive -WDog"
+	if [ $(($?)) -eq 0 ]
+	then
+		diva_tty_present=1
+		report_string "+++INFO: Diva TTY driver present"
+	else
+		diva_tty_present=0
+		report_string "+++INFO: Diva TTY driver not found"
+	fi
+	report_ditrace
+	if [ $(($?)) -ne 0 ]
+	then
+		return
+	fi
+	report_string "+ ACCESS TTY DRIVER MANAGEMENT INTERFACE END"
+
+	if [ $((capi_present)) -ne 0 ]
+	then
+		report_string "+ ACCESS CAPI INTERFACE START"
+		report_command "${diva_dir}/acopy2 /num -n1111111111111: /o1111111111 /V0 /C"
+		report_ditrace
+		if [ $(($?)) -ne 0 ]
+		then
+			return
+		fi
+		report_string "+ ACCESS CAPI INTERFACE END"
+	fi
+
+	if [ $((diva_tty_present)) -ne 0 ]
+	then
+		report_string "+ ACCESS DIVA TTY DRIVER INTERFACE START"
+		report_command "${diva_dir}/tty_test 1 11111111111 hdlc -l128 -y -m100"
+		report_ditrace
+		if [ $(($?)) -ne 0 ]
+		then
+			return
+		fi
+		report_string "+ ACCESS DIVA TTY DRIVER INTERFACE END"
+	fi
+
+  $dialog --backtitle "$backtitle" \
+						--infobox "Stop and unload Diva drivers ..." 3 70
+
+	report_string "+INFO: FINAL STOP AND UNLOAD START"
+	stop_and_unload 0
+	report_string "+INFO: FINAL STOP AND UNLOAD END"
+}
+
+# ------------------------------------------------------------------------------
+# Retrieve adapter crash dump
+# ------------------------------------------------------------------------------
+adapter_crash_dump()
+{
+  check_point
+	if [ $(($1)) -eq 1 ]
+	then
+		capture_config
+		check_point
+	fi
+
+  $dialog --backtitle "$backtitle" \
+					 --infobox "Load MAINT driver ..." 3 70
+
+	report_string "+ LOAD DIDD AND MAINT DRIVERS START"
+	report_command "${trace_start_cmd}"
+	ret=$(($?))
+	set_ditrace_levels
+	if [ $((ret)) -ne 0 ]
+	then
+		stop_and_unload $((ret))
+		return
+	fi
+	report_string "+ LOAD DIDD AND MAINT DRIVERS END"
+
+	report_ditrace
+	if [ $(($?)) -ne 0 ]
+	then
+		return
+	fi
+
+	report_string "+ PROFILE INFORMATION START"
+	report_string "+ CHECK DIVA ADAPTERS START"
+	nr=1
+
+  $dialog --backtitle "$backtitle" \
+					 --infobox "Check state of Diva adapters ..." 3 70
+
+	if [ $(($1)) -eq 1 ]
+	then
+		while [ $((nr)) -lt 100 ]
+		do
+			${diva_dir}/divactrl load -c $((nr)) -CardName > /dev/null 2>&1
+			if [ $(($?)) -eq $((0)) ]
+			then
+				$dialog --backtitle "$backtitle" \
+						 --infobox "Process Diva adapter Nr:$((nr)) ..." 3 70
+				report_string "+ READ XLOG FOR ADAPTER $((nr)) START"
+				tmp_cmd="${diva_dir}/divactrl load -c $((nr)) -FlushXlog"
+				report_command "${tmp_cmd}"
+				report_ditrace
+				if [ $(($?)) -ne 0 ]
+				then
+					return
+				fi
+				report_string "+ READ XLOG FOR ADAPTER $((nr)) END"
+			fi
+			nr=$(($nr+1))
+		done
+	else
+		rm -f ${diva_dir}/support.dlg
+		adapters_found=0
+		msg=" "
+
+		while [ $((nr)) -lt 100 ]
+		do
+			${diva_dir}/divactrl load -c $((nr)) -CardName > /dev/null 2>&1
+			if [ $(($?)) -eq $((0)) ]
+			then
+				card_name=$(${diva_dir}/divactrl load -c $((nr)) -CardName)
+				card_sn=$(${diva_dir}/divactrl load -c $((nr)) -SerialNumber)
+				card_port=$(($card_sn >> 24))
+				adapter_sn=$(($card_sn & 0xffffff))
+				if [ $((card_port)) -eq $((0)) ]
+				then
+					msg="$msg\"$nr\" \"$card_name SN:$((adapter_sn))\" off "
+					adapters_found=$(($adapters_found+1))
+				fi
+			fi
+			nr=$(($nr+1))
+		done
+
+		${diva_dir}/divactrl ditrace > /dev/null 2>&1
+
+		if [ $((adapters_found)) -ne 0 ]
+		then
+			i=$(($adapters_found))
+			if [ $(($i)) -ge 9 ]
+			then
+				i=9
+			fi
+			high=$(($i+7))
+			set_help_id select_diva_adapter
+			msg="$dialog --clear \
+				--title \"Diva Server adapter selection\" --backtitle \"$backtitle\" \
+				--radiolist \"Please select available Diva adapter or exit\" $high 70 $(($i)) $msg"
+
+			echo "$msg 2>$tmp" > ${diva_dir}/support.dlg
+			sh ${diva_dir}/support.dlg
+			if [ $(($?)) -eq 0 ]
+			then
+				nr=$(cat $tmp)
+
+				$dialog --backtitle "$backtitle" \
+						 --infobox "Process Diva adapter Nr:$((nr)) ..." 3 70
+				report_string "+ READ XLOG FOR ADAPTER $((nr)) START"
+				tmp_cmd="${diva_dir}/divactrl load -c $((nr)) -FlushXlog"
+				report_command "${tmp_cmd}"
+				report_ditrace
+				if [ $(($?)) -ne 0 ]
+				then
+					return
+				fi
+				report_string "+ READ XLOG FOR ADAPTER $((nr)) END"
+
+			else
+				report_string "+ no action was taken by user"
+			fi
+		else
+			$dialog --backtitle "$backtitle" \
+					 --infobox "Diva adapter not found" 3 70
+			report_string "+ 0 Diva adapters found"
+		fi
+	fi
+
+	report_command "rmmod diva_mnt"
+
+	report_string "+ CHECK DIVA ADAPTERS END"
+	report_string "+ PROFILE INFORMATION END"
+}
+
+# ------------------------------------------------------------------------------
+#  Start
+# ------------------------------------------------------------------------------
+display_purpose
+rm -f ${report}
+report_string "Diva support report"
+problem_profile=0
+while [ $((problem_profile)) -eq 0 ]
+do
+  select_cause
+done
+
+report_command "hostname"
+report_command "date"
+report_string  "Problem Profile: '${Problem[$problem_profile]}'"
+
+case $((problem_profile)) in
+  1)
+#  Failed to load drivers
+   failed_to_load 0
+    ;;
+  2)
+#  Kernel crash (Oops, lockup) on driver start
+   failed_to_load 0
+    ;;
+  3)
+#  No Dialogic Diva adapter was detected
+   failed_to_load 0
+    ;;
+  4)
+#  Adapter fails to start
+   failed_to_load 1
+    ;;
+  5)
+#  No other way to detect cause of system failure as to capture
+#  as much as possible system information
+   capture_binary_information
+    ;;
+	6) failed_to_load 2 0x001
+		;;
+	7) failed_to_load 2 0x101
+		;;
+	8) failed_to_load 2 0x002
+		;;
+	9) failed_to_load 2 0x10f
+		;;
+	10) adapter_crash_dump 0
+		;;
+	11) adapter_crash_dump 1
+		;;
+esac
+
+#-------------------------------------------------------------------------------
+#  GENERATE SUFFIX
+#-------------------------------------------------------------------------------
+if [ $((need_final_reboot)) -eq 0 ]
+then
+	report_string "RECOVERY DIVA STARTUP LINKS"
+	report_command "sh ${diva_dir}/cfg_util.sh 1"
+else
+	report_string "FINAL STATUS: ERRORS DETECTED, REMOVE STARTUP LINKS, REBOOT NECESSARY"
+	report_command "sh ${diva_dir}/cfg_util.sh 2"
+fi
+
+report_string "---------------------------------------------------------"
+report_string  "END OF REPORT FILE" >> ${report}
+report_string  "---------------------------------------------------------"
+
+show_complete
+

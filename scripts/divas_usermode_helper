@@ -1,0 +1,56 @@
+#! /bin/bash
+
+nr=$((DIVA_ADAPTER))
+cmd=$DIVA_ADAPTER_COMMAND
+divas_dir="/usr/lib/divas"
+logger="logger -p local0.crit -t 'divas ${cmd} usermode helper'"
+
+divas_debug()
+{
+	lsmod | grep "diva_mnt" > /dev/null 2>&1
+	if [ $(($?)) -ne $((0)) ]
+	then
+		"${divas_dir}/Trace" start L 4 > /dev/null 2>&1
+	fi
+	${divas_dir}/divactrl ditrace -l > /dev/null 2>&1
+	if [ $(($?)) -ne 0 ]
+	then
+		${divas_dir}/divactrl load -c $((nr)) -FlushXlog > /dev/null 2>&1
+		ditrace_id=$(pidof -s ${divas_dir}/divactrl 2>/dev/null | sed -e "/^$/d" -e s"/ //g" - 2>/dev/null)
+		while [ $((ditrace_id)) -ne $((0)) ]
+		do
+			killall divactrl > /dev/null 2>&1
+			ditrace_id=$(pidof -s ${divas_dir}/divactrl 2>/dev/null | sed -e "/^$/d" -e s"/ //g" - 2>/dev/null)
+		done
+	fi
+	divas_id=$(${divas_dir}/divactrl ditrace -l 2>/dev/null | grep DIVAS 2>/dev/null | sed -e "s/ *- *.*$//" -e "s/^.* //g" -e "s/^0//g" - 2>/dev/null)
+	if [ $((divas_id)) -le $((0)) ]
+	then
+		${logger} "failed to get DIVAS MAINT id" > /dev/null 2>&1
+		exit 1
+	fi
+	date 2>/dev/null > /var/log/diva_dump$((nr)).txt 2>&1
+	grep divas4linux ${divas_dir}/httpd/index.html >> /var/log/diva_dump$((nr)).txt 2>/dev/null
+	echo $(${divas_dir}/divactrl load -c $((nr)) -CardName 2>&1) $(${divas_dir}/divactrl load -c $((nr)) -SerialNumber 2>&1) >> /var/log/diva_dump$((nr)).txt
+	${divas_dir}/divactrl ditrace -d $((divas_id)) -p >> /var/log/diva_dump$((nr)).txt 2>&1 &
+	ditrace_id=$!
+	${divas_dir}/divactrl load -c $((nr)) -FlushXlog > /dev/null 2>&1
+	sleep 1
+	kill $((ditrace_id)) 2>/dev/null
+	${logger} "+------------------------------------------------------------------------+"
+	${logger} "| adapter core dump recovered and saved to /var/log/diva_dump$((nr)).txt |"
+	${logger} "+----------------------------- ADAPTER DUMP START -----------------------+"
+	logger -t divas -f /var/log/diva_dump$((nr)).txt
+	${logger} "+----------------------------- ADAPTER DUMP END   -----------------------+"
+}
+
+case "${cmd}" in
+	'debug') divas_debug
+					;;
+
+				*) exit 1
+					;;
+esac
+
+exit 0
+

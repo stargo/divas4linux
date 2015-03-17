@@ -1,0 +1,9 @@
+#! /bin/bash
+
+divactrl=/usr/lib/divas/divactrl
+if [ ! -f $divactrl ]
+then
+divactrl=divactrl
+fi
+
+$divactrl mlog $*

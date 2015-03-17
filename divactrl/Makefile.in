@@ -1,0 +1,93 @@
+# $Id$
+#
+# Makefile for divactrl
+# (C) 2001 Cytronics & Melware
+#
+
+DIVA_BUILD=local
+
+SHELL			= /bin/sh
+CFLAGS			= -Wall -O2 -DUNIX -DLINUX -Wno-pointer-sign -Wno-strict-aliasing -Wno-unused-but-set-variable \
+                          -DDIVA_ISTREAM=1 -DDIVA_OS_DSP_FILE=1 \
+                          -DDIVA_BUILD=\"$(DIVA_BUILD)\"
+CFLAGS += $(shell echo 'int main(int argc, char** argv) { if (sizeof(void*) > 4) return 0; return 1; }' > tmp.c && gcc tmp.c -o tmp 2>&1 >/dev/null && rm -f tmp.c && ./tmp && echo " -DPLATFORM_GT_32BIT")
+INCLUDES		= -I. -Iinclude -Iinclude/common \
+                          -I@CONFIG_KERNELDIR@/@KERNEL_DIVADIR@
+LDFLAGS			= -L../lib @LIBS@
+FILES    		= divactrl.o load/divaload.o common/log_b.o load/os.o \
+                          load/pri.o load/pri3.o load/s4bri.o load/s4pri.o load/bri.o load/helpers.o \
+                          load/analog.o load/io.o load/dsp_file.o load/diva_cfg_lib.o load/dlistcc.o \
+                          mantool/mantool.o mantool/mlog.o mantool/os.o \
+                          dchannel/dchannel.o \
+                          ditrace/ditrace.o \
+                          ditrace/common/diva_binary.o ditrace/memorymap.o \
+                          ditrace/arib62.o ditrace/unarib62.o \
+                          common/dbg_tapi.o common/dbg_oid.o common/dbg_dlog.o \
+                          common/xdbg_ppp.o common/dbg_ppp.o common/dbg_capi.o \
+                          common/dbg_ccp.o \
+                          common/dbg_pap.o common/dbg_spap.o common/dbg_chap.o \
+                          common/dbg_cbcp.o common/dbg_ipcp.o common/dbg_nbcp.o \
+                          common/dbg_ipx.o common/dbg_mppp.o common/dbg_bacp.o \
+                          common/dbg_eshp.o common/dbg_rtp.o
+
+PROGRAM			= divactrl
+INSTALL			= @INSTALL@
+SBINDIR			= @CONFIG_SBINDIR@
+DATA_DIR		= @CONFIG_DATADIR@
+INSTALL_PROGRAM	= $(INSTALL) -o 0 -g 0 -m 0750
+INSTALL_DATA	= $(INSTALL) -o 0 -g 0 -m 0644
+CC			= @CC@
+COPTS			= -DDATADIR=\"$(shell echo $(DATA_DIR))\"
+
+
+.SUFFIXES:
+.SUFFIXES: .c .o
+
+%.o: %.c Makefile
+	$(CC) $(CFLAGS) $(INCLUDES) $(COPTS) -c -o $@ $<
+
+PROGRAMS = $(PROGRAM)
+
+all: $(PROGRAMS)
+
+config:
+	@./configure
+
+load/dlistcc.c: @CONFIG_KERNELDIR@/@KERNEL_DIVADIR@/dlist.c
+	cp -vf $< $@
+
+Makefile: Makefile.in config.status
+	./config.status
+
+config.status: configure
+	./config.status --recheck
+
+$(PROGRAM): $(FILES)
+	$(CC) $(CFLAGS) $(INCLUDES) $(FILES) $(LDFLAGS) -o $(PROGRAM) 
+
+install-data:
+	mkdir -p $(DESTDIR)$(DATA_DIR)
+	tar xpCfz $(DESTDIR)$(DATA_DIR) firmware/eicon_firm.tgz
+
+install: all install-data
+	$(INSTALL_PROGRAM) $(PROGRAM) $(DESTDIR)$(SBINDIR)/$(PROGRAM)
+	$(INSTALL_PROGRAM) scripts/divas_trap.rc /usr/sbin/divas_trap.rc
+
+install-strip: all
+	$(INSTALL_PROGRAM) -s $(PROGRAM) $(DESTDIR)$(SBINDIR)/$(PROGRAM)
+
+uninstall:
+	rm -f $(DESTDIR)$(SBINDIR)/$(PROGRAM)
+
+clean:
+	rm -f *.o *~ $(PROGRAM) tmp.c tmp
+	rm -f ./load/*.o ./load/*~
+	rm -f ./mantool/*.o ./mantool/*~
+	rm -f ./dchannel/*.o ./dchannel/*~
+	rm -f ./ditrace/*.o ./ditrace/*~
+	rm -f ./ditrace/common/*.o ./ditrace/common/*~
+	rm -f ./common/*.o ./common/*~
+
+distclean: clean
+	rm -f config.status config.cache config.log config.h Makefile load/dlistcc.c
+

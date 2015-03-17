@@ -1,0 +1,48 @@
+              DIVAS4LINUX
+              ===========
+
+To compile the kernel modules and the divactrl utility just type
+
+   make
+
+and after successful compilation, use
+
+   make install
+
+to install the files on your system.
+(You must be root to do that.)
+
+Note:
+--------------------
+You can choose between the optimized Diva CAPI driver, or an own version
+of common kernelcapi. (you will be asked when doing 'make')
+The optimized Diva CAPI makes sense when using Diva cards with CAPI only.
+
+The 'divactrl' tool and all other tools,
+scripts and the firmware will be installed to
+
+   /usr/lib/divas
+
+
+The compilation needs a configured kernel source at
+
+   /lib/modules/`uname -r`/build
+
+If your kernel resides in another location, you need to specify
+this location with KDIR= , e.g.:
+
+   make KDIR=/path/to/kernelsrc
+   make KDIR=/path/to/kernelsrc install
+
+In case you want to install into a special destination directory, use
+
+   make KDIR=/path/to/kernelsrc DESTDIR=/targetdir install
+
+to install all files to /targetdir/usr/lib/divas
+Note: this is for e.g. cross-installation only. The path
+/usr/lib/divas for running and using the installation must be used.
+
+See README for details of usage.
+
+Copyright 2006-2009 Cytronics & Melware
+

@@ -1,0 +1,214 @@
+#! /bin/bash
+
+# --------------------------------------------------------------------------
+#  DIVA CONFIGURATION WIZARD
+#  Copyright by Dialogic 1993-2008
+# --------------------------------------------------------------------------
+
+while true; do
+
+	config_dlg_only=1
+
+	if [ -f /usr/lib/divas/divadidd.ko ]
+	then
+		diva_dir=/usr/lib/divas
+		config_dlg_only=1
+		break
+	else
+
+		if [ -f /usr/lib/divas/divadidd.o ]
+		then
+			diva_dir=/usr/lib/divas
+			break
+		else
+
+			if [ -f /usr/lib/divas/src/Build ]
+			then
+				if [ $(($#)) -ge 1 ]
+				then
+					if [ $(($1)) -eq $((1)) ]
+					then
+						echo -e "Build can't run without interaction, please start Config without '1'."
+						exit -1
+					fi
+				fi
+echo ' -------------------------------------------------------------------------------'
+echo ""
+echo '                         DIVA CONFIGURATION WIZARD'
+echo '                                     ---'
+echo '                       Copyright Dialogic 1991-2008'
+echo '                                     ---'
+echo '               No compiled module found, start build process ?'
+echo ""
+echo '                  (This will require gcc and the kernel '
+echo '                   development packages to be installed!)'
+echo "" 
+echo ' -------------------------------------------------------------------------------'
+      			echo -e "Your selection (Y/N)[Y]: \c"
+
+                read tmp
+                if [ -z $tmp ]
+				then
+					tmp="Y"
+				fi
+				case $tmp in
+					Y)
+						current_dir=$(pwd)
+						cd /usr/lib/divas/src/
+						./Build
+						build_ret=$(($?))
+						cd ${current_dir}
+						if [ $((build_ret)) -ne $((0)) ]
+						then
+							echo -e "Build failed, exiting ..."
+							exit $((build_ret))
+						fi
+						;;
+					y)
+						current_dir=$(pwd)
+						cd /usr/lib/divas/src/
+						./Build
+						build_ret=$(($?))
+						cd ${current_dir}
+						if [ $((build_ret)) -ne $((0)) ]
+						then
+							echo -e "Build failed, exiting ..."
+							exit $((build_ret))
+						fi
+						;;
+					N)
+						exit
+						;;
+					n)
+						exit
+						;;
+					*)
+						;;
+				esac
+			else
+				diva_dir=/usr/lib/isdn/eicon
+				break
+			fi
+		fi
+	fi
+done
+
+if [ $((config_dlg_only)) -eq 0 ]
+then
+#
+# Check for passive adapter support
+#
+if [ -f $diva_dir/DivasC.o ]
+then
+  passive_adapter="none"
+  passive_eicon_devices=0
+  eicon_devices=$(cat -T /proc/bus/pci/devices | sed -e 's/\^I/ /g;' - | sed -ne '/ 1133.... /p' - | wc -l)
+
+  for passive_adapter in e006 e001 e005 e00b e00d e00e
+  do
+    found_passive_adapter=$(cat -T /proc/bus/pci/devices | sed -e 's/\^I/ /g;' - | sed -ne "/ 1133$passive_adapter /p" - | wc -l)
+    if [ $((found_passive_adapter)) -gt $((0)) ]
+    then
+      passive_eicon_devices=$(($passive_eicon_devices+1))
+    fi
+  done
+
+  if [ $((eicon_devices)) -lt 1 ]
+  then
+    if [ -f $diva_dir/diva_cs.o ]
+    then
+      $diva_dir/cfg_divas.sh
+      exit $?
+    fi
+  else
+    if [ $((eicon_devices)) -eq $((passive_eicon_devices)) ]
+    then
+       $diva_dir/cfg_divas.sh
+       exit $?
+    fi
+  fi
+fi
+
+rm -f ${diva_dir}/OK
+echo "i=100" > ${diva_dir}/test.sh
+echo "t[\$i]=\$((i))" >> ${diva_dir}/test.sh
+echo "if [ \$((\${t[\$i]})) -eq \$((i)) ]" >> ${diva_dir}/test.sh
+echo "then" >> ${diva_dir}/test.sh
+echo "echo OK > \$1" >> ${diva_dir}/test.sh
+echo "fi" >> ${diva_dir}/test.sh
+
+if [ -e ${diva_dir}/Config.dlg ]
+then
+  ${diva_dir}/dialog --infobox test 4 10 > /dev/null 2>&1
+	if [ $(($?)) -eq $((0)) ]
+	then
+		sh ${diva_dir}/test.sh ${diva_dir}/OK > /dev/null 2>&1
+		if [ -f ${diva_dir}/OK ]
+		then
+			rm -f ${diva_dir}/OK
+			rm -f ${diva_dir}/test.sh
+# ---------------------------------------------------------
+#     Ask user about usage of new Configuration Wizard
+# ---------------------------------------------------------
+			while [ $((1)) -eq $((1)) ]
+			do
+      	clear
+echo ' -------------------------------------------------------------------------------'
+echo ""
+echo '                         DIVA CONFIGURATION WIZARD'
+echo '                                     ---'
+echo '                       Copyright Dialogic 1991-2008'
+echo '                                     ---'
+echo "               Use 'dialog' based Configuration Wizard Version ?"
+echo "" 
+echo ' -------------------------------------------------------------------------------'
+      	echo -e "Your selection (Y/N)[Y]: \c"
+      	read tmp
+     	 if [ -z $tmp ]
+				then
+					tmp="Y"
+				fi
+				case $tmp in
+					Y)
+						${diva_dir}/Config.dlg $*
+						exit $?
+						;;
+					y)
+						${diva_dir}/Config.dlg $*
+						exit $?
+						;;
+					N)
+						break
+						;;
+					n)
+						break
+						;;
+					*)
+						;;
+				esac
+			done
+		fi
+	fi
+fi
+
+rm -f ${diva_dir}/OK
+rm -f ${diva_dir}/test.sh
+${diva_dir}/cfg_divas.sh
+if [ $(($?)) -ne 0 ]
+then
+	exit 1
+fi
+
+else
+
+#
+# New package supports Config.dlg only
+#
+
+  ${diva_dir}/Config.dlg $*
+  exit $?
+
+fi
+
+exit 0
+

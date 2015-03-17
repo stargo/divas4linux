@@ -1,0 +1,353 @@
+#! /bin/bash
+
+# ------------------------------------------------------------------------------
+#  STOP SCRIPT FOR OPEN DIVAS4LINUX
+#
+#  Copyright 1991-2009 by Dialogic(R) Corporation
+#
+# ------------------------------------------------------------------------------
+divas_current_module_name="none"
+
+kernel_name=$(uname -r)
+kernel_major=$(echo $kernel_name | sed -e "s/\..*$//" -)
+kernel_minor=$(echo $kernel_name | sed -e "s/${kernel_major}\.//" -e "s/\..*$//" -)
+
+istty=0
+tty -s 2>/dev/null
+if [ $? -eq 0 ]
+then
+  istty=1
+fi
+
+divas_show_processes()
+{
+  device_list=""
+
+  if [ -e "/dev/Divas" ]
+  then
+    device_list="${device_list} /dev/Divas*"
+  fi
+  if [ -e "/dev/ttyds01" ]
+  then
+    device_list="${device_list} /dev/ttyds*"
+  fi
+  if [ -e "/dev/capi20" ]
+  then
+    device_list="${device_list} /dev/capi20"
+  fi
+  if [ -e "/dev/capi/20" ]
+  then
+    device_list="${device_list} /dev/capi/20"
+  fi
+  if [ -e "/proc/net/isdn/eicon/adapter1/idi" ]
+  then
+    device_list="${device_list} /proc/net/isdn/eicon/adapter*/idi"
+  fi
+  if [ -e "/proc/net/isdn/eicon/maint" ]
+  then
+    device_list="${device_list} /proc/net/isdn/eicon/maint"
+  fi
+  if [ -e "/proc/net/isdn/eicon/divadidd" ]
+  then
+    device_list="${device_list} /proc/net/isdn/eicon/divadidd"
+  fi
+
+  fuser -v ${device_list} > /dev/null 2>&1
+  if [ $(($?)) -eq $((0)) ]
+  then
+    echo -------------------------------------------------------
+    fuser -v ${device_list} 2>&1 | sed -e "/^$/d;" -
+    echo -------------------------------------------------------
+  fi
+}
+
+
+divas_module_present()
+{
+local divas_module="none"
+
+if [ $((kernel_minor)) -lt 5 -a -e /proc/modules ]
+then
+divas_module=$(cat /proc/modules | sed -ne "/^$divas_current_module_name/p" - | wc -l)
+else
+divas_module=$(lsmod | sed -ne "/^$divas_current_module_name/p" - | wc -l)
+fi
+
+if [ $(($divas_module)) -ge 1 ]
+then
+return 1
+else
+return 0
+fi
+}
+
+divas_module_busy()
+{
+local divas_module="none"
+
+divas_module_present
+if [ $(($?)) -eq 0 ]
+then
+return 0
+fi
+
+if [ $((kernel_minor)) -lt 5 -a -e /proc/modules ]
+then
+divas_module=$(cat /proc/modules | grep -w $divas_current_module_name | sed -e "s/  */ /g;" - | sed -ne "/ 0 (unused)$/p;/ 0 (autoclean)$/p;/ 0$/p;" - | wc -l)
+else
+divas_module=$(lsmod | grep -w $divas_current_module_name | sed -e "s/  */ /g;" - | sed -ne "/ 0 (unused)$/p;/ 0 (autoclean)$/p;/ 0 *$/p;" - | wc -l)
+fi
+
+if [ $(($divas_module)) -ne 1 ]
+then
+echo -en "DIVAS4LINUX SHUTDOWN "
+if [ $istty -eq 1 ]; then echo -en "\\033[1;31m"; fi
+echo -en "FAILED"
+if [ $istty -eq 1 ]; then echo -en "\\033[0;39m"; fi
+echo     " ('$divas_current_module_name' BUSY, please call 'lsmod' for details)"
+divas_show_processes
+exit 1
+fi
+}
+
+divas_remove_module()
+{
+divas_module_present
+if [ $(($?)) -eq 1 ]
+then
+rmmod $divas_current_module_name
+fi
+return 0
+}
+
+# ------------------------------------------------------------------------------
+# Stop Adapters
+# ------------------------------------------------------------------------------
+divas_stop_cards()
+{
+diva_dir="/usr/lib/opendiva/divas/"
+diva_proc="/proc/net/isdn/eicon/"
+if [ -f ${diva_dir}/divadidd.ko ]
+then
+	diva_proc="/proc/net/eicon/"
+else
+	if [ ! -f ${diva_dir}/divadidd.o ]
+	then
+		diva_dir=" "
+	fi
+fi
+
+i=1
+while [ -f ${diva_proc}adapter$((i))/info ]
+do
+	${diva_dir}divactrl load -c $((i)) -StopCard > /dev/null 2>&1
+	i=$(($i+1))
+done
+sleep 1
+}
+
+# ------------------------------------------------------------------------------
+# Stop and wait process
+# ------------------------------------------------------------------------------
+divas_wait_process()
+{
+  stop_nr=50
+  stop_pid=$(pidof $1 2>/dev/null | sed -e "s/ //g;" -e "/^$/d;" -)
+  if [ $((stop_pid)) -ne $((0)) ]
+  then
+    kill $((stop_pid)) > /dev/null 2>&1
+  fi
+
+  while [ $((stop_nr)) -ne $((0)) ]
+  do
+    stop_pid=$(pidof $1 2>/dev/null | sed -e "s/ //g;" -e "/^$/d;" -)
+    if [ $((stop_pid)) -eq $((0)) ]
+    then
+      break
+    fi
+    sleep 1
+    stop_nr=$(($stop_nr-1))
+  done
+}
+
+# ------------------------------------------------------------------------------
+#  MAIN
+# ------------------------------------------------------------------------------
+sync
+if [ $UID != 0 ]
+then
+clear
+echo ' -------------------------------------------------------------------------------'
+echo "  CAN'T STOP DIVAS4LINUX: YOU SHOULD BE ROOT TO EXECUTE THIS SCRIPT"
+echo ' -------------------------------------------------------------------------------'
+echo
+exit 1
+fi
+
+# ------------------------------------------------------------------------------
+#  STOP call journal if running
+# ------------------------------------------------------------------------------
+divas_wait_process "divalogd"
+rm -f /var/run/divalogd.pid
+diva_registry_dir="/usr/lib/opendiva/divas/registry"
+if [ -d "${diva_registry_dir}" ]
+then
+  sleep 1
+  umount ${diva_registry_dir} > /dev/null 2>&1
+  rmdir ${diva_registry_dir}  > /dev/null 2>&1
+fi
+
+# ------------------------------------------------------------------------------
+#  STOP Diva SNMP
+# ------------------------------------------------------------------------------
+divas_wait_process "divasnmpx"
+
+# ------------------------------------------------------------------------------
+#  STOP Diva SS7
+# ------------------------------------------------------------------------------
+divas_wait_process "ss7_isup_cc_stack"
+
+# ------------------------------------------------------------------------------
+#  STOP SIPcontrol
+# ------------------------------------------------------------------------------
+sipcontrol_bin=$(ps -eo "%c" | grep sipcontrol_)
+divas_wait_process "$sipcontrol_bin"
+
+# ------------------------------------------------------------------------------
+#  STOP divas_softip
+# ------------------------------------------------------------------------------
+divas_wait_process "divas_softip"
+
+# ------------------------------------------------------------------------------
+#  STOP DivasP
+# ------------------------------------------------------------------------------
+divas_wait_process "DivasP"
+
+# ------------------------------------------------------------------------------
+#  STOP DivasC
+# ------------------------------------------------------------------------------
+divas_wait_process "DivasC"
+
+# ------------------------------------------------------------------------------
+#  STOP Global Call Routing
+# ------------------------------------------------------------------------------
+divas_wait_process "gcd"
+
+# ------------------------------------------------------------------------------
+#  STOP Dialogic SS7
+# ------------------------------------------------------------------------------
+dlg_ss7_pid=$(pidof gctload 2>/dev/null)
+if [ $((dlg_ss7_pid)) -gt $((1)) ]
+then
+  /usr/lib/eicon/dlgss7/gctload -x
+  sleep 1
+fi
+
+# ------------------------------------------------------------------------------
+#  OK, Can start check and removal
+# ------------------------------------------------------------------------------
+divas_current_module_name="diva_mtpx"
+divas_module_busy
+divas_current_module_name="diva_idi"
+divas_module_busy
+divas_current_module_name="diva_hsi"
+divas_module_busy
+divas_current_module_name="diva_mnt"
+divas_module_busy
+divas_current_module_name="Divatty"
+divas_module_busy
+divas_current_module_name="divacapi"
+divas_module_busy
+divas_current_module_name="DivasC "
+divas_module_busy
+divas_current_module_name="DivasC6"
+divas_module_busy
+divas_current_module_name="DivasP"
+divas_module_busy
+divas_current_module_name="diva_usb"
+divas_module_busy
+divas_current_module_name="diva_pci"
+divas_module_busy
+
+# ------------------------------------------------------------------------------
+# Stop Adapters
+# ------------------------------------------------------------------------------
+
+divas_stop_cards
+
+# ------------------------------------------------------------------------------
+#  Free unused modules
+# ------------------------------------------------------------------------------
+divas_current_module_name="diva_idi"
+divas_remove_module
+divas_current_module_name="diva_hsi"
+divas_remove_module
+divas_current_module_name="divacapi"
+divas_remove_module
+divas_current_module_name="Divatty"
+divas_remove_module
+divas_current_module_name="diva_mtpx"
+divas_remove_module
+divas_current_module_name="diva_usb"
+divas_remove_module
+divas_current_module_name="diva_pci"
+divas_remove_module
+
+
+divas_current_module_name="DivasC"
+divas_module_busy
+divas_remove_module
+
+divas_current_module_name="DivasC6"
+divas_module_busy
+divas_remove_module
+
+divas_current_module_name="DivasP"
+divas_module_busy
+divas_remove_module
+
+if [ -f /usr/lib/divas/support.debug.mode.active ]
+then
+divas_current_module_name="diva_mnt"
+divas_remove_module
+fi
+
+if [ -f /usr/lib/divas/support.active.adapter ]
+then
+divas_current_module_name="diva_mnt"
+divas_remove_module
+fi
+
+divas_current_module_name="divas"
+sleep 1
+divas_module_busy
+divas_remove_module
+
+divas_current_module_name="diva_mnt"
+divas_remove_module
+
+divas_current_module_name="diva_cs"
+divas_module_present
+if [ $(($?)) -eq 1 ]
+then
+echo -en "DIVAS4LINUX SHUTDOWN "
+if [ $istty -eq 1 ]; then echo -en "\\033[1;31m"; fi
+echo -en "ABORTED"
+if [ $istty -eq 1 ]; then echo -en "\\033[0;39m"; fi
+echo     " (please remove DIVA PCMCIA adapter)"
+exit 1
+fi
+
+divas_current_module_name="divadidd"
+divas_module_busy
+divas_remove_module
+
+echo -en "DIVAS4LINUX SHUTDOWN "
+if [ $istty -eq 1 ]; then echo -en "\\033[1;32m"; fi
+echo -en "OK"
+if [ $istty -eq 1 ]; then echo -en "\\033[0;39m"; fi
+echo     "."
+
+modprobe -r capi >/dev/null 2>&1
+
+exit 0

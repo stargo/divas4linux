@@ -1,0 +1,42 @@
+This is just a short help to install the divactrl utility.
+
+Make sure your kernel sources are installed (should be /usr/src/linux).
+
+Change into the eiconctrl directory and run
+
+    ./configure
+
+to create the Makefile.
+Then run
+
+    make
+
+to compile the binaries.
+The last step is
+
+   make install
+
+to actually install the executables
+and the firmware binaries.
+
+The following options can be used with ./configure
+
+   --with-firmware=DIR
+where DIR is the directory to install the firmware binaries.
+(default: /usr/lib/isdn/eicon)
+
+   --with-sbin=DIR
+where DIR is the directory to install the utility binaries.
+(default: /sbin)
+
+   --with-kernel=DIR
+where DIR is your kernel source directory.
+(default: /usr/src/linux)
+
+
+If you want to re-configure and re-compile, use 
+
+    make distclean
+
+to set all to default.
+ 

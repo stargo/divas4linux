@@ -1,0 +1,194 @@
+DIVA_BUILD=$(shell hostname -s)
+CC=$(shell ./options.sh 1)
+NKOPTIONS=$(shell ./options.sh 2)
+MODULE_SUFFIX=$(shell chmod 700 options.sh && ./options.sh 4)
+MODULE_FLAGS=$(shell chmod 700 options.sh && ./options.sh 8 diva_tty)
+OBJ_DIR=.
+DIVA_GPL=0
+cur-dir=$(shell pwd)
+
+CFLAGS = -I/usr/src/linux/include -I../localinc $(NKOPTIONS) -DUNIX -DLINUX -I../inc.diehl -DDIVA_BUILD=\"$(DIVA_BUILD)\" -DDIVA_GPL=$(DIVA_GPL)
+F2BIN_FLAGS = -I../libcrypt/libmcrypt-2.5.7/lib
+
+SRC=ser_lnx.c \
+    atp.c \
+    port.c \
+    isdn.c \
+    fax.c \
+    fax1.c \
+    fax2.c \
+    queue.c \
+    ppp.c \
+    rna.c \
+    btx.c \
+    diva_mem.c \
+    ser_dbg.c \
+    dlist.c \
+    dpc.c \
+    hdlc.c \
+    v110.c \
+    piafs.c \
+    manage1.c \
+    drv_man1.c \
+    tty_man.c \
+    fax_stat.c
+
+
+Divatty.${MODULE_SUFFIX}: $(patsubst %.c,$(OBJ_DIR)/%.o,$(SRC))
+	$(LD) -Map mymap.txt -r $^ -o Divatty.o
+ifeq ($(MODULE_SUFFIX),ko)
+	@echo $(cur-dir)/$@ > Divatty.mod
+	@cp /usr/src/linux/Makefile conftest.mak
+	@echo "" >> conftest.mak
+	@echo "post_diva_modules:" >> conftest.mak
+	@echo -e "\t"'$$(Q)$$(MAKE) -rR -f $$(srctree)/scripts/Makefile.modpost' >> conftest.mak
+	cd /usr/src/linux; make -f $(cur-dir)/conftest.mak post_diva_modules MODVERDIR=$(cur-dir)
+	@rm -f conftest.mak
+endif
+
+# ------------------------------------------------------------------------------
+
+%.o: %.c
+ifeq ($(MODULE_FLAGS),1)
+	$(CC) -c $(CFLAGS) -DKBUILD_BASENAME=$(*F) -DKBUILD_MODNAME=Divatty $< -o $@
+else
+	$(CC) -c $(CFLAGS) -D"KBUILD_STR(s)=#s" -D"KBUILD_BASENAME=KBUILD_STR($(*F))" -D"KBUILD_MODNAME=KBUILD_STR(Divatty)" $< -o $@
+endif
+
+
+.PHONY: clean
+clean:
+	@rm -rf *.o *.ko core *.bin image.c files.txt mymap.txt .depend f2bin prefix.c h.c tty_compiler conftest.mak .depend .*.*.cmd *.mod *.mod.c link.mak module tty_module.tgz
+	@rm -rf module test
+	@mkdir test
+
+# -------------------------------------------------------------------------
+
+depend:
+	@$(CC) $(CFLAGS) -M $(SRC) > .depend
+
+#        sed -e "s/^.*:/$(OBJ_DIR)\/&/" - > $(OBJ_DIR)/.depend
+
+-include $(OBJ_DIR)/.depend
+
+
+# -------------------------------------------------------------------------
+#  Buid encrypted image
+# -------------------------------------------------------------------------
+f2bin: f2bincrypt.c ../libcrypt/diva_crypt.o
+	$(CC) $(F2BIN_FLAGS) -O2 -Wall $^ -static ../libcrypt/libmcrypt-2.5.7/lib/.libs/libmcrypt.a -lm -o $@
+
+%.bin:%.c
+	@./f2bin $^ $^ > $@
+	@echo "{\"$<\", $<_get_image, $<_get_image_size }," >> prefix.c
+
+h.c: link.mak
+	cd .. && tar -cf drv.ser/h.c localinc/*.h inc.diehl/*.h drv.ser/*.h drv.ser/options.sh drv.ser/link.mak
+
+link.mak:
+	@echo "cur-dir=\$$(shell pwd)" > $@
+	@echo "MODULE_SUFFIX=\$$(shell chmod 700 options.sh && ./options.sh 4)" >> $@
+	@echo "" >> $@
+	@echo "Divatty.\$${MODULE_SUFFIX}: *.o" >> $@
+	@echo -e "\t\$$(LD) -Map mymap.txt -r $$^ -o Divatty.o" >> $@
+	@echo "ifeq (\$$(MODULE_SUFFIX),ko)" >> $@
+	@echo -e "\techo \$$(cur-dir)/\$$@ > Divatty.mod" >> $@
+	@echo -e "\tcp /usr/src/linux/Makefile conftest.mak" >> $@
+	@echo -e "\techo "" >> conftest.mak" >> $@
+	@echo -e "\techo "post_diva_modules:" >> conftest.mak" >> $@
+	@echo -e "\t\c" >> $@
+	@echo -e "echo -e \c" >> $@
+	@echo -e "\"\\\\t\"\c" >> $@
+	@echo "'\$$\$$(Q)\$$\$$(MAKE) -rR -f \$$\$$(srctree)/scripts/Makefile.modpost' >> conftest.mak" >> $@
+	@echo -e "\tcd /usr/src/linux; make -f \$$(cur-dir)/conftest.mak post_diva_modules MODVERDIR=\$$(cur-dir)" >> $@
+	@echo -e "\trm -f conftest.mak" >> $@
+	@echo "endif" >> $@
+
+image.c: f2bin prefix.c h.bin $(patsubst %.c,%.bin,$(SRC)) syslnx.bin manage.bin drv_man.bin license.bin
+	@echo "#ifndef __NO_IMAGE_DATA__"       >  $@
+	@cat $(patsubst %.c,%.bin,$(SRC)) h.bin syslnx.bin manage.bin drv_man.bin license.bin >> $@
+	@echo "" >> $@
+	@cat prefix.c >> $@
+	@echo "{0,0,0}" >> $@
+	@echo "};" >> $@
+	@echo "" >> $@
+	@sed -e "s/\.c_get_image/_c_get_image/g" -e "s/\.c\[/_c[/g" -e "s/\.c)/_c)/g" $@ > prefix.c
+	@cp -f prefix.c $@
+	@echo ""                                             >> $@
+	@echo "diva_image_t* get_image(void) { return (&tty_image[0]); }" >> $@
+	@echo ""                                             >> $@
+	@echo "#else"                                        >> $@
+	@echo ""                                             >> $@
+	@echo "diva_image_t* get_image(void);"               >> $@
+	@echo ""                                             >> $@
+	@echo "#endif"                                       >> $@
+	@echo ""                                             >> $@
+	@echo ""                                             >> $@
+	@echo ""                                             >> $@
+
+prefix.c:
+	@echo ""                                             > $@
+	@echo "#endif"                                       >> $@
+	@echo ""                                             >> $@
+	@echo "typedef struct _diva_image {"                 >> $@
+	@echo "  const        char* name;"                   >> $@
+	@echo "  void*        (*get_image_proc)(void);"      >> $@
+	@echo "  unsigned int (*get_image_size_proc)(void);" >> $@
+	@echo "} diva_image_t;"                              >> $@
+	@echo ""                                             >> $@
+	@echo "#ifndef __NO_IMAGE_DATA__"                    >> $@
+	@echo ""                                             >> $@
+	@echo "static diva_image_t tty_image[] = {"    			 >> $@
+
+tty_compiler.o: tty_compiler.c image.c
+	$(CC) -c -O2 -static $< -o $@
+
+image.o: image.c
+	$(CC) -c -O2 $< -o $@
+
+tty_compiler: tty_compiler.o image.o ../libcrypt/diva_crypt.o
+	gcc -static -O2 -Wall $^ -static ../libcrypt/libmcrypt-2.5.7/lib/.libs/libmcrypt.a -lm -o $@
+	@strip $@
+
+
+../libcrypt/diva_crypt.o: libmcrypt ../libcrypt/diva_crypt.c ../libcrypt/diva_crypt.h 
+	@cd ../libcrypt && make && cp diva_crypt.o ../drv.ser/ && cd ../drv.ser
+
+libmcrypt:
+	@cd ../libcrypt/libmcrypt-2.5.7 && \
+	./configure --enable-static --disable-shared && \
+	make && \
+	cd ../../drv.ser
+
+OBJECTS=$(patsubst %.c,%.o,$(SRC))
+
+.PHONY: module_dir module_sources tty_module.tgz
+
+module/%.c:%.c
+	@cp $< $@
+
+module_dir:
+	@mkdir module
+
+module_sources: clean module_dir $(patsubst %.c,module/%.c,$(SRC) syslnx.c manage.c drv_man.c)
+	@cp ../inc.diehl/* module/
+	@cp ../localinc/* module/
+	@cp *.h module/
+	@cp options.sh module/
+	@cp makefile module/Makefile.2.4
+	@echo 'DIVA_SMP_OPTIONS=$$(shell (cat /usr/src/linux/include/linux/autoconf.h 2>/dev/null || cat /usr/src/linux/include/generated/autoconf.h 2>/dev/null) | grep ''"^ *.define *CONFIG_SMP"'' > /dev/null 2>&1 && echo -DDIVA_SMP=1)' >> module/Makefile
+	@echo 'EXTRA_CFLAGS += -I. -I/usr/lib/eicon/divas/src/kernel/drivers/isdn/hardware/eicon -I/usr/src/linux/drivers/isdn/hardware/eicon $$(DIVA_SMP_OPTIONS) -DDIVA_BUILD=\"$(DIVA_BUILD)\" -DDIVA_GPL=$(DIVA_GPL) -DUNIX -DLINUX -D__KERNEL_VERSION_GT_2_4__=1' >> module/Makefile
+	@echo "" >> module/Makefile
+	@echo "obj-m := Divatty.o" >> module/Makefile
+	@echo "Divatty-y := $(OBJECTS)" >> module/Makefile
+
+tty_module.tgz: clean module_sources
+	@cp ../rtools/notes.sh .
+	@cp ../rtools/notes.awk .
+	@chmod 755 notes.sh
+	@sh notes.sh module ../rtools/builder.h 1.tmp linux none
+	@cd module && tar -zcf ../tty_module.tgz *
+
+build_module: clean module_sources
+	cd /usr/src/linux && make modules M=$(cur-dir)/module V=1
+	@cp -f module/Divatty.ko .
