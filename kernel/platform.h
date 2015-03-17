@@ -133,7 +133,7 @@ typedef const byte* pcbyte;
 
 #define DIVAS_CONTAINING_RECORD(address, type, field) \
         ((type *)((char*)(address) - (char*)(&((type *)0)->field)))
-#define DIVAS_OFFSET_OF(type, field) ((dword)&(((type*)0)->field))
+#define DIVAS_OFFSET_OF(type, field) (offsetof(type, field))
 #define DIVAS_SIZE_OF(type, field) (sizeof(((type*)0)->field))
 
 extern int sprintf(char *, const char*, ...);
@@ -457,7 +457,7 @@ static __inline__ void diva_os_diva_um_proxy_user_request (void (*fn)(struct _di
 
 #endif /* } */
 
-/* #define DIVA_EICON_CAPI 1 */
+#define DIVA_EICON_CAPI 1
 #define MODULDRIVERDEBUG 0
 
 #define DEBUGLIB_CALLING_CONVENTION

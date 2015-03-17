@@ -151,38 +151,42 @@ extern struct proc_dir_entry *proc_net_eicon;
 static struct proc_dir_entry *maint_proc_entry = NULL;
 
 static int
-proc_read(char *page, char **start, off_t off, int count, int *eof,
-	  void *data)
+proc_show(struct seq_file *m, void *v)
 {
-	int len = 0;
 	char tmprev[32];
 
 	strcpy(tmprev, main_revision);
-	len += sprintf(page + len, "%s\n", DRIVERNAME);
-	len += sprintf(page + len, "name     : %s\n", DRIVERLNAME);
-	len += sprintf(page + len, "release  : %s\n", DRIVERRELEASE_MNT);
-	len += sprintf(page + len, "build    : %s\n", DIVA_BUILD);
-	len += sprintf(page + len, "revision : %s\n", getrev(tmprev));
-	len += sprintf(page + len, "major    : %d\n", major);
+	seq_printf(m, "%s\n", DRIVERNAME);
+	seq_printf(m, "name     : %s\n", DRIVERLNAME);
+	seq_printf(m, "release  : %s\n", DRIVERRELEASE_MNT);
+	seq_printf(m, "build    : %s\n", DIVA_BUILD);
+	seq_printf(m, "revision : %s\n", getrev(tmprev));
+	seq_printf(m, "major    : %d\n", major);
 
-	if (off + count >= len)
-		*eof = 1;
-	if (len < off)
-		return 0;
-	*start = page + off;
-
-	return ((count < len - off) ? count : len - off);
+	return 0;
 }
+
+static int proc_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, proc_show, NULL);
+}
+
+static const struct file_operations proc_fops = {
+	.owner          = THIS_MODULE,
+	.open           = proc_open,
+	.read           = seq_read,
+	.llseek         = seq_lseek,
+	.release        = single_release,
+};
 
 static int DIVA_INIT_FUNCTION create_maint_proc(void)
 {
 	maint_proc_entry =
-	    create_proc_entry("maint", S_IFREG | S_IRUGO | S_IWUSR,
-			      proc_net_eicon);
+	    proc_create("maint", S_IRUGO, proc_net_eicon,
+	    	&proc_fops);
+
 	if (!maint_proc_entry)
 		return (0);
-
-	maint_proc_entry->read_proc = proc_read;
 
 	return (1);
 }
