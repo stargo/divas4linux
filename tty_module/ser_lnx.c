@@ -1,12 +1,11 @@
-
 /*
  *
-  Copyright (c) Dialogic(R), 2009.
+  Copyright (c) Dialogic, 2008.
  *
   This source file is supplied for the use with
   Dialogic range of DIVA Server Adapters.
  *
-  Dialogic(R) File Revision :    2.1
+  Dialogic File Revision :    2.1
  *
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -150,47 +149,23 @@ static struct semaphore diva_tty_lock;
 
 int errno = 0;
 
-typedef struct _diva_man_var_header {
-  byte   escape;
-  byte   length;
-  byte   management_id;
-  byte   type;
-  byte   attribute;
-  byte   status;
-  byte   value_length;
-  byte   path_length;
-} diva_man_var_header_t;
-
-typedef struct _diva_capi_mngt_work_item {
-  char*  name;
-  void*  dst;
-  int    size;
-} diva_capi_mngt_work_item_t;
-
-typedef struct _diva_capi_mngt_work_entry {
-  char* directory_name;
-  diva_capi_mngt_work_item_t* work_items;
-} diva_capi_mngt_work_entry_t;
-
-typedef struct _diva_capi_mngt_ctxt {
+typedef struct _diva_tty_mngt_ctxt {
   ENTITY  e;
   volatile int     state;
   BUFFERS XData;
   BUFFERS RData;
-  byte    xbuffer[2048+1];
-  DESCRIPTOR* d;
+  byte    xbuffer[270];
+  DESCRIPTOR d;
+  word channel_count;
+} diva_tty_mngt_ctxt_t;
 
-  int current_entry;
-  diva_capi_mngt_work_entry_t** work_entries;
-  int pending_msg;
-} diva_capi_mngt_ctxt_t;
 
 typedef void (*EtdM_DIDD_Read_t)(DESCRIPTOR *, int *);
 typedef void (*DIVA_DIDD_Read_t)(DESCRIPTOR *, int);
 static EtdM_DIDD_Read_t EtdM_DIDD_Read_fn = 0;
 DIVA_DIDD_Read_t DIVA_DIDD_Read_fn = 0;
 static int __tty_isdn_write (struct tty_struct *tty, char *tx_buffer, int count);
-static int diva_tty_read_channel_count (DESCRIPTOR* d, int* VsCAPI);
+static int diva_tty_read_channel_count (DESCRIPTOR* d);
 
 int diva_mtpx_adapter_detected = 0;
 int diva_wide_id_detected      = 0;
@@ -429,7 +404,8 @@ int tty_isdn_read(int dev_num) {
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,16)
 		if ((room = tty->ldisc.receive_room(tty)) <= 0) {
 #else
-		if ((room = tty->receive_room) <= 0) {
+		room = tty_buffer_space_avail(&(ser_devs[dev_num].tport));
+		if (room <= 0) {
 #endif
 			break;
 		}
@@ -460,10 +436,12 @@ int tty_isdn_read(int dev_num) {
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,31)
 		tty->ldisc.ops->receive_buf (tty, sd->rtmp, rflag, sizeGiven);
 #else
-		tty->ldisc->ops->receive_buf (tty, sd->rtmp, rflag, sizeGiven);
+		tty_insert_flip_string_flags(&(ser_devs[dev_num].tport), sd->rtmp, rflag, sizeGiven);
 #endif
 #endif
 	}
+
+	tty_flip_buffer_push(&(ser_devs[dev_num].tport));
 
 	return (0);
 }
@@ -492,7 +470,7 @@ static void diva_tty_wakeup_write (ser_dev_t *sd) {
 	if ((tty->flags & (1 << TTY_DO_WRITE_WAKEUP)) && tty->ldisc.ops->write_wakeup) {
 			(tty->ldisc.ops->write_wakeup)(tty);
 #else
-	if ((tty->flags & (1 << TTY_DO_WRITE_WAKEUP)) && tty->ldisc->ops && tty->ldisc->ops->write_wakeup) {
+	if ((tty->flags & (1 << TTY_DO_WRITE_WAKEUP)) && tty->ldisc->ops->write_wakeup) {
 			(tty->ldisc->ops->write_wakeup)(tty);
 #endif
 #endif
@@ -609,6 +587,8 @@ tty_isdn_open(struct tty_struct *tty, struct file *filp)
 
 	tty->driver_data = sd;
 	sd->ser_ttyp = tty;
+	sd->tport.tty = tty;
+	tty->port = &(sd->tport);
 
 	ser_devs[dev_num].dev_state = DEV_OPEN;
 	ser_devs[dev_num].dev_open_count++;
@@ -704,6 +684,7 @@ static void tty_isdn_close(struct tty_struct *tty, struct file *filp) {
 	devptr->P = 0;
 	devptr->signal_dcd  = 0;
 	devptr->ser_ttyp = 0;
+	devptr->tport.tty = 0;
 	PortEnableNotification (P, 0, 0);
 	PortSetEventMask (P,       0, 0);
 	PortSetReadCallBack(P, 0, 0, (void*)devptr->dev_num);
@@ -1025,11 +1006,7 @@ static int __tty_isdn_write (struct tty_struct *tty, char *tx_buffer, int count)
 }
 
 static int
-tty_isdn_ioctl (struct tty_struct *tty,
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,39)
-struct file *filp,
-#endif
-uint cmd, ulong arg) {
+tty_isdn_ioctl (struct tty_struct *tty, uint cmd, ulong arg) {
 	int	dev_num;
 	unsigned int ival;
 	int rc;
@@ -1368,6 +1345,7 @@ static void tty_isdn_hangup (struct tty_struct* tty) {
 #endif
 
 	sd->ser_ttyp = 0;
+	sd->tport.tty = 0;
 	sd->signal_dcd  = 0;
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3,7,0)
 	if (tty->termios) {
@@ -1437,11 +1415,7 @@ static void tty_isdn_unthrottle(struct tty_struct *tty) {
 }
 
 #if defined(__KERNEL_VERSION_GT_2_4__) /* { */
-static int diva_tty_tiocmget(struct tty_struct *tty
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,39)
-, struct file *file
-#endif
-) {
+static int diva_tty_tiocmget(struct tty_struct *tty) {
 	uint value = 0, msr;
 	ser_dev_t* sd;
 	unsigned long old_irql;
@@ -1466,10 +1440,7 @@ static int diva_tty_tiocmget(struct tty_struct *tty
 }
 
 static int diva_tty_tiocmset(struct tty_struct *tty,
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,39)
-struct file *file,
-#endif
-	unsigned int set, unsigned int clear) {
+										unsigned int set, unsigned int clear) {
 	ser_dev_t* sd;
 	unsigned long old_irql;
 	int dev_num;
@@ -1539,6 +1510,7 @@ int eicon_tty_isdn_modem_init(int nr, int minors) {
 	}
 #else /* } { */
 
+int i;
 static struct tty_operations diva_tty_ops = {
 	.open = tty_isdn_open,
 	.close = tty_isdn_close,
@@ -1588,6 +1560,11 @@ static struct tty_operations diva_tty_ops = {
 	eicon_tty_driver->flags        = TTY_DRIVER_REAL_RAW;
 	tty_set_operations(eicon_tty_driver, &diva_tty_ops);
 
+	for( i = 0; i < (minors+1); i++) {
+		tty_port_link_device(&(ser_devs[i].tport), eicon_tty_driver, i);
+	}
+
+
 	if (tty_register_driver(eicon_tty_driver)) {
 		DBG_ERR(("tty_register_driver failed"))
 		put_tty_driver(eicon_tty_driver);
@@ -1619,12 +1596,13 @@ void init_device_array(int NumDevices)
 
 		atomic_set(&ser_devs[i].tx_q_sz, 0);
 		skb_queue_head_init(&ser_devs[i].tx_q);
+		tty_port_init(&ser_devs[i].tport);
 	}
 
 }
 
 extern int connect_didd(void);
-static void diva_read_adapter_array (DESCRIPTOR* d, int* length, int register_didd) {
+static void diva_read_adapter_array (DESCRIPTOR* d, int* length) {
 
 #define DIVA_OS_READ_DIDD_ARRAY() do \
 	{ \
@@ -1678,9 +1656,7 @@ static void diva_read_adapter_array (DESCRIPTOR* d, int* length, int register_di
 
 #endif /* } */
 
-	if (register_didd != 0) {
-		connect_didd();
-	}
+	connect_didd();
 
 #undef DIVA_OS_READ_DIDD_ARRAY
 }
@@ -1699,7 +1675,7 @@ int EtSRinit(void)
 	/*
 		Read DIDD table
 		*/
-	diva_read_adapter_array (d, &length, 1);
+	diva_read_adapter_array (d, &length);
 	if (!(DIVA_DIDD_Read_fn || EtdM_DIDD_Read_fn)) {
 		DBG_ERR(("DIVA_TTY: NO DIDD WAS FOUND"))
 		printk (KERN_CRIT "DIVA_TTY: NO DIDD WAS FOUND\n");
@@ -1733,23 +1709,18 @@ int EtSRinit(void)
 
 		for(i = 0; i < length; i++) {
 			if ((d[i].type == IDI_MADAPTER) && d[i].channels) {
-				int VsCAPI = -1;
-				int ch = diva_tty_read_channel_count (&d[i], &VsCAPI);
-				if (VsCAPI <= 0) {
-					if (ch > 0) {
-						d[i].channels = (byte)ch;
-					}
-					Adapter_Count++;
-					Channel_Count += d[i].channels;
-				} else {
-					d[i].channels = 0;
+				int ch = diva_tty_read_channel_count (&d[i]);
+				if (ch > 0) {
+					d[i].channels = (byte)ch;
 				}
+				Adapter_Count++;
+				Channel_Count += d[i].channels;
 			}
 		}
 	} else {
 		for(i = 0; i < length; i++) {
 			if ((d[i].type < 0x80) && d[i].channels) {
-				int ch = diva_tty_read_channel_count (&d[i], 0);
+				int ch = diva_tty_read_channel_count (&d[i]);
 				if (ch > 0) {
 					d[i].channels = (byte)ch;
 				}
@@ -1850,31 +1821,12 @@ int eicon_tty_isdn_init(void) {
 	dword porterror;
 	byte ComPort[64];
 
-	/*
-		Diva TTY does not works without MTPX and without available
-		MTPX instances
-		*/
-	{
-		int length = sizeof(d), i;
-
-		memset(d, 0x00, sizeof(d));
-		diva_read_adapter_array (d, &length, 0);
-		for (i = 0, length = 0; length == 0 && i < sizeof(d)/sizeof(d[0]); i++) {
-			length = (d[i].request != 0 && d[i].type == IDI_MADAPTER && d[i].features != 0 && d[i].channels != 0);
-		}
-
-		if (length == 0)
-			return (-EIO);
-
-		memset(d, 0x00, sizeof(d));
-	}
-
 #if defined(DIVA_USES_MUTEX)
 	init_MUTEX_LOCKED(&diva_tty_lock);
 	up (&diva_tty_lock);
 #endif
 
-	memset (&diva_tty_init_prm[0], 0x00, sizeof(diva_tty_init_prm));
+	diva_tty_init_prm[0] = 0;
 	if (diva_tty_init) {
     int length = MIN(62, str_len(diva_tty_init));
 		mem_cpy (&diva_tty_init_prm[0], diva_tty_init, length);
@@ -1969,11 +1921,12 @@ int eicon_tty_isdn_init(void) {
 														 DivaCfgLibValueTypeUnsigned,
 														 &ports_unavailable_cause,
 														 sizeof(ports_unavailable_cause));
-
+#if 0
 		diva_tty_read_cfg_value (&sync_req, 0, "GlobalOptions\\TTY_INIT",
 														 DivaCfgLibValueTypeASCIIZ,
 														 &diva_tty_init_prm[0],
-														 sizeof(diva_tty_init_prm)-1);
+														 sizeof(diva_tty_init_prm));
+#endif
 
 		diva_tty_read_cfg_value (&sync_req, 0, "GlobalOptions\\WaitSigDisc",
 														 DivaCfgLibValueTypeBool,
@@ -2003,6 +1956,7 @@ int eicon_tty_isdn_init(void) {
 void cleanup_module (void) {
 	ISDN_ADAPTER *A;
 	ISDN_PORT_DESC	*D;
+	int j;
 
 	diva_stop_management ();
 
@@ -2032,6 +1986,9 @@ void cleanup_module (void) {
 #else /* } { */
 	if (tty_unregister_driver(eicon_tty_driver)) {
 		DBG_ERR(("Failed to unregister tty driver"))
+	}
+	for (j = 0; j < Channel_Count; j++) {
+		tty_port_destroy(&(ser_devs[j].tport));
 	}
 	put_tty_driver(eicon_tty_driver);
 	eicon_tty_driver = 0;
@@ -2380,7 +2337,10 @@ static void diva_os_sleep (dword mSec) {
   schedule_timeout(timeout);
 }
 
-static word diva_capi_create_mngt_read_req (byte* P, const char* path) {
+/*
+	Read amount of channels from the adapter management interface
+	*/
+static word diva_tty_create_mngt_read_req (byte* P, const char* path) {
   byte var_length;
   byte* plen;
 
@@ -2404,7 +2364,7 @@ static word diva_capi_create_mngt_read_req (byte* P, const char* path) {
   return ((word)(var_length + 0x09));
 }
 
-static void diva_capi_send_mngt_req (diva_capi_mngt_ctxt_t* pE, byte Req, word length, int new_state) {
+static void diva_tty_send_mngt_req (diva_tty_mngt_ctxt_t* pE, byte Req, word length, int new_state) {
   ENTITY* e = &pE->e;
 
   e->XNum        = 1;
@@ -2414,252 +2374,146 @@ static void diva_capi_send_mngt_req (diva_capi_mngt_ctxt_t* pE, byte Req, word l
   e->X->P        = pE->xbuffer;
   pE->state      = new_state;
 
-  (*(pE->d->request))(e);
+  (*(pE->d.request))(e);
 }
 
-static diva_man_var_header_t* get_next_var (diva_man_var_header_t* pVar) {
-  byte* msg   = (byte*)pVar;
-  byte* start;
-  int msg_length;
+/*
+	Read amount of channels from the management interface
+	of MTPX adapter
+	*/
+static word diva_tty_read_mgnt_channels_nr (const byte* p, word length) {
+	word channel_count = 0;
 
-  if (*msg != ESC) return (0);
+  if ((length > 8) && (length >= (8 + p[6] + p[7])) &&
+      (p[3] == 0x82) && (p[6] <= 2)) {
+    byte* ptr = (byte*)&p[7];
+    ptr += (p[7] + 1);
 
-  start = msg + 2;
-  msg_length = *(msg+1);
-  msg = (start+msg_length);
-
-  if (*msg != ESC) return (0);
-
-  return ((diva_man_var_header_t*)msg);
-}
-
-static diva_man_var_header_t* find_var (diva_man_var_header_t* pVar,
-                                        const char* name) {
-  const char* path;
-  int i;
-
-  do {
-    path = (char*)&pVar->path_length+1;
-
-    for (i = 0; (name[i] && (i < pVar->path_length) && (name[i] == path[i])); i++);
-    if ((i >= pVar->path_length) && (name[i] == 0)) {
-      return (pVar);
-    }
-
-  } while ((pVar = get_next_var (pVar)));
-
-  return (pVar);
-}
-
-static void diva_capi_read_var (const diva_man_var_header_t* pVar, void* dst, int size) {
-  if (pVar && dst && size) {
-    byte* ptr     = (byte*)&pVar->path_length;
-    int   use_int = 0;
-    int   v_i     = 0;
-    dword v_u     = 0;
-
-    ptr += (pVar->path_length + 1);
-
-    switch (pVar->type) {
-      case 0x81: /* MI_INT    - signed integer */
-        use_int = 1;
-        switch (pVar->value_length) {
-          case 1:
-            v_i = *(char*)ptr;
-            break;
-          case 2:
-            v_i = (int)READ_WORD(ptr);
-            break;
-          case 4:
-            v_i = (int)READ_DWORD(ptr);
-            break;
-        }
-        break;
-
-      case 0x82: /* MI_UINT   - unsigned integer */
-      case 0x83: /* MI_HINT   - unsigned integer, hex representetion */
-      case 0x87: /* MI_BITFLD - unsigned integer, bit representation */
-        switch (pVar->value_length) {
-          case 1:
-            v_u = *(byte*)ptr;
-            break;
-          case 2:
-            v_u = READ_WORD(ptr);
-            break;
-          case 4:
-            v_u = READ_DWORD(ptr);
-            break;
-        }
-        break;
-
-      case 0x85: /* MI_BOOLEAN */
-        switch (pVar->value_length) {
-          case 1:
-            v_u = (*(byte*)ptr  != 0);
-            break;
-          case 2:
-            v_u = READ_WORD(ptr) != 0;
-            break;
-          case 4:
-            v_u = READ_DWORD(ptr) != 0;
-            break;
-        }
-        break;
-
-      default:
-        DBG_FTL(("Variable type %02x not supported", pVar->type))
-        break;
-    }
-
-    if (use_int) {
-      switch(size) {
-        case 1:
-          *(char*)dst  = (char)v_i;
-          break;
-        case 2:
-          *(short*)dst = (short)v_i;
-          break;
-        case 4:
-          *(int*)dst   = (int)v_i;
-          break;
-      }
+		if (p[6] == 1) {
+			channel_count = (word)ptr[0];
     } else {
-      switch(size) {
-        case 1:
-          *(byte*)dst   = (byte)v_u;
-          break;
-        case 2:
-          *(word*)dst   = (word)v_u;
-          break;
-        case 4:
-          *(dword*)dst  = (dword)v_u;
-          break;
-      }
-    }
+			channel_count = (word)(((word)ptr[0]) | (((word)ptr[1]) << 8));
+		}
   }
+
+  return (channel_count);
 }
 
-static void diva_capi_process_mngt_indication (diva_capi_mngt_ctxt_t* pE) {
-  if (!--pE->pending_msg) {
+static void diva_tty_mmgt_callback (ENTITY* e) {
+  diva_tty_mngt_ctxt_t* pE = (diva_tty_mngt_ctxt_t*)e;
 
-    if (pE->xbuffer[0]) {
-      int current_work_entry;
-      for (current_work_entry = 0;
-           pE->work_entries[pE->current_entry]->work_items[current_work_entry].name;
-           current_work_entry++) {
-        char* name = pE->work_entries[pE->current_entry]->work_items[current_work_entry].name;
-        void* dst  = pE->work_entries[pE->current_entry]->work_items[current_work_entry].dst;
-        int   size = pE->work_entries[pE->current_entry]->work_items[current_work_entry].size;
-
-        diva_capi_read_var (find_var ((diva_man_var_header_t*)&pE->xbuffer[0], name), dst, size);
-      }
-    }
-
-    if (pE->work_entries[++pE->current_entry]) {
-      word length;
-
-      pE->pending_msg = 2;
-      DBG_LOG(("Read: '%s' directory", pE->work_entries[pE->current_entry]->directory_name))
-      length = diva_capi_create_mngt_read_req (pE->xbuffer,
-                                               pE->work_entries[pE->current_entry]->directory_name);
-      diva_capi_send_mngt_req (pE, MAN_READ, length, pE->state + 1);
-    } else {
-      pE->xbuffer[0] = 0;
-      diva_capi_send_mngt_req (pE, REMOVE, 1, -1);
-    }
-  }
-}
-
-static void diva_capi_mngt_callback (ENTITY* e) {
-  diva_capi_mngt_ctxt_t* pE = (diva_capi_mngt_ctxt_t*)e;
-
-  if (e->complete == 255) { /* Return code */
-    switch (pE->state) {
-      case 1: /* ASSIGN pending */
-        if (e->Rc == ASSIGN_OK) {
-          word length;
-          DBG_LOG(("Read: '%s' directory", pE->work_entries[pE->current_entry]->directory_name))
-          pE->pending_msg        = 2;
-          length = diva_capi_create_mngt_read_req (pE->xbuffer,
-                                                   pE->work_entries[pE->current_entry]->directory_name);
-          diva_capi_send_mngt_req (pE, MAN_READ, length, 2);
-        } else {
-          DBG_FTL(("Management interface ASSIGN failed"))
-          pE->state = 0;
-        }
-        break;
-
-      case -1: /* REMOVE pending */
-        if (e->Rc != 0xff) {
-          DBG_FTL(("Management interface REMOVE failed (%02x)", e->Rc))
-        }
+  switch (pE->state) {
+    case 1: /* ASSIGN pending */
+      if (e->Rc != ASSIGN_OK) {
+        DBG_ERR(("Management entity assign failed"))
         pE->state = 0;
-        break;
-
-      default: /* Assigned, information retrival state */
-        if (e->Rc != 0xff) {
-          DBG_ERR(("failed to read: '%s' directory (%02x)",
-                  pE->work_entries[pE->current_entry]->directory_name, e->Rc))
-          pE->pending_msg = 1;
-          pE->xbuffer[0]  = 0;
-        }
-        diva_capi_process_mngt_indication (pE);
-        break;
-    }
-  } else { /* Indication */
-    if (pE->state > 1) { /* Assigned, information retrival state */
-      if (e->complete != 2) { /* start copy indication */
-        e->RNum       = 1;
-        e->R          = &pE->RData;
-        e->R->P       = &pE->xbuffer[0];
-        e->R->PLength = sizeof(pE->xbuffer) - 1;
       } else {
-        pE->xbuffer[e->R->PLength] = 0;
-        diva_capi_process_mngt_indication (pE);
+        word length = diva_tty_create_mngt_read_req (pE->xbuffer, "Info\\Channels");
+        diva_tty_send_mngt_req (pE, MAN_READ, length, 2);
       }
-    } else {
-      e->RNum = 0;
-      e->RNR  = 2;
-    }
+      break;
 
-    e->Ind = 0;
+    case 2: /* Read request pending */
+      if (e->complete == 255) {
+        if (e->Rc != 0xff) {
+          /*
+            Variable not supported by current version of management interface
+            */
+          pE->xbuffer[0] = 0;
+          diva_tty_send_mngt_req (pE, REMOVE, 1, -1);
+        } else {
+          pE->state = 3;
+        }
+      } else if (e->Ind) {
+        if ((e->Ind == MAN_INFO_IND) && (e->complete == 1)) {
+          word channels = diva_tty_read_mgnt_channels_nr (&e->RBuffer->P[0], e->RBuffer->length);
+          if (channels) {
+						if (channels <= 0xff) {
+            	pE->d.channels = channels;
+						}
+						pE->channel_count = channels;
+            DBG_LOG(("Management ifc. channel count: %d", channels))
+          }
+        }
+        e->Ind  = 0;
+        e->RNR  = 2;
+        e->RNum = 0;
+        pE->state = 4;
+      }
+      break;
+
+    case 3: /* Management interface indication pending */
+      if ((e->complete != 255) && e->Ind) {
+        if ((e->Ind == MAN_INFO_IND) && (e->complete == 1)) {
+          word channels = diva_tty_read_mgnt_channels_nr (&e->RBuffer->P[0], e->RBuffer->length);
+          if (channels) {
+						if (channels <= 0xff) {
+            	pE->d.channels = channels;
+						}
+						pE->channel_count = channels;
+            DBG_LOG(("Management ifc. channel count: %d", channels))
+          }
+        }
+        e->Ind = 0;
+        e->RNR = 2;
+        e->RNum = 0;
+
+        pE->xbuffer[0] = 0;
+        diva_tty_send_mngt_req (pE, REMOVE, 1, -1);
+      }
+      break;
+
+    case 4: /* Management interface return code pending */
+      if (e->complete == 255) {
+        pE->xbuffer[0] = 0;
+        diva_tty_send_mngt_req (pE, REMOVE, 1, -1);
+      } else if (e->Ind) {
+        e->Ind = 0;
+        e->RNR = 2;
+        e->RNum = 0;
+      }
+      break;
+
+    case -1: /* REMOVE pending */
+      if (e->complete == 255) {
+        if (e->Rc != 0xff) {
+          DBG_FTL(("Management entity removal failed"))
+        }
+       pE->state = 0;
+      } else {
+        e->Ind = 0;
+        e->RNR = 2;
+        e->RNum = 0;
+      }
+      break;
   }
 }
+
 /*
   Read real channel cound from the adapter management interface
   */
-static int diva_tty_read_channel_count (DESCRIPTOR* d, int* VsCAPI) {
-	int channels = -1;
+static int diva_tty_read_channel_count (DESCRIPTOR* d) {
+  int channels = -1;
 
-  if (d && d->request && (d->channels || (d->type == IDI_MADAPTER))) {
-    diva_capi_mngt_ctxt_t* pE;
-
-    if ((pE = diva_mem_malloc (sizeof(*pE)))) {
+  if (d->request && d->channels) {
+    diva_tty_mngt_ctxt_t* pE;
+    if ((pE = (void*)diva_mem_malloc (sizeof(*pE)))) {
       ENTITY* e = &pE->e;
-      int count = 500;
-      int prev_state;
-      diva_capi_mngt_work_item_t ch_items[] = { { "Info\\Channels", &channels, sizeof(channels) },
-                                                { 0, 0, 0 } };
-      diva_capi_mngt_work_item_t ch_items_mtpx[] = { { "Info\\Channels", &channels, sizeof(channels) },
-																										 { "Info\\VsCAPI",   VsCAPI,   sizeof(*VsCAPI)   },
-																										 { 0, 0, 0 } };
-      diva_capi_mngt_work_entry_t info_entry = { "Info", ch_items };
-      diva_capi_mngt_work_entry_t* entries[] = { &info_entry, 0 };
-
-			if (d->type == IDI_MADAPTER && VsCAPI != 0)
-				info_entry.work_items = ch_items_mtpx;
+      int count = 100, prev_state;
 
       memset (pE, 0x00, sizeof(*pE));
-      pE->d = d;
-      pE->work_entries = entries;
+      pE->d = *d;
+      pE->state = 1;
+      prev_state = pE->state;
 
       e->Id          = MAN_ID;
-      e->callback    = diva_capi_mngt_callback;
-      diva_capi_send_mngt_req (pE, ASSIGN, 1, 1);
-      prev_state = pE->state;
+      e->callback    = diva_tty_mmgt_callback;
+      pE->xbuffer[0] = 0;
+      diva_tty_send_mngt_req (pE, ASSIGN, 1, prev_state);
+
       diva_os_sleep(10);
       while (pE->state && --count) {
-        diva_os_sleep(10);
+        diva_os_sleep(50);
         if (pE->state != prev_state) {
           prev_state = pE->state;
           count = 500;
@@ -2667,12 +2521,17 @@ static int diva_tty_read_channel_count (DESCRIPTOR* d, int* VsCAPI) {
       }
 
       if (pE->state) {
-        DBG_FTL(("Management entity removal failed"))
+        DBG_FTL(("Management interface operation timeout"))
+        diva_os_sleep(50);
+      } else {
+        channels = pE->channel_count ? (int)pE->channel_count : (int)pE->d.channels;
       }
 
       diva_mem_free (pE);
+    } else {
+      DBG_ERR(("Can't access adapter management interface - no memory"))
     }
-	}
+  }
 
   return (channels);
 }

@@ -135,6 +135,7 @@ typedef struct ser_dev_s {
 	atomic_t						tx_q_sz;
 	int									tx_flow;
 	int									tx_complete;
+	struct tty_port tport;
 } ser_dev_t;
 
 #define DIVA_TTY_TX_Q_FC_LEVEL 1024
