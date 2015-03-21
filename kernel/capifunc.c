@@ -1300,7 +1300,7 @@ static void diva_release_appl(struct capi_ctr *ctrl, __u16 appl)
 
   if ((mem_release = diva_os_malloc (0, sizeof(*mem_release))) != 0)
   {
-    memset (mem_release, 0x00, sizeof(mem_release));
+    memset (mem_release, 0x00, sizeof(*mem_release));
     mem_release->t         = jiffies;
     mem_release->DataNCCI  = DataNCCI;
     mem_release->DataFlags = DataFlags;
