@@ -470,7 +470,7 @@ static void diva_tty_wakeup_write (ser_dev_t *sd) {
 	if ((tty->flags & (1 << TTY_DO_WRITE_WAKEUP)) && tty->ldisc.ops->write_wakeup) {
 			(tty->ldisc.ops->write_wakeup)(tty);
 #else
-	if ((tty->flags & (1 << TTY_DO_WRITE_WAKEUP)) && tty->ldisc->ops->write_wakeup) {
+	if ((tty->flags & (1 << TTY_DO_WRITE_WAKEUP)) && tty->ldisc->ops && tty->ldisc->ops->write_wakeup) {
 			(tty->ldisc->ops->write_wakeup)(tty);
 #endif
 #endif
@@ -1826,7 +1826,7 @@ int eicon_tty_isdn_init(void) {
 	up (&diva_tty_lock);
 #endif
 
-	diva_tty_init_prm[0] = 0;
+	memset (&diva_tty_init_prm[0], 0x00, sizeof(diva_tty_init_prm));
 	if (diva_tty_init) {
     int length = MIN(62, str_len(diva_tty_init));
 		mem_cpy (&diva_tty_init_prm[0], diva_tty_init, length);
@@ -1921,12 +1921,10 @@ int eicon_tty_isdn_init(void) {
 														 DivaCfgLibValueTypeUnsigned,
 														 &ports_unavailable_cause,
 														 sizeof(ports_unavailable_cause));
-#if 0
 		diva_tty_read_cfg_value (&sync_req, 0, "GlobalOptions\\TTY_INIT",
 														 DivaCfgLibValueTypeASCIIZ,
 														 &diva_tty_init_prm[0],
-														 sizeof(diva_tty_init_prm));
-#endif
+														 sizeof(diva_tty_init_prm)-1);
 
 		diva_tty_read_cfg_value (&sync_req, 0, "GlobalOptions\\WaitSigDisc",
 														 DivaCfgLibValueTypeBool,
