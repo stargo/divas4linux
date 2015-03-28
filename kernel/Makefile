@@ -1,7 +1,5 @@
 # Makefile for the Dialogic DIVA ISDN drivers.
 
-EXTRA_CFLAGS += -Wno-error=date-time
-
 CONFIG_CAPI_EICON=y
 CONFIG_ISDN_DIVAS=m
 CONFIG_ISDN_DIVAS_BRIPCI=y

@@ -193,7 +193,7 @@ volatile int dpc_init_complete          = 0;
 	#endif
 #endif
 
-#define	DIVA_BUILD_STRING "BUILD ("DIVA_BUILD"-"__DATE__"-"__TIME__")-"DIVA_VERSION_EXTEND
+#define	DIVA_BUILD_STRING "BUILD ("DIVA_BUILD")-"DIVA_VERSION_EXTEND
 
 #if !defined(__KERNEL_VERSION_GT_2_4__)
 #define MAX_DIVA_TTY_MAJORS 2
