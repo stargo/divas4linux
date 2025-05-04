@@ -30,5 +30,7 @@
 #include <string.h>
 #include "pri.h"
 
+PISDN_ADAPTER IoAdapters[MAX_ADAPTER];
+
 #include <io.c>
 

@@ -32,7 +32,7 @@
 #define seterror(x)
 #endif
 
-#include <stdarg.h>
+#include <linux/stdarg.h>
 
 /* include a standard set of header files for Unix drivers */
 

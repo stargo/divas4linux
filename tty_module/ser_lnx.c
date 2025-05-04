@@ -91,6 +91,7 @@ static void local_bh_enable(void) { }
 #include <linux/tty_flip.h>
 
 #include <linux/string.h>
+#include <linux/termios_internal.h>
 
 #endif /* } */
 
@@ -171,7 +172,6 @@ int diva_mtpx_adapter_detected = 0;
 int diva_wide_id_detected      = 0;
 volatile int dpc_init_complete          = 0;
 
-#undef memset
 #undef bcopy
 #define bcopy(__x__, __y__, __z__) memcpy(__y__,__x__,__z__)
 
@@ -303,7 +303,7 @@ word flat_descriptor_length = 0;
 static int eicon_refcount[MAX_DIVA_TTY_MAJORS];
 #endif
 static void PortReadReady(void *P, void* RefData, long Type, long Zero);
-static int tty_isdn_chars_in_buffer(struct tty_struct *tty);
+static unsigned int tty_isdn_chars_in_buffer(struct tty_struct *tty);
 int PortDoCollectAsync (ISDN_PORT* P);
 extern ISDN_PORT_DRIVER PortDriver;
 static void diva_setsignals (ser_dev_t* d, int dtr, int rts);
@@ -317,15 +317,6 @@ static int diva_tty_read_cfg_value (IDI_SYNC_REQ* sync_req,
                                      dword data_length);
 static void diva_tty_read_global_option(IDI_SYNC_REQ* sync_req, const char* name, int mask);
 static void diva_tty_read_global_port_option(IDI_SYNC_REQ* sync_req, const char* name, int mask);
-
-void* memset(void * s, int c, size_t count) {
- char *xs = (char *) s;
-
- while (count--)
- 	*xs++ = c;
-
-	return (s);
-}
 
 
 /*
@@ -1023,7 +1014,7 @@ tty_isdn_ioctl (struct tty_struct *tty, uint cmd, ulong arg) {
 		int ret = 0;
 		byte buf[128];
 
-		if (!access_ok (VERIFY_READ, (char*)arg, 128)) {
+		if (!access_ok ((char*)arg, 128)) {
 			return (-EFAULT);
 		}
 		if (copy_from_user (buf, (char*)arg, 128)) {
@@ -1040,7 +1031,7 @@ tty_isdn_ioctl (struct tty_struct *tty, uint cmd, ulong arg) {
 
 
 		if (ret > 0) {
-			if (!access_ok (VERIFY_WRITE, (char*)arg, 128)) {
+			if (!access_ok ((char*)arg, 128)) {
 				return (-EFAULT);
 			}
 			if (copy_to_user((char*)arg, buf, 128)) {
@@ -1120,7 +1111,7 @@ tty_isdn_ioctl (struct tty_struct *tty, uint cmd, ulong arg) {
 
 			case TIOCMSET: /* CHANGE SIGNALS */
 #if defined(__KERNEL_VERSION_GT_2_4__)
-        rc = ((access_ok(VERIFY_READ, (void *) arg, sizeof(unsigned int))) == 0) ? -EFAULT : 0;
+        rc = ((access_ok((void *) arg, sizeof(unsigned int))) == 0) ? -EFAULT : 0;
 #else
         rc = verify_area(VERIFY_READ, (void *) arg, sizeof(unsigned int));
 #endif
@@ -1146,7 +1137,7 @@ tty_isdn_ioctl (struct tty_struct *tty, uint cmd, ulong arg) {
 
 			case TIOCMBIS: /* SET SIGNALS */
 #if defined(__KERNEL_VERSION_GT_2_4__)
-        rc = ((access_ok(VERIFY_READ, (void *) arg, sizeof(unsigned int))) == 0) ? -EFAULT : 0;
+        rc = ((access_ok((void *) arg, sizeof(unsigned int))) == 0) ? -EFAULT : 0;
 #else
         rc = verify_area(VERIFY_READ, (void *) arg, sizeof(unsigned int));
 #endif
@@ -1172,7 +1163,7 @@ tty_isdn_ioctl (struct tty_struct *tty, uint cmd, ulong arg) {
 
 			case TIOCMBIC: /* CLEAR SIGNALS */
 #if defined(__KERNEL_VERSION_GT_2_4__)
-        rc = ((access_ok(VERIFY_READ, (void *) arg, sizeof(unsigned int))) == 0) ? -EFAULT : 0;
+        rc = ((access_ok((void *) arg, sizeof(unsigned int))) == 0) ? -EFAULT : 0;
 #else
         rc = verify_area(VERIFY_READ, (void *) arg, sizeof(unsigned int));
 #endif
@@ -1238,7 +1229,7 @@ static void tty_isdn_set_termios (struct tty_struct *tty,
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
 																	struct termios *old
 #else
-																	struct ktermios *old
+																	const struct ktermios *old
 #endif
 																	) {
 	unsigned long old_irql = eicon_splimp ();
@@ -1285,7 +1276,7 @@ static void tty_isdn_set_termios (struct tty_struct *tty,
 }
 
 
-static int tty_isdn_chars_in_buffer(struct tty_struct *tty) {
+static unsigned int tty_isdn_chars_in_buffer(struct tty_struct *tty) {
 	int dev_num;
 
 	if ((!tty) || tty->closing || ((dev_num = DIVA_MINOR(tty)) >= (Channel_Count+1))) {
@@ -1364,7 +1355,7 @@ static void tty_isdn_hangup (struct tty_struct* tty) {
 	eicon_splx (old_irql);
 }
 
-static int tty_isdn_write_room(struct tty_struct *tty) {
+static unsigned int tty_isdn_write_room(struct tty_struct *tty) {
 	int dev_num, ret;
 
 	if ((!tty) || tty->closing || ((dev_num = DIVA_MINOR(tty)) >= (Channel_Count+1))) {
@@ -1541,7 +1532,7 @@ static struct tty_operations diva_tty_ops = {
 		return (-1);
 	}
 
-	if (!(eicon_tty_driver = alloc_tty_driver (minors+1))) {
+	if (!(eicon_tty_driver = tty_alloc_driver (minors+1, 0))) {
 		DBG_ERR(("alloc_tty_driver(%d) failed", minors+1))
 		return (-1);
 	}
@@ -1567,7 +1558,7 @@ static struct tty_operations diva_tty_ops = {
 
 	if (tty_register_driver(eicon_tty_driver)) {
 		DBG_ERR(("tty_register_driver failed"))
-		put_tty_driver(eicon_tty_driver);
+		tty_driver_kref_put(eicon_tty_driver);
 		eicon_tty_driver = 0;
 		return (-1);;
 	}
@@ -1866,10 +1857,8 @@ int eicon_tty_isdn_init(void) {
 				}
 			}
 #else /* } { */
-			if (tty_unregister_driver(eicon_tty_driver)) {
-				DBG_ERR(("Failed to unregister tty driver"))
-			}
-			put_tty_driver(eicon_tty_driver);
+			tty_unregister_driver(eicon_tty_driver);
+			tty_driver_kref_put(eicon_tty_driver);
 			eicon_tty_driver = 0;
 #endif /* } */
 			return -EIO;
@@ -1982,13 +1971,11 @@ void cleanup_module (void) {
 		}
 	}
 #else /* } { */
-	if (tty_unregister_driver(eicon_tty_driver)) {
-		DBG_ERR(("Failed to unregister tty driver"))
-	}
+	tty_unregister_driver(eicon_tty_driver);
 	for (j = 0; j < Channel_Count; j++) {
 		tty_port_destroy(&(ser_devs[j].tport));
 	}
-	put_tty_driver(eicon_tty_driver);
+	tty_driver_kref_put(eicon_tty_driver);
 	eicon_tty_driver = 0;
 #endif /* } */
 
@@ -2218,9 +2205,9 @@ static void diva_waituntilsent(struct tty_struct *tty, int timeout) {
 void diva_tty_os_sleep (dword mSec) {
   unsigned long timeout = HZ * mSec / 1000 + 1;
 
-	current->state = TASK_UNINTERRUPTIBLE;
+	WRITE_ONCE(current->__state, TASK_UNINTERRUPTIBLE);
   schedule_timeout(timeout);
-	current->state = TASK_RUNNING;
+	WRITE_ONCE(current->__state, TASK_RUNNING);
 }
 
 /*

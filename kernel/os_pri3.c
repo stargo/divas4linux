@@ -25,7 +25,7 @@
 /* $Id: os_pir3.c,v 1.1.2.3 2001/02/14 21:10:19 armin Exp $ */
 
 #include "platform.h"
-#include <stdarg.h>
+#include <linux/stdarg.h>
 #include "debuglib.h"
 #include "cardtype.h"
 #include "dlist.h"

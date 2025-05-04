@@ -48,7 +48,11 @@
 #else
 #define MODULDRIVERDEBUG 1
 #endif
+#ifdef __KERNEL__
+#include <linux/stdarg.h>
+#else
 #include <stdarg.h>
+#endif
 /*
  * define global debug priorities
  */

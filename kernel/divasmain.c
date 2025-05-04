@@ -388,6 +388,8 @@ typedef struct _diva_allocated_dma_descriptors {
 	int                 opened;
 } diva_allocated_dma_descriptors_t;
 static diva_allocated_dma_descriptors_t diva_allocated_dma_descriptors;
+static struct device *divas_device = NULL;
+static struct class *divas_class = NULL;
 
 static dword diva_create_allocated_dma_descriptors  (diva_allocated_dma_descriptors_t* dma, dword nr);
 static void  diva_release_allocated_dma_descriptors (diva_allocated_dma_descriptors_t* dma);
@@ -597,7 +599,13 @@ static void *diva_pci_alloc_consistent(struct pci_dev *hwdev,
 				       dma_addr_t * dma_handle,
 				       void **addr_handle)
 {
-	void *addr = pci_alloc_consistent(hwdev, size, dma_handle);
+	void *addr;
+
+	if (hwdev == NULL) {
+		return NULL;
+	}
+
+	addr = dma_alloc_coherent(&hwdev->dev, size, dma_handle, GFP_ATOMIC);
 
 	*addr_handle = addr;
 
@@ -680,7 +688,7 @@ void diva_free_dma_map_pages(void *hdev, struct _diva_dma_map_entry *pmap, int p
 
 		dma_handle = (dma_addr_t)(((qword)phys_addr) | (((qword)addr_hi) << 32));
 
-		pci_free_consistent(pdev, pages*PAGE_SIZE, addr_handle,
+		dma_free_coherent(pdev == NULL ? NULL : &pdev->dev, pages*PAGE_SIZE, addr_handle,
 				    dma_handle);
 		DBG_TRC(("dma map free [%d]=(%08lx:lo %08x:hi %08x:%08lx)", i,
 			 (unsigned long) cpu_addr, (dword) dma_handle, (dword)(((qword)dma_handle) >> 32),
@@ -708,7 +716,7 @@ static dword diva_create_allocated_dma_descriptors  (diva_allocated_dma_descript
 
 		do {
 			if ((descriptor = (diva_allocated_dma_descriptor_t*)diva_os_malloc (0, sizeof(*descriptor))) != 0) {
-				if ((descriptor->addr = pci_alloc_consistent (0, PAGE_SIZE, &descriptor->dma_handle)) != 0) {
+				if ((descriptor->addr = dma_alloc_coherent(divas_device, PAGE_SIZE, &descriptor->dma_handle, GFP_ATOMIC)) != 0) {
 					sprintf ((char*)descriptor->addr,
 									 "%s %08x:%08x", "DESCRIPTOR:",
 									 (dword)(((qword)descriptor->dma_handle) >> 32),
@@ -738,7 +746,7 @@ static void diva_release_allocated_dma_descriptors (diva_allocated_dma_descripto
 		diva_allocated_dma_descriptor_t* descriptor =
 					DIVAS_CONTAINING_RECORD(link, diva_allocated_dma_descriptor_t, link);
 
-		pci_free_consistent (0, PAGE_SIZE, descriptor->addr, descriptor->dma_handle);
+		dma_free_coherent (divas_device, PAGE_SIZE, descriptor->addr, descriptor->dma_handle);
 		diva_q_remove (&dma->descriptor_q, &descriptor->link);
 		diva_os_free (0, descriptor);
 		nr++;
@@ -1266,12 +1274,13 @@ static void divas_unregister_chrdev(void)
 }
 
 void diva_os_get_time(dword * sec, dword * usec) {
-	struct timeval tv;
+	ktime_t tv;
 
-	do_gettimeofday(&tv);
+	tv = ktime_get_real();
 
-	*sec  = (dword)tv.tv_sec;
-	*usec = (dword)tv.tv_usec;
+	*sec  = tv / 1000000000;
+	*usec = tv / 1000;
+	*usec = (*sec * 1000000) - *usec;
 }
 
 static int DIVA_INIT_FUNCTION divas_register_chrdev(void)
@@ -1349,12 +1358,8 @@ static int __devinit divas_init_one(struct pci_dev *pdev,
 
 		if (use_dac != 0) {
 			DBG_LOG(("bus: %08x fn: %08x set dma mask to %s", pdev->bus->number, pdev->devfn, "DMA_64BIT_MASK"))
-			if (pci_set_dma_mask(pdev, DMA_64BIT_MASK) != 0) {
+			if (dma_set_mask_and_coherent(&pdev->dev, DMA_64BIT_MASK) != 0) {
 				DBG_ERR(("bus: %08x fn: %08x failed to set dma mask to %s",
-					pdev->bus->number, pdev->devfn, "DMA_64BIT_MASK"))
-			}
-			if (pci_set_consistent_dma_mask(pdev, DMA_64BIT_MASK) != 0) {
-				DBG_ERR(("bus: %08x fn: %08x failed to set consistent dma mask to %s",
 					pdev->bus->number, pdev->devfn, "DMA_64BIT_MASK"))
 			}
 		}
@@ -1552,6 +1557,26 @@ static int DIVA_INIT_FUNCTION divas_init(void)
 	printk("PRI/PCI ");
 #endif
 	printk("adapters\n");
+
+	divas_class = class_create(THIS_MODULE, "divas");
+	if (IS_ERR(divas_class)) {
+		printk(KERN_ERR "%s: failed to create character device class.\n", DRIVERLNAME);
+		ret = -EIO;
+		goto out;
+	}
+
+	divas_device = device_create(divas_class, NULL, MKDEV(0, 0), NULL, "divas");
+	if (IS_ERR(divas_device)) {
+		printk(KERN_ERR "%s: failed to create character device.\n", DRIVERLNAME);
+		ret = -EIO;
+		goto out;
+	}
+
+	if (dma_coerce_mask_and_coherent(divas_device, DMA_BIT_MASK(24))) {
+		printk(KERN_ERR "%s: failed to set DMA mask.\n", DRIVERLNAME);
+		ret = -EIO;
+		goto out;
+	}
 
 	if (diva_os_initialize_spin_lock (&diva_os_usermode_proc.request_lock, "init")) {
 		destroy_spin_lock = 1;

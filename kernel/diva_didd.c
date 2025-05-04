@@ -52,7 +52,6 @@ static char *main_proc_dir = "eicon";
 
 MODULE_DESCRIPTION("DIDD table driver for diva drivers");
 MODULE_AUTHOR("Cytronics & Melware, Dialogic");
-MODULE_SUPPORTED_DEVICE("Dialogic Diva drivers");
 MODULE_LICENSE("GPL");
 
 #define DBG_MINIMUM  (DL_LOG + DL_FTL + DL_ERR)
@@ -101,6 +100,8 @@ static DEFINE_SEMAPHORE(didd_ifc_lock);
   */
 static void*      clock_data_addr;
 static dma_addr_t clock_data_bus_addr;
+static struct device *clock_data_dev = NULL;
+static struct class *divadidd_class = NULL;
 
 static char *getrev(const char *revision)
 {
@@ -140,12 +141,11 @@ static int divadidd_proc_open(struct inode *inode, struct file *file)
 	return single_open(file, proc_show, NULL);
 }
 
-static const struct file_operations divadidd_proc_fops = {
-	.owner          = THIS_MODULE,
-	.open           = divadidd_proc_open,
-	.read           = seq_read,
-	.llseek         = seq_lseek,
-	.release        = single_release,
+static const struct proc_ops divadidd_proc_fops = {
+	.proc_open      = divadidd_proc_open,
+	.proc_read      = seq_read,
+	.proc_lseek    = seq_lseek,
+	.proc_release   = single_release,
 };
 
 static int DIVA_INIT_FUNCTION create_proc(void)
@@ -501,6 +501,32 @@ static int DIVA_INIT_FUNCTION divadidd_init(void)
 	printk("%s  Build:%s(%s)\n", getrev(tmprev),
 	       diva_didd_common_code_build, DIVA_BUILD);
 
+	divadidd_class = class_create(THIS_MODULE, "divadidd");
+	if (IS_ERR(divadidd_class)) {
+		printk(KERN_ERR "%s: failed to create character device class.\n", DRIVERLNAME);
+		ret = -EIO;
+		goto out;
+	}
+
+	clock_data_dev = device_create(divadidd_class, NULL, MKDEV(0, 0), NULL, "divadidd");
+	if (IS_ERR(clock_data_dev)) {
+		printk(KERN_ERR "%s: failed to create character device.\n", DRIVERLNAME);
+		ret = -EIO;
+		goto out;
+	}
+
+	if (dma_coerce_mask_and_coherent(clock_data_dev, DMA_BIT_MASK(24))) {
+		printk(KERN_ERR "%s: failed to set DMA mask.\n", DRIVERLNAME);
+		ret = -EIO;
+		goto out;
+	}
+
+	if (IS_ERR(clock_data_dev)) {
+		printk(KERN_ERR "%s: failed to set DMA mask.\n", DRIVERLNAME);
+		ret = -EIO;
+		goto out;
+	}
+
 	if (!create_proc()) {
 		printk(KERN_ERR "%s: could not create proc entry\n",
 		       DRIVERLNAME);
@@ -532,8 +558,11 @@ static int DIVA_INIT_FUNCTION divadidd_init(void)
     major = -1;
   }
 
-	if ((clock_data_addr = pci_alloc_consistent (0, PAGE_SIZE, &clock_data_bus_addr)) != 0)
+	if ((clock_data_addr = dma_alloc_coherent(clock_data_dev, PAGE_SIZE, &clock_data_bus_addr, GFP_ATOMIC)) != 0) {
 		memset (clock_data_addr, 0x00, PAGE_SIZE);
+	} else {
+		printk(KERN_ERR "%s: failed to allocate DMA for clock data.\n", DRIVERLNAME);
+	}
 
 out:
 
@@ -547,9 +576,13 @@ void DIVA_EXIT_FUNCTION divadidd_exit(void)
 	diddfunc_finit();
 	remove_proc();
 
-	if (clock_data_addr != 0) {
-		pci_free_consistent (0, PAGE_SIZE, clock_data_addr, clock_data_bus_addr);
+	if (clock_data_dev) {
+		if (clock_data_addr != 0) {
+			dma_free_coherent(clock_data_dev, PAGE_SIZE, clock_data_addr, clock_data_bus_addr);
+		}
+		device_destroy(divadidd_class, MKDEV(0, 0));
 	}
+	class_destroy(divadidd_class);
 
 	printk(KERN_INFO "%s: module unloaded.\n", DRIVERLNAME);
 }

@@ -28,6 +28,8 @@
 #if defined(CONFIG_DEVFS_FS)
 #include <linux/devfs_fs_kernel.h>
 #endif
+#include <linux/seq_file.h>
+#include <linux/panic_notifier.h>
 
 #include "platform.h"
 #include "di_defs.h"
@@ -40,7 +42,6 @@ static int major;
 
 MODULE_DESCRIPTION("Maint driver for Dialogic DIVA Server cards");
 MODULE_AUTHOR("Cytronics & Melware, Dialogic");
-MODULE_SUPPORTED_DEVICE("DIVA card driver");
 MODULE_LICENSE("GPL");
 
 int buffer_length = 128;
@@ -171,12 +172,11 @@ static int proc_open(struct inode *inode, struct file *file)
 	return single_open(file, proc_show, NULL);
 }
 
-static const struct file_operations proc_fops = {
-	.owner          = THIS_MODULE,
-	.open           = proc_open,
-	.read           = seq_read,
-	.llseek         = seq_lseek,
-	.release        = single_release,
+static const struct proc_ops proc_fops = {
+	.proc_open      = proc_open,
+	.proc_read      = seq_read,
+	.proc_lseek     = seq_lseek,
+	.proc_release   = single_release,
 };
 
 static int DIVA_INIT_FUNCTION create_maint_proc(void)

@@ -25,7 +25,7 @@
 /* $Id: os_bri.c,v 1.1.2.2 2001/02/12 20:23:46 armin Exp $ */
 
 #include "platform.h"
-#include <stdarg.h>
+#include <linux/stdarg.h>
 #include "debuglib.h"
 #include "cardtype.h"
 #include "dlist.h"

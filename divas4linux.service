@@ -1,0 +1,12 @@
+[Unit]
+Description=Divas4Linux
+After=network.target
+
+[Service]
+Type=oneshot
+ConditionPathExists=/usr/lib/divas/divas_cfg.rc
+ExecStart=/usr/lib/divas/divas_cfg.rc
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

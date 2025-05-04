@@ -38,7 +38,6 @@
 #include <dlist.h>
 
 #include <s_analog.c>
-PISDN_ADAPTER IoAdapters[MAX_ADAPTER];
 extern int card_ordinal;
 extern int card_number;
 

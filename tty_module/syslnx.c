@@ -75,8 +75,6 @@ void sysPageFree (void *Handle) {
 
 void *sysHeapAlloc (dword Size) {
 	void *Address = 0;
-	int i;
-	char* p;
 
 	if (Size) {
 		Address = diva_mem_malloc(Size);
@@ -85,12 +83,8 @@ void *sysHeapAlloc (dword Size) {
 	if (!Address) {
 		return (0);
 	}
-	p = Address;
-	i = Size;
 
-	while (i--) {
-		*p++ = 0;
-	}
+	memset(Address, 0, Size);
 
 	return (Address);
 }

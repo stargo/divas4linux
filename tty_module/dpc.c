@@ -107,7 +107,7 @@ typedef struct work_struct* diva_work_queue_fn_parameter_t;
 
 static void diva_tty_dpc_proc (diva_work_queue_fn_parameter_t context);
 #endif
-static void diva_timer_function (unsigned long data);
+static void diva_timer_function (struct timer_list *);
 static void diva_process_timer_ticks (void);
 
 /* --------------------------------------------------------------------------
@@ -184,11 +184,9 @@ int	diva_start_main_dpc (void) {
 	if (divas_dpc_pid != (-1))
 #endif /* } */
 	{
-		init_timer (&diva_timer_id);
+		timer_setup(&diva_timer_id, diva_timer_function, 0);
 		diva_timer_ticks = 0;
 
-		diva_timer_id.function	= (void *)diva_timer_function;
-		diva_timer_id.data			= (unsigned long)&diva_timer_ticks;
 		atomic_set(&divas_timer_running, 1);
 		if (!(diva_to = DIVA_TIMER_TO)) {
 			diva_to = 1;
@@ -421,7 +419,7 @@ int sysCancelDpc (sys_DPC *Dpc) {
 /*
 	Timer callback. UN-SAFE, and can run in interrupt context
 	*/
-static void diva_timer_function (unsigned long data) {
+static void diva_timer_function (struct timer_list *t) {
 	unsigned long flags;
 
 	if (!atomic_read(&divas_timer_running)) {

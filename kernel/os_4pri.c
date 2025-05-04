@@ -23,7 +23,7 @@
  *
  */
 #include "platform.h"
-#include <stdarg.h>
+#include <linux/stdarg.h>
 #include "debuglib.h"
 #include "cardtype.h"
 #include "dlist.h"

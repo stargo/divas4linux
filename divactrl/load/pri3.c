@@ -39,7 +39,6 @@
 #include <xdi_msg.h>
 
 #include <s_pri3.c>
-PISDN_ADAPTER IoAdapters[MAX_ADAPTER];
 extern int card_ordinal;
 extern int card_number;
 

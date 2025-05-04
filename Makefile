@@ -11,7 +11,7 @@ DESTDIR=
 
 EICONDIR=/usr/lib/divas
 
-.PHONY: all clean
+.PHONY: all clean tty_module kernel
 
 all: kernel/divas.ko tty_module/Divatty.ko divactrl/divactrl
 	@echo
@@ -20,18 +20,22 @@ all: kernel/divas.ko tty_module/Divatty.ko divactrl/divactrl
 	@echo "You may run 'make install' now."
 	@echo
 
-tty_module/Divatty.ko: $(KDIR)/.config
+tty_module/Divatty.ko: $(KDIR)/.config tty_module
+
+tty_module: $(KDIR)/.config kernel
 	@echo "Building tty kernel module using kernel from $(KDIR) ..."
 	@echo
 	@rm -f tty_module/divainclude
 	@ln -s `pwd`/kernel tty_module/divainclude
-	@make DIVA_CFLAGS="-I`pwd`/tty_module -I`pwd`/kernel" -C $(KDIR) M=`pwd`/tty_module modules
+	@make DIVA_CFLAGS="-I`pwd`/tty_module -I`pwd`/kernel" -C $(KDIR) M=`pwd`/tty_module KBUILD_EXTRA_SYMBOLS="`pwd`/kernel/Module.symvers" modules -j $(nproc)
 	@echo
 
-kernel/divas.ko: $(KDIR)/.config config.h
+kernel/divas.ko: $(KDIR)/.config config.h kernel
+
+kernel: $(KDIR)/.config config.h
 	@echo "Building divas4linux kernel modules using kernel from $(KDIR) ..."
 	@echo
-	@make -C $(KDIR) M=`pwd`/kernel modules
+	@make -C $(KDIR) M=`pwd`/kernel modules -j $(nproc)
 	@echo
 
 divactrl/divactrl:
@@ -46,7 +50,7 @@ divactrl/divactrl:
 	 	--with-firmware=$(EICONDIR)	\
 		--with-kernel=`pwd`/dlinux		\
 		|| exit 1;		\
-	  make || exit 1;	\
+	  make -j $(nproc) || exit 1;	\
 	  rm -rf ./dlinux;		\
 	)
 

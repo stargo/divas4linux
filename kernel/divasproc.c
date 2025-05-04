@@ -15,6 +15,7 @@
 #include <linux/kernel.h>
 #include <linux/poll.h>
 #include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 
 #include "platform.h"
 #include "debuglib.h"
@@ -115,14 +116,13 @@ static int divas_close(struct inode *inode, struct file *file)
 	return (0);
 }
 
-static const struct file_operations divas_fops = {
-	.owner   = THIS_MODULE,
-	.llseek  = no_llseek,
-	.read    = divas_read,
-	.write   = divas_write,
-	.poll    = divas_poll,
-	.open    = divas_open,
-	.release = divas_close
+static const struct proc_ops divas_fops = {
+	.proc_lseek   = no_llseek,
+	.proc_read    = divas_read,
+	.proc_write   = divas_write,
+	.proc_poll    = divas_poll,
+	.proc_open    = divas_open,
+	.proc_release = divas_close
 };
 
 int create_divas_proc(void)
@@ -150,7 +150,7 @@ void remove_divas_proc(void)
 static ssize_t
 write_grp_opt(struct file *file, const char __user *buffer, size_t count, loff_t *pos)
 {
-	diva_os_xdi_adapter_t *a = PDE_DATA(file_inode(file));
+	diva_os_xdi_adapter_t *a = pde_data(file_inode(file));
 	PISDN_ADAPTER IoAdapter = IoAdapters[a->controller - 1];
 
 	if ((count == 1) || (count == 2)) {
@@ -180,7 +180,7 @@ write_grp_opt(struct file *file, const char __user *buffer, size_t count, loff_t
 static ssize_t
 write_d_l1_down(struct file *file, const char __user *buffer, size_t count, loff_t *pos)
 {
-	diva_os_xdi_adapter_t *a = PDE_DATA(file_inode(file));
+	diva_os_xdi_adapter_t *a = pde_data(file_inode(file));
 	PISDN_ADAPTER IoAdapter = IoAdapters[a->controller - 1];
 
 	if ((count == 1) || (count == 2)) {
@@ -224,16 +224,15 @@ d_l1_down_proc_show(struct seq_file *m, void *v)
 
 static int d_l1_down_proc_open(struct inode *inode, struct file *file)
 {
-	return single_open(file, d_l1_down_proc_show, PDE_DATA(inode));
+	return single_open(file, d_l1_down_proc_show, pde_data(inode));
 }
 
-static const struct file_operations d_l1_down_proc_fops = {
-	.owner          = THIS_MODULE,
-	.open           = d_l1_down_proc_open,
-	.read           = seq_read,
-	.llseek         = seq_lseek,
-	.release        = single_release,
-	.write          = write_d_l1_down,
+static const struct proc_ops d_l1_down_proc_fops = {
+	.proc_open      = d_l1_down_proc_open,
+	.proc_read      = seq_read,
+	.proc_lseek     = seq_lseek,
+	.proc_release   = single_release,
+	.proc_write     = write_d_l1_down,
 };
 
 /*
@@ -255,16 +254,15 @@ grp_opt_proc_show(struct seq_file *m, void *v)
 
 static int grp_opt_proc_open(struct inode *inode, struct file *file)
 {
-	return single_open(file, grp_opt_proc_show, PDE_DATA(inode));
+	return single_open(file, grp_opt_proc_show, pde_data(inode));
 }
 
-static const struct file_operations grp_opt_proc_fops = {
-	.owner          = THIS_MODULE,
-	.open           = grp_opt_proc_open,
-	.read           = seq_read,
-	.llseek         = seq_lseek,
-	.release        = single_release,
-	.write          = write_grp_opt,
+static const struct proc_ops grp_opt_proc_fops = {
+	.proc_open      = grp_opt_proc_open,
+	.proc_read      = seq_read,
+	.proc_lseek     = seq_lseek,
+	.proc_release   = single_release,
+	.proc_write     = write_grp_opt,
 };
 
 /*
@@ -351,16 +349,15 @@ info_show(struct seq_file *m, void *v)
 
 static int info_proc_open(struct inode *inode, struct file *file)
 {
-	return single_open(file, info_show, PDE_DATA(inode));
+	return single_open(file, info_show, pde_data(inode));
 }
 
-static const struct file_operations info_proc_fops = {
-	.owner          = THIS_MODULE,
-	.open           = info_proc_open,
-	.read           = seq_read,
-	.llseek         = seq_lseek,
-	.release        = single_release,
-	.write          = info_write,
+static const struct proc_ops info_proc_fops = {
+	.proc_open      = info_proc_open,
+	.proc_read      = seq_read,
+	.proc_lseek     = seq_lseek,
+	.proc_release   = single_release,
+	.proc_write     = info_write,
 };
 
 /*

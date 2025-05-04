@@ -25,7 +25,7 @@
 /*
 	*/
 #include "platform.h"
-#include <stdarg.h>
+#include <linux/stdarg.h>
 
 /* -------------------------------------------------------------------------
     Generic printf

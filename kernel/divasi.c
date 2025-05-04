@@ -25,6 +25,7 @@
 #if defined(CONFIG_DEVFS_FS)
 #include <linux/devfs_fs_kernel.h>
 #endif
+#include <linux/seq_file.h>
 
 #include "platform.h"
 #include "di_defs.h"
@@ -38,7 +39,6 @@ static int major;
 
 MODULE_DESCRIPTION("User IDI Interface for Dialogic DIVA cards");
 MODULE_AUTHOR("Cytronics & Melware, Dialogic");
-MODULE_SUPPORTED_DEVICE("DIVA card driver");
 MODULE_LICENSE("GPL");
 
 typedef struct _diva_um_idi_os_context {
@@ -85,7 +85,7 @@ static unsigned int um_idi_poll(struct file *file, poll_table * wait);
 static int um_idi_open(struct inode *inode, struct file *file);
 static int um_idi_release(struct inode *inode, struct file *file);
 static int remove_entity(void *entity);
-static void diva_um_timer_function(unsigned long data);
+static void diva_um_timer_function(struct timer_list *t);
 
 /*
  * proc entry
@@ -114,12 +114,11 @@ static int um_idi_proc_open(struct inode *inode, struct file *file)
 	return single_open(file, um_idi_proc_show, NULL);
 }
 
-static const struct file_operations um_idi_proc_fops = {
-	.owner          = THIS_MODULE,
-	.open           = um_idi_proc_open,
-	.read           = seq_read,
-	.llseek         = seq_lseek,
-	.release        = single_release,
+static const struct proc_ops um_idi_proc_fops = {
+	.proc_open      = um_idi_proc_open,
+	.proc_read      = seq_read,
+	.proc_lseek     = seq_lseek,
+	.proc_release   = single_release,
 };
 
 static int DIVA_INIT_FUNCTION create_um_idi_proc(void)
@@ -316,9 +315,7 @@ static int um_idi_open_adapter(struct file *file, int adapter_nr)
 	p_os = (diva_um_idi_os_context_t *) diva_um_id_get_os_context(e);
 	init_waitqueue_head(&p_os->read_wait);
 	init_waitqueue_head(&p_os->close_wait);
-	init_timer(&p_os->diva_timer_id);
-	p_os->diva_timer_id.function = (void *) diva_um_timer_function;
-	p_os->diva_timer_id.data = (unsigned long) p_os;
+	timer_setup(&p_os->diva_timer_id, diva_um_timer_function, 0);
 	p_os->aborted = 0;
 	p_os->adapter_nr = adapter_nr;
 	return (1);
@@ -336,9 +333,7 @@ static int um_idi_create_proxy(struct file *file) {
   p_os = (diva_um_idi_os_context_t *) diva_um_id_get_os_context(e);
   init_waitqueue_head(&p_os->read_wait);
   init_waitqueue_head(&p_os->close_wait);
-  init_timer(&p_os->diva_timer_id);
-  p_os->diva_timer_id.function = (void *) diva_um_timer_function;
-  p_os->diva_timer_id.data = (unsigned long) p_os;
+  timer_setup(&p_os->diva_timer_id, diva_um_timer_function, 0);
   p_os->aborted = 0;
   p_os->adapter_nr = -1;
 
@@ -512,9 +507,9 @@ void diva_os_wakeup_close(void *os_context)
 }
 
 static
-void diva_um_timer_function(unsigned long data)
+void diva_um_timer_function(struct timer_list *t)
 {
-	diva_um_idi_os_context_t *p_os = (diva_um_idi_os_context_t *) data;
+	diva_um_idi_os_context_t *p_os = from_timer(p_os, t, diva_timer_id);
 
 	p_os->aborted = 1;
 	divas_um_notify_timeout (p_os);

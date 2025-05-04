@@ -55,7 +55,6 @@ static char *DRIVERLNAME = "divacapi";
 
 MODULE_DESCRIPTION("CAPI driver for Dialogic DIVA cards");
 MODULE_AUTHOR("Cytronics & Melware, Dialogic");
-MODULE_SUPPORTED_DEVICE("CAPI and DIVA card drivers");
 MODULE_LICENSE("GPL");
 
 typedef struct _diva_os_thread_dpc {
