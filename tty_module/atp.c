@@ -2466,16 +2466,16 @@ int atPlusI (ISDN_PORT *P, AT_DATA *At, byte **Arg)
 					int j = 0;
 
 					j += sprintf (&tmp[j],
-												At->f.o_line ? "CALL OUT ADAPTER: %02d CHANNELS: %02d\n" : "CALL OUT ADAPTER: any\n",
+												At->f.o_line ? "\r\nCALL OUT ADAPTER: %02d CHANNELS: %02d\r\n" : "\r\nCALL OUT ADAPTER: any\r\n",
 												At->f.o_line, isdn_get_adapter_channel_count (At->f.o_line));
 					j += sprintf (&tmp[j],
-												At->f.i_line ? "CALL IN  ADAPTER: %02d CHANNELS: %02d\n" : "CALL IN  ADAPTER: any\n",
+												At->f.i_line ? "CALL IN  ADAPTER: %02d CHANNELS: %02d\r\n" : "CALL IN  ADAPTER: any\r\n",
 												At->f.i_line, isdn_get_adapter_channel_count (At->f.i_line));
 					j += sprintf (&tmp[j],
-									At->f.o_line && At->f.o_channel ? "CALL OUT CHANNEL: %02d\n" : "CALL OUT CHANNEL: any\n",
+									At->f.o_line && At->f.o_channel ? "CALL OUT CHANNEL: %02d\r\n" : "CALL OUT CHANNEL: any\r\n",
 												At->f.o_channel);
 					j += sprintf (&tmp[j],
-									At->f.i_line && At->f.i_channel ? "CALL IN  CHANNEL: %02d\n" : "CALL IN  CHANNEL: any\n",
+									At->f.i_line && At->f.i_channel ? "CALL IN  CHANNEL: %02d\r\n" : "CALL IN  CHANNEL: any\r\n",
 									At->f.i_channel);
 
 					tmp[j] = 0;
@@ -2518,17 +2518,17 @@ int atPlusI (ISDN_PORT *P, AT_DATA *At, byte **Arg)
 				case '?': {
 					char tmp[256];
 					int j = 0;
-					j += sprintf   (&tmp[j], "ADAPTERS        : %02d\n",\
+					j += sprintf   (&tmp[j], "\r\nADAPTERS        : %02d\r\n",\
                                                   isdn_get_num_adapters ());
 					if (At->f.o_line) {
-						j += sprintf (&tmp[j], "CALL OUT ADAPTER: %02d\n", At->f.o_line);
+						j += sprintf (&tmp[j], "CALL OUT ADAPTER: %02d\r\n", At->f.o_line);
 					} else {
-						j += sprintf (&tmp[j], "CALL OUT ADAPTER: %s\n", "any");
+						j += sprintf (&tmp[j], "CALL OUT ADAPTER: %s\r\n", "any");
 					}
 					if (At->f.i_line) {
-						j += sprintf (&tmp[j], "CALL IN  ADAPTER: %02d\n", At->f.i_line);
+						j += sprintf (&tmp[j], "CALL IN  ADAPTER: %02d\r\n", At->f.i_line);
 					} else {
-						j += sprintf (&tmp[j], "CALL IN  ADAPTER: %s\n", "any");
+						j += sprintf (&tmp[j], "CALL IN  ADAPTER: %s\r\n", "any");
 					}
 					tmp[j] = 0;
 					atRspStr (P, tmp);
