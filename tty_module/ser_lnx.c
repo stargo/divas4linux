@@ -2204,9 +2204,9 @@ static void diva_waituntilsent(struct tty_struct *tty, int timeout) {
 void diva_tty_os_sleep (dword mSec) {
   unsigned long timeout = HZ * mSec / 1000 + 1;
 
-	WRITE_ONCE(current->__state, TASK_UNINTERRUPTIBLE);
-  schedule_timeout(timeout);
-	WRITE_ONCE(current->__state, TASK_RUNNING);
+	set_current_state(TASK_UNINTERRUPTIBLE);
+	schedule_timeout(timeout);
+	set_current_state(TASK_RUNNING);
 }
 
 /*
