@@ -138,7 +138,7 @@ EXPORT_NO_SYMBOLS;
 #endif
 
 #if defined(DIVA_USES_MUTEX)
-static struct semaphore diva_tty_lock;
+static struct mutex diva_tty_lock;
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,2,37)
 #define init_MUTEX_LOCKED(__x__) sema_init((__x__), 0)
@@ -1813,8 +1813,7 @@ int eicon_tty_isdn_init(void) {
 	byte ComPort[64];
 
 #if defined(DIVA_USES_MUTEX)
-	init_MUTEX_LOCKED(&diva_tty_lock);
-	up (&diva_tty_lock);
+	mutex_init(&diva_tty_lock);
 #endif
 
 	memset (&diva_tty_init_prm[0], 0x00, sizeof(diva_tty_init_prm));
@@ -2024,7 +2023,7 @@ unsigned long eicon_splimp (void) {
 #else /* } { */
 
 #if defined(DIVA_USES_MUTEX)
-	down (&diva_tty_lock);
+	mutex_lock(&diva_tty_lock);
 #else
 	local_bh_disable();
 	lock_kernel();
@@ -2047,7 +2046,7 @@ void eicon_splx (unsigned long i) {
 
 #else /* } { */
 #if defined(DIVA_USES_MUTEX)
-	up (&diva_tty_lock);
+	mutex_unlock(&diva_tty_lock);
 #else
 	unlock_kernel();
 	local_bh_enable();
