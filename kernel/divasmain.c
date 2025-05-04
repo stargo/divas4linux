@@ -1667,6 +1667,9 @@ static void DIVA_EXIT_FUNCTION divas_exit(void)
 	divas_unregister_chrdev();
 	divasfunc_exit();
 
+	device_destroy(divas_class, MKDEV(0, 0));
+	class_destroy(divas_class);
+
 	flush_scheduled_work();
 	diva_os_destroy_spin_lock (&diva_os_usermode_proc.request_lock, "init");
 
