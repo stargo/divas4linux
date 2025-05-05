@@ -90,7 +90,9 @@ DIVA_DI_PRINTF dprintf = no_printf;
 
 static struct file_operations diva_hsi_fops = {
 	.owner   = THIS_MODULE,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6,12,0)
 	.llseek  = no_llseek,
+#endif
 	.read    = diva_hsi_read,
 	.write   = diva_hsi_write,
 	.poll    = diva_hsi_poll,

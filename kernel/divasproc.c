@@ -117,7 +117,9 @@ static int divas_close(struct inode *inode, struct file *file)
 }
 
 static const struct proc_ops divas_fops = {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6,12,0)
 	.proc_lseek   = no_llseek,
+#endif
 	.proc_read    = divas_read,
 	.proc_write   = divas_write,
 	.proc_poll    = divas_poll,

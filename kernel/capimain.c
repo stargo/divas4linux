@@ -95,8 +95,10 @@ static diva_capi_device_t* diva_appl_map[MAX_APPL];
 	*/
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,37)
 	static DECLARE_MUTEX(diva_appl_lock);
-#else
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(6,3,0)
 	static DEFINE_SEMAPHORE(diva_appl_lock);
+#else
+	static DEFINE_SEMAPHORE(diva_appl_lock, 1);
 #endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,13)
@@ -617,7 +619,9 @@ static int diva_capi_release(struct inode *inode, struct file *file) {
 
 static struct file_operations diva_capi_fops = {
 	.owner   = THIS_MODULE,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6,12,0)
 	.llseek  = no_llseek,
+#endif
 	.read    = diva_capi_read,
 	.write   = diva_capi_write,
 	.poll    = diva_capi_poll,
@@ -732,8 +736,10 @@ static int DIVA_INIT_FUNCTION divacapi_init (void) {
 	}
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,13)
 	diva_capi_class = class_simple_create(THIS_MODULE, "divacapi");
-#else
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(6,3,0)
 	diva_capi_class = class_create(THIS_MODULE, "divacapi");
+#else
+	diva_capi_class = class_create("divacapi");
 #endif
 	if (IS_ERR(diva_capi_class)) {
 		ret = PTR_ERR(diva_capi_class);

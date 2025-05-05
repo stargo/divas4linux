@@ -755,7 +755,7 @@ static int diva_add_card(DESCRIPTOR * d)
 	info_sync_req->GetName.Req = 0;
 	info_sync_req->GetName.Rc = IDI_SYNC_REQ_GET_NAME;
 	card->d.request((ENTITY *)info_sync_req);
-	strlcpy(card->name, info_sync_req->GetName.name, sizeof(card->name));
+	strscpy(card->name, info_sync_req->GetName.name, sizeof(card->name));
 	ctrl = &card->capi_ctrl;
 	strcpy(ctrl->name, card->name);
 	ctrl->register_appl = diva_register_appl;
@@ -810,7 +810,7 @@ static int diva_add_card(DESCRIPTOR * d)
 	diva_os_leave_spin_lock(&api_lock, &old_irql, "find id");
 #endif
 
-	strlcpy(ctrl->manu, M_COMPANY, sizeof(ctrl->manu));
+	strscpy(ctrl->manu, M_COMPANY, sizeof(ctrl->manu));
 	ctrl->version.majorversion = 2;
 	ctrl->version.minorversion = 0;
 	ctrl->version.majormanuversion = DRRELMAJOR;
@@ -830,7 +830,7 @@ static int diva_add_card(DESCRIPTOR * d)
 		sprintf(serial, "%ld", info_sync_req->GetSerial.serial);
 	}
 	serial[CAPI_SERIAL_LEN - 1] = 0;
-	strlcpy(ctrl->serial, serial, sizeof(ctrl->serial));
+	strscpy(ctrl->serial, serial, sizeof(ctrl->serial));
 #if defined(DIVA_EICON_CAPI)
 	memcpy (card->serial, ctrl->serial, MIN(sizeof(card->serial),sizeof(ctrl->serial)));
 #endif
@@ -1926,7 +1926,7 @@ u16 diva_capi20_get_manufacturer (u32 contr, u8 *buf) {
 	int found;
 
 	if (contr == 0) {
-		strlcpy(buf, M_COMPANY, CAPI_MANUFACTURER_LEN);
+		strscpy(buf, M_COMPANY, CAPI_MANUFACTURER_LEN);
 		return (CAPI_NOERROR);
 	}
 
@@ -1935,7 +1935,7 @@ u16 diva_capi20_get_manufacturer (u32 contr, u8 *buf) {
 	diva_os_leave_spin_lock(&api_lock, &old_irql, "manufacturer");
 
 	if (found != 0) {
-		strlcpy(buf, M_COMPANY, CAPI_MANUFACTURER_LEN);
+		strscpy(buf, M_COMPANY, CAPI_MANUFACTURER_LEN);
 		return (CAPI_NOERROR);
 	}
 
@@ -1979,7 +1979,7 @@ u16 diva_capi20_get_serial(u32 contr, u8 *serial) {
 	diva_card *card;
 
 	if (contr == 0) {
-		strlcpy(serial, "0004711", CAPI_SERIAL_LEN);
+		strscpy(serial, "0004711", CAPI_SERIAL_LEN);
 		return CAPI_NOERROR;
 	}
 

@@ -91,8 +91,10 @@ static int didd_open(struct inode *inode, struct file *file);
 static int didd_release(struct inode *inode, struct file *file);
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,37)
 static DECLARE_MUTEX(didd_ifc_lock);
-#else
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(6,3,0)
 static DEFINE_SEMAPHORE(didd_ifc_lock);
+#else
+static DEFINE_SEMAPHORE(didd_ifc_lock, 1);
 #endif
 
 /*
@@ -166,7 +168,9 @@ void diva_os_read_descriptor_array (void* t, int length) {
 
 static struct file_operations divas_didd_fops = {
 	.owner   = THIS_MODULE,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6,12,0)
 	.llseek  = no_llseek,
+#endif
 	.read    = didd_read,
 	.write   = didd_write,
 	.poll    = didd_poll,
@@ -501,7 +505,11 @@ static int DIVA_INIT_FUNCTION divadidd_init(void)
 	printk("%s  Build:%s(%s)\n", getrev(tmprev),
 	       diva_didd_common_code_build, DIVA_BUILD);
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6,3,0)
 	divadidd_class = class_create(THIS_MODULE, "divadidd");
+#else
+	divadidd_class = class_create("divadidd");
+#endif
 	if (IS_ERR(divadidd_class)) {
 		printk(KERN_ERR "%s: failed to create character device class.\n", DRIVERLNAME);
 		ret = -EIO;

@@ -67,8 +67,10 @@ char *DRIVERRELEASE_MNT = "3.1.6-109.75-1";
 static wait_queue_head_t msgwaitq;
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,37)
 static DECLARE_MUTEX(opened_sem);
-#else
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(6,3,0)
 static DEFINE_SEMAPHORE(opened_sem);
+#else
+static DEFINE_SEMAPHORE(opened_sem, 1);
 #endif
 static int opened;
 static int diva_notifier_registered;
@@ -278,7 +280,9 @@ static ssize_t divas_maint_read(struct file *file, char *buf,
 
 static struct file_operations divas_maint_fops = {
 	.owner   = THIS_MODULE,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6,12,0)
 	.llseek  = no_llseek,
+#endif
 	.read    = divas_maint_read,
 	.write   = divas_maint_write,
 	.poll    = maint_poll,

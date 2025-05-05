@@ -1257,7 +1257,9 @@ static unsigned int divas_poll(struct file *file, poll_table * wait)
 
 static struct file_operations divas_fops = {
 	.owner   = THIS_MODULE,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6,12,0)
 	.llseek  = no_llseek,
+#endif
 	.read    = divas_read,
 	.write   = divas_write,
 	.poll    = divas_poll,
@@ -1558,7 +1560,11 @@ static int DIVA_INIT_FUNCTION divas_init(void)
 #endif
 	printk("adapters\n");
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6,3,0)
 	divas_class = class_create(THIS_MODULE, "divas");
+#else
+	divas_class = class_create("divas");
+#endif
 	if (IS_ERR(divas_class)) {
 		printk(KERN_ERR "%s: failed to create character device class.\n", DRIVERLNAME);
 		ret = -EIO;

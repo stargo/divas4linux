@@ -723,11 +723,19 @@ static void tty_isdn_close(struct tty_struct *tty, struct file *filp) {
 	eicon_splx (old_irql);
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6,5,0)
 static int tty_isdn_write (struct tty_struct *tty,
+#else
+static ssize_t tty_isdn_write (struct tty_struct *tty,
+#endif
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,10)
                            int from_user,
 #endif
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6,5,0)
                            const u_char *tbuf, int count)
+#else
+                           const u_char *tbuf, size_t count)
+#endif
 {
 	int dev_num = DIVA_MINOR(tty);
 	ser_dev_t* sd;
