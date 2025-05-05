@@ -90,7 +90,7 @@ install: all
 	@echo "Installing firmware to $(DESTDIR)$(EICONDIR) ..."
 	@install -m 0644 firmware/* $(DESTDIR)$(EICONDIR)/.
 	@echo "Installing scripts to $(DESTDIR)$(EICONDIR) ..."
-	@if [ `id -u` -eq 0 ]; then chown 0.0 scripts/*; fi
+	@if [ `id -u` -eq 0 ]; then chown 0:0 scripts/*; fi
 	@cp -p scripts/* $(DESTDIR)$(EICONDIR)/.
 	@echo "Installing diva modules to $(DESTDIR)$(EICONDIR) ..."
 	@install -m 0644 kernel/*.ko $(DESTDIR)$(EICONDIR)/.
