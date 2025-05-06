@@ -1,5 +1,7 @@
 #!/usr/bin/perl -w
 
+use Text::Table;
+
 my $divactrl = "/usr/lib/divas/divactrl";
 
 sub mantool($) {
@@ -35,7 +37,16 @@ my $cards = mantool("-L");
 
 die "no cards found: $!" if ($cards !~ m/{(.*)}/);
 
-print "Ctrl Ch         L1           L2           Line       Type      Framing    Layer 2      Layer 3             Remote              Local\n";
+my $table = Text::Table->new({ title=>'Ct/Ch', align=>"right"},
+	\' | ',{ title=>'L1', align=>"left"},
+	\' | ',{ title=>'L2', align=>"left"},
+	\' | ',{ title=>'Line', align=>"left"},
+	\' | ',{ title=>'Type', align=>"left"},
+	\' | ',{ title=>'Framing', align=>"left"},
+	\' | ',{ title=>'Layer 2', align=>"left"},
+	\' | ',{ title=>'Layer 3', align=>"left"},
+	\' | ',{ title=>'Remote', align=>"left"},
+	\' | ',{ title=>'Local', align=>"left"});
 foreach my $card (split(/,/, $1)) {
 	next if ($card >= 1000);
 
@@ -44,8 +55,7 @@ foreach my $card (split(/,/, $1)) {
 
 	for (my $c=1; $c <= getval($info, "Info\\Channels"); $c++) {
 
-		printf("  %02d %02d %10.10s %12.12s %14.14s %10.10s %12.12s %10.10s %12.12s %18.18s %18.18s\n",
-			$card, $c,
+		$table->add(sprintf("%02d/%02d",$card, $c),
 			getval($state, "State\\Layer1"),
 			getval($state, "State\\Layer2 No1"),
 			getval($state, "State\\B${c}\\Line"),
@@ -58,3 +68,5 @@ foreach my $card (split(/,/, $1)) {
 			);
 	}
 }
+
+print $table->title, $table->rule('-','+'), $table->body;
