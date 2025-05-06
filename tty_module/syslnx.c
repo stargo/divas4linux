@@ -1,12 +1,13 @@
 
 /*
  *
-  Copyright (c) Dialogic(R), 2009.
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2009-2014.
  *
   This source file is supplied for the use with
-  Dialogic range of DIVA Server Adapters.
+  Sangoma (formerly Dialogic) range of DIVA Server Adapters.
  *
-  Dialogic(R) File Revision :    2.1
+  File Revision :    2.1
  *
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -75,6 +76,8 @@ void sysPageFree (void *Handle) {
 
 void *sysHeapAlloc (dword Size) {
 	void *Address = 0;
+	int i;
+	char* p;
 
 	if (Size) {
 		Address = diva_mem_malloc(Size);
@@ -83,8 +86,12 @@ void *sysHeapAlloc (dword Size) {
 	if (!Address) {
 		return (0);
 	}
+	p = Address;
+	i = Size;
 
-	memset(Address, 0, Size);
+	while (i--) {
+		*p++ = 0;
+	}
 
 	return (Address);
 }
@@ -225,13 +232,18 @@ int str_2_int (char *s)
 
 unsigned long sysTimerTicks(void)
 {
-	return  jiffies;
-}        
+	unsigned long j;
+
+	j = jiffies;
+	if (HZ == 250)
+		return (j << 2);
+	return (((j / HZ) * 1000) + (((j % HZ) * 1000) / HZ));
+}
 
 unsigned long sysLastUpdatedTimerTick(void)
 {
 	return sysTimerTicks();
-}   
+}
 
 
 unsigned char *int_2_str (

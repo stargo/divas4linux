@@ -1,12 +1,16 @@
 
 /*
  *
-  Copyright (c) Dialogic, 2007.
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
  *
   This source file is supplied for the use with
-  Dialogic range of DIVA Server Adapters.
+  Sangoma (formerly Dialogic) range of Adapters.
  *
-  Dialogic File Revision :    2.1
+  File Revision :    2.1
  *
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -23,11 +27,13 @@
   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  */
+
 #include "platform.h"
 #include "di_defs.h"
 #include "pc.h"
 #include "pr_pc.h"
 #include "di.h"
+#include "vidi_di.h"
 #include "mi_pc.h"
 #include "pc_maint.h"
 #include "divasync.h"
@@ -37,9 +43,7 @@
 #include "dsrv4bri.h"
 #include "dsp_defs.h"
 #include "sdp_hdr.h"
-#if defined(DIVA_ADAPTER_TEST_SUPPORTED)
 #include "divatest.h" /* Adapter test framework */
-#endif
 #include "fpga_rom.h"
 #include "fpga_rom_xdi.h"
 
@@ -180,6 +184,7 @@ static void stop_qBri_hardware (PISDN_ADAPTER IoAdapter) {
 	int reset_offset = rev2 ? (MQ2_BREG_RISC)      : (MQ_BREG_RISC);
 	int irq_offset   = rev2 ? (MQ2_BREG_IRQ_TEST)  : (MQ_BREG_IRQ_TEST);
 	int hw_offset    = rev2 ? (MQ2_ISAC_DSP_RESET) : (MQ_ISAC_DSP_RESET);
+	dword i = 0;
 
 	if ( IoAdapter->ControllerNumber > 0 )
 		return ;
@@ -187,6 +192,30 @@ static void stop_qBri_hardware (PISDN_ADAPTER IoAdapter) {
  qBriIrq   = (dword volatile *)(&IoAdapter->ctlReg[irq_offset]) ;
  qBriIsacDspReset = (dword volatile *)(&IoAdapter->ctlReg[hw_offset]);
  qBriIpacxConfig = rev2 ? (dword volatile *)(&IoAdapter->ctlReg[MQ2_IPACX_CONFIG]) : NULL ;
+
+	if (IoAdapter->host_vidi.vidi_started != 0) {
+		diva_os_spin_lock_magic_t OldIrql;
+
+		diva_os_enter_spin_lock (&IoAdapter->data_spin_lock, &OldIrql, "stop");
+		IoAdapter->host_vidi.request_flags |= DIVA_VIDI_REQUEST_FLAG_STOP_AND_INTERRUPT;
+		diva_os_schedule_soft_isr (&IoAdapter->req_soft_isr);
+		diva_os_leave_spin_lock (&IoAdapter->data_spin_lock, &OldIrql, "stop");
+
+		do {
+			diva_os_sleep(10);
+		} while (i++ < 10 &&
+					 (IoAdapter->host_vidi.request_flags & DIVA_VIDI_REQUEST_FLAG_STOP_AND_INTERRUPT) != 0);
+    if ((IoAdapter->host_vidi.request_flags & DIVA_VIDI_REQUEST_FLAG_STOP_AND_INTERRUPT) == 0) {
+			i = 0;
+			do {
+				diva_os_sleep(10);
+			} while (i++ < 10 && IoAdapter->host_vidi.cpu_stop_message_received != 2);
+    }
+		if (i >= 10) {
+			DBG_ERR(("A(%d) vidi, failed to stop CPU", IoAdapter->ANum))
+		}
+	}
+
 /*
  *	clear interrupt line (reset Local Interrupt Test Register)
  */
@@ -210,7 +239,7 @@ static void stop_qBri_hardware (PISDN_ADAPTER IoAdapter) {
 #define FPGA_NAME_OFFSET         0x10
 
 byte * qBri_check_FPGAsrc (PISDN_ADAPTER IoAdapter, char *FileName,
-                                  dword *Length, dword *code) {
+                           dword *Length, dword *code) {
 	byte *File ;
 	char  *fpgaFile, *fpgaType, *fpgaDate, *fpgaTime ;
 	dword  fpgaFlen,  fpgaTlen,  fpgaDlen, cnt, year, i ;
@@ -253,7 +282,7 @@ byte * qBri_check_FPGAsrc (PISDN_ADAPTER IoAdapter, char *FileName,
       IoAdapter->fpga_features |= PCINIT_FPGA_PLX_ACCESS_SUPPORTED ;
     }
 
-		DBG_LOG(("FPGA[%s] download: use new file format", FileName))
+		DBG_LOG(("FPGA download: use new file format"))
 
     return (File);
 	}
@@ -274,13 +303,13 @@ byte * qBri_check_FPGAsrc (PISDN_ADAPTER IoAdapter, char *FileName,
 	cnt = (dword)(((File[  i  ] & 0x0F) << 20) + (File[i + 1] << 12)
 	             + (File[i + 2]         <<  4) + (File[i + 3] >>  4)) ;
 
-	if ( (dword)(i + (cnt / 8)) > *Length )
-	{
-		DBG_FTL(("FPGA download: '%s' file too small (%ld < %ld)",
-		         FileName, *Length, code + ((cnt + 7) / 8) ))
-		xdiFreeFile (File) ;
-		return (NULL) ;
-	}
+  if ( (dword)(i + (cnt / 8)) > *Length )
+  {
+    DBG_FTL(("FPGA download: 'file too small (%ld < %ld)",
+             *Length, code + ((cnt + 7) / 8) ))
+    xdiFreeFile (File) ;
+    return (NULL) ;
+  }
 	i = 0 ;
 	do
 	{
@@ -338,32 +367,31 @@ int qBri_FPGA_download (PISDN_ADAPTER IoAdapter) {
 	volatile dword* Irq    = (dword volatile*)(&IoAdapter->ctlReg[DIVA_4BRI_REVISION(IoAdapter) ? (MQ2_BREG_IRQ_TEST) : (MQ_BREG_IRQ_TEST)]);
 
   if (DIVA_4BRI_REVISION(IoAdapter)) {
-		char* name;
+    char* name;
 
-		switch (IoAdapter->cardType) {
-			case CARDTYPE_DIVASRV_B_2F_PCI:
-			case CARDTYPE_DIVASRV_BRI_CTI_V2_PCI:
-				name = "dsbri2f.bit";
-				break;
+    switch (IoAdapter->cardType) {
+      case CARDTYPE_DIVASRV_B_2F_PCI:
+      case CARDTYPE_DIVASRV_BRI_CTI_V2_PCI:
+        name = "dsbri2f.bit";
+        break;
 
-			case CARDTYPE_DIVASRV_B_2M_V2_PCI:
-			case CARDTYPE_DIVASRV_VOICE_B_2M_V2_PCI:
-			case CARDTYPE_DIVASRV_V_B_2M_V2_PCI:
-				name = "dsbri2m.bit";
-				break;
+      case CARDTYPE_DIVASRV_B_2M_V2_PCI:
+      case CARDTYPE_DIVASRV_VOICE_B_2M_V2_PCI:
+      case CARDTYPE_DIVASRV_V_B_2M_V2_PCI:
+        name = "dsbri2m.bit";
+        break;
 
-			default:
-				name = "ds4bri2.bit";
-		}
+      default:
+        name = "ds4bri2.bit";
+    }
 
-		File = qBri_check_FPGAsrc (IoAdapter, name,
-	                           		&FileLength, &code_start);
-	}
-	else
-	{
-		File = qBri_check_FPGAsrc (IoAdapter, "ds4bri.bit",
-		                           &FileLength, &code_start) ;
-	}
+    File = qBri_check_FPGAsrc (IoAdapter, name, &FileLength, &code_start);
+  }
+  else
+  {
+    File = qBri_check_FPGAsrc (IoAdapter, "ds4bri.bit",
+                               &FileLength, &code_start);
+  }
 	if ( !File )
 		return (0) ;
 
@@ -472,6 +500,7 @@ int qBri_FPGA_download (PISDN_ADAPTER IoAdapter) {
 		void* hdev = IoAdapter->hdev;
 		dword pedevcr = 0;
 		byte  MaxReadReq;
+		byte revID = 0;
 
 		PCIread (Bus, Slot, 0x54 /* PEDEVCR */, &pedevcr, sizeof(pedevcr), hdev);
 		MaxReadReq = (byte)((pedevcr >> 12) & 0x07);
@@ -493,9 +522,16 @@ int qBri_FPGA_download (PISDN_ADAPTER IoAdapter) {
 
 				*/
 			DBG_LOG(("PEDEVCR:%08x, MaxReadReq:%02x", pedevcr, MaxReadReq))
-      pedevcr &= ~(0x07U << 12);
-      pedevcr |=  (0x02U << 12);
-			PCIwrite (Bus, Slot, 0x54 /* PEDEVCR */, &pedevcr, sizeof(pedevcr), hdev);
+			pedevcr &= ~(0x07U << 12);
+			pedevcr |=  (0x02U << 12);
+			
+			// Retrieve RevisionID from PCI Config Space (HERA/FPGA-Seaville Replacement is >=3 limited to 0x10)
+			PCIread(Bus, Slot, 0x08, &revID, sizeof(revID), hdev);
+			if (!((revID >=0x3) && (revID <= 0x10)))
+			{
+				// Write to 0x54 only if it is *NOT* HERA/FPGA-Seaville Replacement
+				PCIwrite (Bus, Slot, 0x54 /* PEDEVCR */, &pedevcr, sizeof(pedevcr), hdev);
+			}
 		}
 
 		*(volatile dword*)&IoAdapter->reset[PLX9054_MABR0] |= (1U << 18);
@@ -1139,7 +1175,7 @@ static int load_qBri_hardware (PISDN_ADAPTER IoAdapter) {
 /*
  *	download only one copy of the DSP code
  */
- if (!(IoAdapter->cardType == CARDTYPE_DIVASRV_B_2F_PCI        || 
+ if (!(IoAdapter->cardType == CARDTYPE_DIVASRV_B_2F_PCI        ||
        IoAdapter->cardType == CARDTYPE_DIVASRV_BRI_CTI_V2_PCI)   ) {
 	if ( !qBri_telindus_load (IoAdapter) )
 		return (0) ;
@@ -1208,7 +1244,6 @@ static int qBri_ISR (struct _ISDN_ADAPTER* IoAdapter) {
 	PADAPTER_LIST_ENTRY QuadroList = IoAdapter->QuadroList ;
 
 	word              	i ;
-	int             	serviced = 0 ;
 
 
 	if ( !(IoAdapter->reset[PLX9054_INTCSR] & 0x80) )
@@ -1228,12 +1263,18 @@ static int qBri_ISR (struct _ISDN_ADAPTER* IoAdapter) {
 		  && IoAdapter->tst_irq (&IoAdapter->a) )
 		{
 			IoAdapter->IrqCount++ ;
-			serviced = 1 ;
 			diva_os_schedule_soft_isr (&IoAdapter->isr_soft_isr);
 		}
 	}
 
-	return (serviced) ;
+	/*
+		Always serviced if cause indicated by PLX.
+		tst_irq may return false even it interrupt is indicated
+		by PLX. This is in case DPC running on parallel CPU already
+		called clr_irq
+		*/
+
+	return (1) ;
 }
 
 /*
@@ -1318,10 +1359,18 @@ static void set_common_qBri_functions (PISDN_ADAPTER IoAdapter) {
 	a->ram_out_buffer   = mem_out_buffer ;
 	a->ram_inc          = mem_inc ;
 
-	IoAdapter->out      = pr_out ;
-	IoAdapter->dpc      = pr_dpc ;
-	IoAdapter->tst_irq  = scom_test_int ;
-	IoAdapter->clr_irq  = scom_clear_int ;
+	if (IoAdapter->host_vidi.vidi_active) {
+		IoAdapter->out      = vidi_host_pr_out;
+		IoAdapter->dpc      = vidi_host_pr_dpc;
+		IoAdapter->tst_irq  = vidi_host_test_int;
+		IoAdapter->clr_irq  = vidi_host_clear_int;
+	} else {
+		IoAdapter->out      = pr_out ;
+		IoAdapter->dpc      = pr_dpc ;
+		IoAdapter->tst_irq  = scom_test_int ;
+		IoAdapter->clr_irq  = scom_clear_int ;
+	}
+
 	IoAdapter->pcm      = (struct pc_maint *)MIPS_MAINT_OFFS ;
 
 	IoAdapter->load     = load_qBri_hardware ;
@@ -1384,3 +1433,5 @@ void prepare_qBri2_functions (PISDN_ADAPTER IoAdapter) {
 }
 
 /* -------------------------------------------------------------------------- */
+
+// vim: set tabstop=2 softtabstop=2 shiftwidth=2 expandtab :

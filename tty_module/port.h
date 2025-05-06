@@ -1,12 +1,13 @@
 
 /*
  *
-  Copyright (c) Dialogic(R), 2009.
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2009-2014.
  *
   This source file is supplied for the use with
-  Dialogic range of DIVA Server Adapters.
+  Sangoma (formerly Dialogic) range of DIVA Server Adapters.
  *
-  Dialogic(R) File Revision :    2.1
+  File Revision :    2.1
  *
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -52,7 +53,7 @@
 # define DiPort_DeviceName	"DiPort"
 # define DiPort_ModemID		"Eicon ISDN Modem"
 
-# define MAX_PORTS		16	/* Win9x only	*/
+# define MAX_PORTS		255
 
 # define MAX_DEVICE_NAME	9	/*  8 + \0	*/
 # define MAX_PORT_NAME		16	/* 15 + \0	*/
@@ -188,7 +189,8 @@ typedef struct AT_DATA {
 
 	byte	Dest[ISDN_MAX_NUMBER];	/* last dialed address		*/
 	byte	Ring[2*ISDN_MAX_NUMBER+4];	/* last ringing address		*/
-	byte	RingName[ISDN_MAX_PARTY_NAME];	/* Ring Calling Party Name */
+	byte	RingName[(ISDN_MAX_DISPLAY_IE > ISDN_MAX_PARTY_NAME) ?
+	                 ISDN_MAX_DISPLAY_IE : ISDN_MAX_PARTY_NAME];  /* ring calling party name      */
 	byte	Last[MAX_AT_COMMAND];	/* last good command line	*/
 	byte	Line[MAX_AT_COMMAND];	/* command line buffer		*/
 	byte	sizeLine;		/* current # of bytes in buffer	*/

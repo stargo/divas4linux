@@ -1,30 +1,33 @@
-/*------------------------------------------------------------------------------
- *
- * (c) COPYRIGHT 1999-2007       Dialogic Corporation
- *
- * ALL RIGHTS RESERVED
- *
- * This software is the property of Dialogic Corporation and/or its
- * subsidiaries ("Dialogic"). This copyright notice may not be removed,
- * modified or obliterated without the prior written permission of
- * Dialogic.
- *
- * This software is a Trade Secret of Dialogic and may not be
- * copied, transmitted, provided to or otherwise made available to any company,
- * corporation or other person or entity without written permission of
- * Dialogic.
- *
- * No right, title, ownership or other interest in the software is hereby
- * granted or transferred. The information contained herein is subject
- * to change without notice and should not be construed as a commitment of
- * Dialogic.
- *
- *------------------------------------------------------------------------------*/
-/* ------------------------------------------------------------------------
-		MODULE:     MLOG.C
 
-		LANGUAGE:   ANSI C++ Version 4.2
- ------------------------------------------------------------------------ */
+/*
+ *
+  Copyright (c) Sangoma Technologies, 2018-2022
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
+ *
+  This source file is supplied for the use with
+  Sangoma (formerly Dialogic) range of Adapters.
+ *
+  File Revision :    2.1
+ *
+  This program is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; either version 2, or (at your option)
+  any later version.
+ *
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY OF ANY KIND WHATSOEVER INCLUDING ANY
+  implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+  See the GNU General Public License for more details.
+ *
+  You should have received a copy of the GNU General Public License
+  along with this program; if not, write to the Free Software
+  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *
+ */
+
 #include "platform.h"
 #include "os.h"
 #include <stdio.h>
@@ -157,7 +160,7 @@ static void mlog_help (void) {
    fprintf (VisualStream,
 	  "Management Interface Trace/Log utility for Diva Server adapters\n");
    fprintf (VisualStream, "BUILD (%s-%s-%s)\n", DIVA_BUILD, __DATE__, __TIME__);
-   fprintf (VisualStream, "Copyright (c) 1991-2007 Dialogic, 2001-2009 Cytronics & Melware\n\n");
+   fprintf (VisualStream, "Copyright (c) 1991-2007 Dialogic\n\n");
    fprintf (VisualStream,
            "===============================================================\n");
   fprintf (VisualStream, "  Press 'q' to quit\n");
@@ -238,7 +241,7 @@ int mlog_main (int argc, char** argv) {
    fprintf (LogStream,
 					  "Management Interface Trace/Log utility for EICON DIVA adapters\n");
    fprintf (LogStream, "BUILD (%s-%s-%s)\n", DIVA_BUILD, __DATE__, __TIME__);
-   fprintf (LogStream, "Copyright (c) 1991-2007 Dialogic, 2001-2009 Cytronics & Melware\n\n");
+   fprintf (LogStream, "Copyright (c) 1991-2007 Dialogic\n\n");
    fprintf (LogStream,
            "===============================================================\n");
 		 } else if ((argv[arg][0] == '-') && (argv[arg][1] == 's')) {
@@ -355,7 +358,7 @@ int mlog_main (int argc, char** argv) {
      }
    }
 
-   fprintf (VisualStream, "Management Interface Trace utility for Diva cards Version 1.0\nCopyright (c) 1991 - 2007 Dialogic, 2001-2009 Cytronics & Melware\n\n");
+   fprintf (VisualStream, "Management Interface Trace utility for Diva cards Version 1.0\nCopyright (c) 1991 - 2007 Dialogic\n\n");
 
    mlog_help ();
 
@@ -706,7 +709,6 @@ static void ReadInitVars (void) {
 			}
 		}
 	}
-	return;
 }
 
 static void SelectTraceDir (void) {

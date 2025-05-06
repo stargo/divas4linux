@@ -1,15 +1,33 @@
-/* $Id: divamnt.c,v 1.32 2004/01/15 09:48:13 armin Exp $
+
+/*
  *
- * Driver for Dialogic DIVA Server ISDN cards.
- * Maint module
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
  *
- * Copyright 2000-2009 by Armin Schindler (mac@melware.de)
- * Copyright 2000-2009 Cytronics & Melware (info@melware.de)
- * Copyright 2000-2007 Dialogic
+  This source file is supplied for the use with
+  Sangoma (formerly Dialogic) range of Adapters.
  *
- * This software may be used and distributed according to the terms
- * of the GNU General Public License, incorporated herein by reference.
+  File Revision :    2.1
+ *
+  This program is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; either version 2, or (at your option)
+  any later version.
+ *
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY OF ANY KIND WHATSOEVER INCLUDING ANY
+  implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+  See the GNU General Public License for more details.
+ *
+  You should have received a copy of the GNU General Public License
+  along with this program; if not, write to the Free Software
+  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *
  */
+
 #include <linux/version.h>
 #include <linux/module.h>
 #include <linux/init.h>
@@ -28,8 +46,12 @@
 #if defined(CONFIG_DEVFS_FS)
 #include <linux/devfs_fs_kernel.h>
 #endif
+#if LINUX_VERSION_CODE > KERNEL_VERSION(3,9,0)
 #include <linux/seq_file.h>
+#endif
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,14,0)
 #include <linux/panic_notifier.h>
+#endif
 
 #include "platform.h"
 #include "di_defs.h"
@@ -40,9 +62,18 @@ static char *main_revision = "$Revision: 1.32 $";
 
 static int major;
 
-MODULE_DESCRIPTION("Maint driver for Dialogic DIVA Server cards");
-MODULE_AUTHOR("Cytronics & Melware, Dialogic");
+#ifdef MODULE_DESCRIPTION
+MODULE_DESCRIPTION("Maint driver for DIVA Server cards");
+#endif
+#ifdef MODULE_AUTHOR
+MODULE_AUTHOR("Cytronics & Melware, Sangoma");
+#endif
+#ifdef MODULE_SUPPORTED_DEVICE
+MODULE_SUPPORTED_DEVICE("DIVA card driver");
+#endif
+#ifdef MODULE_LICENSE
 MODULE_LICENSE("GPL");
+#endif
 
 int buffer_length = 128;
 module_param(buffer_length, uint, 0);
@@ -62,16 +93,10 @@ static char *DEVNAME     = "DivasMAINT";
 static char *DEVNAME_DBG = "DivasDBG";
 static char *DEVNAME_DBG_IFC = "DivasDBGIFC";
 #endif
-char *DRIVERRELEASE_MNT = "3.1.6-109.75-1";
+char *DRIVERRELEASE_MNT = "9.6.8-124.26-1";
 
 static wait_queue_head_t msgwaitq;
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,37)
 static DECLARE_MUTEX(opened_sem);
-#elif LINUX_VERSION_CODE < KERNEL_VERSION(6,3,0)
-static DEFINE_SEMAPHORE(opened_sem);
-#else
-static DEFINE_SEMAPHORE(opened_sem, 1);
-#endif
 static int opened;
 static int diva_notifier_registered;
 static int diva_reboot_notifier_registered;
@@ -138,12 +163,21 @@ int diva_os_copy_from_user(void *os_handle, void *dst, const void *src,
  */
 void diva_os_get_time(dword * sec, dword * usec)
 {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,9)
 	unsigned long j = jiffies;
 	dword t_sec = (dword)(j/HZ);
 	dword t_rem = (dword)(j%HZ);
 
 	*sec = t_sec;
 	*usec = jiffies_to_usecs (t_rem);
+#else
+	struct timeval tv;
+
+	do_gettimeofday (&tv);
+
+	*sec  = tv.tv_sec;
+	*usec = tv.tv_usec;
+#endif
 }
 
 /*
@@ -152,44 +186,94 @@ void diva_os_get_time(dword * sec, dword * usec)
 
 extern struct proc_dir_entry *proc_net_eicon;
 static struct proc_dir_entry *maint_proc_entry = NULL;
-
-static int
-proc_show(struct seq_file *m, void *v)
+int proc_cnt=0;
+#if LINUX_VERSION_CODE > KERNEL_VERSION(3,9,0)
+int eof[1];
+#define PROC_RETURN(x,y) { \
+   if (!x) { \
+       x=1; \
+       return(y); \
+   } else { \
+       x=0; \
+       return(0); \
+   } \
+}
+#define PRINT_BUF(m,b,l) { \
+           seq_printf(m, "%s", b); \
+           l = 0; \
+}
+static int proc_read(struct seq_file *m, void *v)
+#else
+#define PROC_RETURN(x,y) return(y)
+#define PRINT_BUF(m,b,l) /* no op for older kernel */
+static int proc_read(char *page, char **start, off_t off, int count, int *eof, void *data)
+#endif
 {
+	int len = 0;
 	char tmprev[32];
-
+#if LINUX_VERSION_CODE > KERNEL_VERSION(3,9,0)
+	char page[100];
+#else
+	void *m;
+#endif
 	strcpy(tmprev, main_revision);
-	seq_printf(m, "%s\n", DRIVERNAME);
-	seq_printf(m, "name     : %s\n", DRIVERLNAME);
-	seq_printf(m, "release  : %s\n", DRIVERRELEASE_MNT);
-	seq_printf(m, "build    : %s\n", DIVA_BUILD);
-	seq_printf(m, "revision : %s\n", getrev(tmprev));
-	seq_printf(m, "major    : %d\n", major);
+	len += sprintf(page + len, "%s\n", DRIVERNAME); PRINT_BUF(m,page,len);
+	len += sprintf(page + len, "name     : %s\n", DRIVERLNAME); PRINT_BUF(m,page,len);
+	len += sprintf(page + len, "release  : %s\n", DRIVERRELEASE_MNT); PRINT_BUF(m,page,len);
+	len += sprintf(page + len, "build    : %s\n", DIVA_BUILD); PRINT_BUF(m,page,len);
+	len += sprintf(page + len, "revision : %s\n", getrev(tmprev)); PRINT_BUF(m,page,len);
+	len += sprintf(page + len, "major    : %d\n", major); PRINT_BUF(m,page,len);
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,9,0)
+	if (off + count >= len)
+		*eof = 1;
+	if (len < off)
+		return 0;
+	*start = page + off;
+	PROC_RETURN(proc_cnt,((count < len-off) ? count : len-off));
+#else
 	return 0;
+#endif
 }
 
+#if LINUX_VERSION_CODE > KERNEL_VERSION(3,9,0)
 static int proc_open(struct inode *inode, struct file *file)
 {
-	return single_open(file, proc_show, NULL);
+	return single_open(file, proc_read, NULL);
 }
-
-static const struct proc_ops proc_fops = {
-	.proc_open      = proc_open,
-	.proc_read      = seq_read,
-	.proc_lseek     = seq_lseek,
-	.proc_release   = single_release,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,6,0)
+static const struct proc_ops proc_file_fops = {
+ .proc_open   = proc_open,
+ .proc_read   = seq_read,
+ .proc_lseek = seq_lseek,
+ .proc_release= single_release
 };
+#else
+static const struct file_operations proc_file_fops = {
+ .owner = THIS_MODULE,
+ .open   = proc_open,
+ .read   = seq_read,
+ .llseek = seq_lseek,
+ .release= single_release
+};
+#endif
+#endif
 
 static int DIVA_INIT_FUNCTION create_maint_proc(void)
 {
+#if LINUX_VERSION_CODE > KERNEL_VERSION(3,9,0)
+	maint_proc_entry = proc_create("maint", S_IFREG | S_IRUGO | S_IWUSR, proc_net_eicon, &proc_file_fops);
+	if (!maint_proc_entry)
+		return (0);
+#else
 	maint_proc_entry =
-	    proc_create("maint", S_IRUGO, proc_net_eicon,
-	    	&proc_fops);
-
+	    create_proc_entry("maint", S_IFREG | S_IRUGO | S_IWUSR,
+			      proc_net_eicon);
 	if (!maint_proc_entry)
 		return (0);
 
+	maint_proc_entry->read_proc = proc_read;
+#endif
 	return (1);
 }
 
@@ -379,9 +463,8 @@ static int DIVA_INIT_FUNCTION maint_init(void)
 	init_waitqueue_head(&msgwaitq);
 
 	printk(KERN_INFO "%s\n", DRIVERNAME);
-	printk(KERN_INFO "%s: Rel:%s  Rev:", DRIVERLNAME, DRIVERRELEASE_MNT);
 	strcpy(tmprev, main_revision);
-	printk("%s  Build: %s \n", getrev(tmprev), DIVA_BUILD);
+	printk(KERN_INFO "%s: Rel:%s  Rev: %s  Build: %s \n", DRIVERLNAME, DRIVERRELEASE_MNT, getrev(tmprev), DIVA_BUILD);
 
 	if (!divas_maint_register_chrdev()) {
 		ret = -EIO;

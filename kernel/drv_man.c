@@ -1,11 +1,16 @@
+
 /*
  *
-  Copyright (c) Dialogic, 2008.
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
  *
   This source file is supplied for the use with
-  Dialogic range of DIVA Server Adapters.
+  Sangoma (formerly Dialogic) range of Adapters.
  *
-  Dialogic File Revision :    2.1
+  File Revision :    2.1
  *
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -22,7 +27,9 @@
   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  */
+
 #include "platform.h"
+#include "debug.h"
 #include "di_defs.h"
 #include "pc.h"
 #include "divasync.h"
@@ -244,11 +251,13 @@ static void diva_man_drv_process_request (diva_driver_management_t* pM, int requ
 	switch(req_type) {
 		case DIVA_MAN_DRV_ASSIGN_PENDING:
 			pM->entities[request_index].chain_ind = 0;
+			pM->entities[request_index].nohide    = 0;
       if (e->XNum) {  // set capability of entity
         byte lli[12];
         ComParse (e->X[0].P, e->X[0].PLength,
                   1, LLI | PARSE_CLEAR, lli, sizeof(lli));
 			  if (lli[1] &1) pM->entities[request_index].chain_ind = 1;
+			  if (lli[1] &2) pM->entities[request_index].nohide    = 1;
       }
 			e->complete = 0xff;
 			e->Id = 2 + pM->assignId++;
@@ -266,6 +275,7 @@ static void diva_man_drv_process_request (diva_driver_management_t* pM, int requ
 	}
 
 	pM->chain_ind = pM->entities[request_index].chain_ind;
+	pM->nohide    = pM->entities[request_index].nohide;
 
 	switch (e->Req) {
 		case MAN_READ:
@@ -340,7 +350,7 @@ static word ComParse(byte* req_data, int req_length, int argc,...) {
   {
     /* read information element id and length                   */
     if (ploc >= plen ||
-        (!(w = in[ploc]) && ((ploc+1)==plen)))
+        (((w = in[ploc])==0) && ((ploc+1)==plen)))
     {
       return(0);
     }
@@ -402,7 +412,7 @@ static word ComParse(byte* req_data, int req_length, int argc,...) {
       }
       va_end(ap);
     }
-    ploc +=wlen;
+    ploc = ploc+wlen;
   }
 }
 
@@ -525,10 +535,10 @@ static void man_fill_ind_count_element(diva_driver_management_t* pE,
   data[(*plength)++] = 'u';
   data[(*plength)++] = 'n';
   data[(*plength)++] = 't';
-  data[7]            = *plength - 8; // path length
+  data[7]            = (byte)(*plength - 8); // path length
   data[(*plength)++] = (byte)value; // variable value
   data[(*plength)++] = 0x00;  // required by applications (vlad)
-  data[1] = *plength - 2; // overall length
+  data[1] = (byte)(*plength - 2); // overall length
 }
 
 /*
@@ -548,14 +558,14 @@ static void man_usr_delivery_ind (unsigned int message,
 		DBG_TRC(("ManUsr: Ind:%02x, IndCh:%02x, length=%d", Ind, IndCh, length))
 		*/
 
-  e->complete = (length <= sizeof(RBuffer.P));
+  e->complete = (byte)(length <= sizeof(RBuffer.P));
   e->Ind      = Ind;
   e->IndCh    = IndCh;
   e->RLength  = length;
 	e->RNum     = 0;
 	e->RNR      = 0;
 
-	if ((RBuffer.length = MIN(length, sizeof(RBuffer.P)))) {
+	if ((RBuffer.length = MIN(length, sizeof(RBuffer.P)))>0) {
 		memcpy (RBuffer.P, data, RBuffer.length);
 	}
 	e->RBuffer = (DBUFFER*)&RBuffer;
@@ -601,7 +611,7 @@ static int diva_man_add_ie (byte *header, byte *value, void *context) {
 												                      DIVA_MAN_DRV_MAX_NET_DATA_IND) {
 	    dst = &pE->man_ind_data_to_user[pE->ind_count].P[pE->man_ind_data_to_user[pE->ind_count].length];
 			memcpy (dst, header, size);
-			pE->man_ind_data_to_user[pE->ind_count].length += size;
+			pE->man_ind_data_to_user[pE->ind_count].length = pE->man_ind_data_to_user[pE->ind_count].length+size;
 			return (size);
 		} else {
       if (!pE->chain_ind || ((pE->ind_count+1) >= NUM_NET_DBUFFER)) {
@@ -653,7 +663,7 @@ static void diva_copy_ind_to_user (ENTITY* e, byte* src, int length) {
   int to_copy;
 
   while ((i < e->RNum) && length) {
-    if ((to_copy = MIN(e->R[i].PLength, length))) {
+    if ((to_copy = MIN(e->R[i].PLength, length))!=0) {
       if (e->R[i].P) {
         memcpy (e->R[i].P, src, to_copy);
       }
@@ -763,5 +773,11 @@ void diva_man_write_value_by_offset (diva_driver_management_t* pM,
 				break;
 		}
 	}
+}
+
+int drv_man_nohide (const void* Ipar) {
+	const diva_driver_management_t* pE = (const diva_driver_management_t*)Ipar;
+
+	return ((pE == 0) || (pE->nohide != 0));
 }
 

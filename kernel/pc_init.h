@@ -1,12 +1,16 @@
 
 /*
  *
-  Copyright (c) Dialogic, 2007.
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
  *
   This source file is supplied for the use with
-  Dialogic range of DIVA Server Adapters.
+  Sangoma (formerly Dialogic) range of Adapters.
  *
-  Dialogic File Revision :    2.1
+  File Revision :    2.1
  *
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -23,6 +27,7 @@
   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  */
+
 #ifndef PC_INIT_H_
 #define PC_INIT_H_
 /*------------------------------------------------------------------*/
@@ -49,6 +54,7 @@
   0x0014 <byte> Bit 1-0: CRC4 option:0=default,1=double_frm,2=multi_frm,3=auto
                 Bit 4: L1 disable jitter attenuation
                 Bit 5: L1 free running TE
+                Bit 6: L1 apply FALC GCM erratas
   0x0015 <byte> Bit 0: NoHscx30
                 Bit 1: Loopback flag
                 Bit 2: ForceHscx30
@@ -103,7 +109,7 @@
 #define PCINIT_CARD_ADDRESS               0x14
 #define PCINIT_FPGA_FEATURES              0x15
 #define PCINIT_US_EKTS_MWI                0x16
-#define PCINIT_SOFTWARE_OPTIONS           0x17
+#define PCINIT_RESERVED_17                0x17
 #define PCINIT_RESERVED_18                0x18
 #define PCINIT_MODEM_CARRIER_WAIT_TIME    0x19
 #define PCINIT_MODEM_CARRIER_LOSS_TIME    0x1a
@@ -196,7 +202,7 @@
 #define PCINIT_L1_SYNC_OP_MODE            0x71
 #define PCINIT_L1_SYNC_PORT_NO            0x72
 #define PCINIT_CAS_TX_IDLE                0x73
-#define PCINIT_OPTIMIZATION               0x74
+#define PCINIT_SOFTWARE_OPTIONS           0x74
 /*------------------------------------------------------------------*/
 #define PCINIT_MODEM_GUARD_TONE_NONE            0x00
 #define PCINIT_MODEM_GUARD_TONE_550HZ           0x01
@@ -357,11 +363,14 @@
 #define PCINIT_TXATTENUATION_07DBM              0x01
 #define PCINIT_TXATTENUATION_15DBM              0x02
 /*--------------------------------------------------------------------------*/
-/* PCINIT_OPTIMIZATION                                                      */
+/* PCINIT_SOFTWARE_OPTIONS                                                  */
 /* Bit mask                                                                 */
 /*--------------------------------------------------------------------------*/
-#define PCINIT_OPTIMIZATION_NET_CONNECTION      0x01
-#define PCINIT_OPTIMIZATION_NO_LI               0x02
+#define PCINIT_SOFTWARE_OPTION_NET_CONNECTION   0x00000001
+#define PCINIT_SOFTWARE_OPTION_NO_LI            0x00000002
+#define PCINIT_SOFTWARE_OPTION_DSP_CLOCK_6002   0x00000004
+#define PCINIT_SOFTWARE_OPTION_MICROSOFT_GATEWAY 0x00000008
+#define PCINIT_SOFTWARE_OPTION_DAC_DISABLED      0x00000010
 /*--------------------------------------------------------------------------*/
 #endif
 /*--------------------------------------------------------------------------*/

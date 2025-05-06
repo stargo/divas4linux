@@ -1,15 +1,31 @@
-/* $Id: diddfunc.c,v 1.14 2003/08/25 10:06:37 schindler Exp $
+
+/*
  *
- * DIDD Interface module for Dialogic active cards.
- * 
- * Functions are in dadapter.c 
- * 
- * Copyright 2002-2009 by Armin Schindler (mac@melware.de) 
- * Copyright 2002-2009 Cytronics & Melware (info@melware.de)
- * Copyright 2002-2007 Dialogic
- * 
- * This software may be used and distributed according to the terms
- * of the GNU General Public License, incorporated herein by reference.
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
+ *
+  This source file is supplied for the use with
+  Sangoma (formerly Dialogic) range of Adapters.
+ *
+  File Revision :    2.1
+ *
+  This program is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; either version 2, or (at your option)
+  any later version.
+ *
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY OF ANY KIND WHATSOEVER INCLUDING ANY
+  implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+  See the GNU General Public License for more details.
+ *
+  You should have received a copy of the GNU General Public License
+  along with this program; if not, write to the Free Software
+  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *
  */
 
 #include "platform.h"
@@ -67,7 +83,7 @@ static int DIVA_INIT_FUNCTION connect_didd(void)
 	int x = 0;
 	int dadapter = 0;
 	IDI_SYNC_REQ req;
-	static DESCRIPTOR DIDD_Table[MAX_DESCRIPTORS];
+	DESCRIPTOR DIDD_Table[MAX_DESCRIPTORS];
 
 	DIVA_DIDD_Read(DIDD_Table, sizeof(DIDD_Table));
 

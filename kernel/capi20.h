@@ -1,11 +1,16 @@
+
 /*
  *
-  Copyright (c) Dialogic, 2007.
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
  *
   This source file is supplied for the use with
-  Dialogic range of DIVA Server Adapters.
+  Sangoma (formerly Dialogic) range of Adapters.
  *
-  Dialogic File Revision :    2.1
+  File Revision :    2.1
  *
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -22,6 +27,7 @@
   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  */
+
 #ifndef _INC_CAPI20  
 #define _INC_CAPI20
         /* operations on message queues                             */
@@ -127,6 +133,7 @@ typedef struct api_profile_s {
 #define _DI_CONTROL_MESSAGE     0x0010
 #define _DI_RESEND_BUSY_RPLCI   0x0011
 #define _DI_MANAGEMENT_INFO     0x0012
+#define _DI_STREAM_CTRL         0x0014
 /*
   _DI_MANAGEMENT_INFO commands:
 */
@@ -270,7 +277,7 @@ typedef struct {
         /* FACILITY-REQUEST */
 typedef struct {
   word Selector;
-  byte structs[0];      /* Facility parameters */
+  byte structs[1];      /* Facility parameters */
 } _FAC_REQP;
 /* FACILITY-CONFIRM STRUCT FOR ECHO CANCELLER */
 typedef struct
@@ -569,7 +576,7 @@ struct _API_MSG {
     _CON_B3_T90_A_INDP  connect_b3_t90_a_ind;
     _CON_B3_T90_A_RESP  connect_b3_t90_a_res;
     _MANUF_CONP         manufacturer_con;
-    byte                b[200];
+    byte                b[2100];
   } info;
 };
 /*------------------------------------------------------------------*/
@@ -1016,6 +1023,14 @@ struct _API_MSG {
 #define LI2_FLAG_LOOP_X                 ((dword) 0x00000100L)
 #define LI2_FLAG_NOT_SEND_X             ((dword) 0x00004000L)
 #define LI2_FLAG_NOT_RECEIVE_X          ((dword) 0x00008000L)
+#define LI2_FLAG_BCONNECT_A_B           ((dword) 0x01000000L)
+#define LI2_FLAG_BCONNECT_B_A           ((dword) 0x02000000L)
+#define LI2_FLAG_MONITOR_A_B            ((dword) 0x04000000L)
+#define LI2_FLAG_MONITOR_B_A            ((dword) 0x08000000L)
+#define LI2_FLAG_MIX_A_B                ((dword) 0x10000000L)
+#define LI2_FLAG_MIX_B_A                ((dword) 0x20000000L)
+#define LI2_FLAG_PCCONNECT_A_B          ((dword) 0x40000000L)
+#define LI2_FLAG_PCCONNECT_B_A          ((dword) 0x80000000L)
 #define LI2_CROSS_CONTROLLER_SUPPORTED  ((dword) 0x00000001L)
 #define LI2_ASYMMETRIC_SUPPORTED        ((dword) 0x00000002L)
 #define LI2_MONITORING_SUPPORTED        ((dword) 0x00000004L)
@@ -1072,17 +1087,28 @@ struct _API_MSG {
 /*------------------------------------------------------------------*/
 /* INFO_IND event number                                            */
 /*------------------------------------------------------------------*/
+#define INFO_IND_CAUSE                       0x0008
+#define INFO_IND_CHANNELID                   0x0018
+#define INFO_IND_FACILITY_IE                 0x001c
+#define INFO_IND_PROGRESS_IE                 0x001e
+#define INFO_IND_DISPLAY                     0x0028
+#define INFO_IND_KEYPAD                      0x002c /* Q.931 "Keypad facility" */
+#define INFO_IND_CALLEDNUMBER                0x0070
 #define INFO_IND_ORIGINALCALLEDNUMBER        0x0073
 #define INFO_IND_REDIRECTINGNUMBER           0x0074 /* Q.931 "Redirecting number" IE */
+#define INFO_IND_REDIRECTIONNUMBER           0x0076 /* ETS 300 207 "Redirection number" IE */
+#define INFO_IND_SENDINGCOMPLETE             0x00a1
 #define INFO_IND_ALERTING                    0x8001
 #define INFO_IND_CALLPROC                    0x8002
 #define INFO_IND_PROGRESS                    0x8003
 #define INFO_IND_SETUP                       0x8005
 #define INFO_IND_CONN                        0x8007
 #define INFO_IND_SETUP_ACK                   0x800d
+#define INFO_IND_CONN_ACK                    0x800f
 #define INFO_IND_DISC                        0x8045
 #define INFO_IND_RELEASE                     0x804d
 #define INFO_IND_RELEASE_COMPLETE            0x805a
+#define INFO_IND_FACILITY                    0x8062
 /*------------------------------------------------------------------*/
 /* function prototypes                                              */
 /*------------------------------------------------------------------*/

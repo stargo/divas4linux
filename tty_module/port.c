@@ -1,12 +1,13 @@
 
 /*
  *
-  Copyright (c) Dialogic(R), 2009.
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2009-2014.
  *
   This source file is supplied for the use with
-  Dialogic range of DIVA Server Adapters.
+  Sangoma (formerly Dialogic) range of DIVA Server Adapters.
  *
-  Dialogic(R) File Revision :    2.1
+  File Revision :    2.1
  *
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -1584,6 +1585,7 @@ static char *portName (void *C, void *hP)
 	return ( hP? (char *)((ISDN_PORT *)hP)->Name : "?" ) ;
 }
 
+
 /*
  *  System Control Message Processors
  *
@@ -1650,7 +1652,7 @@ ISDN_PORT * _cdecl PortOpen (
 	0L		/* TxDelay	- Amount of time between chars */
 	};
 	ISDN_PORT_DESC	*D;
-	ISDN_PORT	*P;
+	ISDN_PORT	*P = NULL;
 	int		NewPort;
 	byte		State;
 	void		*hPortPages;
@@ -1671,7 +1673,6 @@ ISDN_PORT * _cdecl PortOpen (
 	}
 
  	LOG_SIG(("[%s] Open: (%d) { ", NiceName, PortDriver.curPorts));
-
 
 	/* Gets matches the Port Name */
 	for (D = PortDriver.Ports; str_i_cmp ((char*)D->Name, (char*)Name); ) {
@@ -1819,6 +1820,7 @@ static void _cdecl portWatchdog (void *context)
 {
 	ISDN_PORT_DESC	*D;
 	ISDN_PORT	*P;
+	unsigned long old_irql;
 
 	if ( !PortDriver.Ready )
 		return ;
@@ -1870,7 +1872,6 @@ static void _cdecl portWatchdog (void *context)
 			break;
 		}
 	}
-
 	(void) sysStartTimer (&PortDriver.Watchdog, P_TO_TICK * 1000);
 }
 
@@ -1947,7 +1948,7 @@ static void ParmClose (void)
 	return;
 }
 
-int DiPort_Init_Complete (void)
+static int DiPort_Init_Complete (void)
 {
 	unsigned long old_irql;
 
@@ -1955,9 +1956,7 @@ int DiPort_Init_Complete (void)
 	/* Listen only if AT S0=0 is set for some port */
 # else /* !LISTEN_SELECTIVELY */
 	old_irql = eicon_splimp ();
-
 	PortDriver.Isdn->Listen (1); /* Listen always */
-
 	eicon_splx (old_irql);
 # endif /* LISTEN_SELECTIVELY */
 
@@ -2002,7 +2001,6 @@ int DiPort_Dynamic_Init (dword Dynamic, int NumChannels)
 	/* Remember how we were loaded */
 
 	PortDriver.Dynamic = (byte) Dynamic;
-
 
 	ParmOpen ();
 
@@ -2117,13 +2115,12 @@ int DiPort_Dynamic_Init (dword Dynamic, int NumChannels)
 
 	// VST: EtdM_DIDD_Read((DESCRIPTOR *)DescBuf, &sizeDescBuf);
 	diva_os_didd_read ((DESCRIPTOR *)DescBuf, &sizeDescBuf);
-
 	if ( !(PortDriver.Isdn = isdnBind (&Indications, DescBuf,(word)sizeDescBuf)))
 	{
-    DBG_ERR(("DIVA_TTY: BIND FAILURE"))
+		DBG_ERR(("DIVA_TTY: BIND FAILURE"))
+		printk (KERN_ERR "%s: BIND FAILURE=%p\n", __FUNCTION__, PortDriver.Isdn);
 		goto failure;
 	}
-
 
 	if (PortDriver.Dynamic)
 	{

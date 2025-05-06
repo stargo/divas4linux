@@ -1,14 +1,31 @@
-/* $Id: capimain.c,v 1.24 2003/09/09 06:51:05 schindler Exp $
+
+/*
  *
- * ISDN interface module for Dialogic active cards DIVA.
- * CAPI Interface
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
  *
- * Copyright 2000-2010 by Armin Schindler (mac@melware.de)
- * Copyright 2000-2010 Cytronics & Melware (info@melware.de)
- * Copyright 2000-2007 Dialogic
+  This source file is supplied for the use with
+  Sangoma (formerly Dialogic) range of Adapters.
  *
- * This software may be used and distributed according to the terms
- * of the GNU General Public License, incorporated herein by reference.
+  File Revision :    2.1
+ *
+  This program is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; either version 2, or (at your option)
+  any later version.
+ *
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY OF ANY KIND WHATSOEVER INCLUDING ANY
+  implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+  See the GNU General Public License for more details.
+ *
+  You should have received a copy of the GNU General Public License
+  along with this program; if not, write to the Free Software
+  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *
  */
 
 #include <linux/version.h>
@@ -21,15 +38,12 @@
 #endif
 #include <linux/skbuff.h>
 
-#include "platform.h"
-#if LINUX_VERSION_CODE > KERNEL_VERSION(2,6,33)
-#include <linux/seq_file.h>
-#endif
-
 #include "os_capi.h"
 
+#include "platform.h"
 #include "di_defs.h"
 #include "capi20.h"
+#include "dlist.h"
 #include "divacapi.h"
 #include "cp_vers.h"
 #include "capifunc.h"
@@ -53,9 +67,18 @@ static char *DRIVERNAME =
     "Dialogic DIVA - CAPI Interface driver (http://www.melware.net)";
 static char *DRIVERLNAME = "divacapi";
 
-MODULE_DESCRIPTION("CAPI driver for Dialogic DIVA cards");
-MODULE_AUTHOR("Cytronics & Melware, Dialogic");
+#ifdef MODULE_DESCRIPTION
+MODULE_DESCRIPTION("CAPI driver for DIVA cards");
+#endif
+#ifdef MODULE_AUTHOR
+MODULE_AUTHOR("Cytronics & Melware, Sangoma");
+#endif
+#ifdef MODULE_SUPPORTED_DEVICE
+MODULE_SUPPORTED_DEVICE("CAPI and DIVA card drivers");
+#endif
+#ifdef MODULE_LICENSE
 MODULE_LICENSE("GPL");
+#endif
 
 typedef struct _diva_os_thread_dpc {
 	struct work_struct divas_task;
@@ -85,6 +108,10 @@ typedef struct _diva_capi_device {
   struct capi_register_params rp;
 } diva_capi_device_t;
 
+#if LINUX_VERSION_CODE > KERNEL_VERSION(2,6,33)
+#define cardstate state
+#endif
+
 #define DIVA_CARD_DETECTED 1
 #define DIVA_CARD_RUNNING  2
 
@@ -93,13 +120,7 @@ static diva_capi_device_t* diva_appl_map[MAX_APPL];
 	diva_appl_lock is used to protect applications against adapter removal and to
 	serialize parallel CAPI_REGISTER requests
 	*/
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,37)
-	static DECLARE_MUTEX(diva_appl_lock);
-#elif LINUX_VERSION_CODE < KERNEL_VERSION(6,3,0)
-	static DEFINE_SEMAPHORE(diva_appl_lock);
-#else
-	static DEFINE_SEMAPHORE(diva_appl_lock, 1);
-#endif
+static DECLARE_MUTEX(diva_appl_lock);
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,13)
 static struct class_simple *diva_capi_class;
@@ -154,14 +175,31 @@ void diva_os_free_message_buffer(diva_os_message_buffer_s * dmb)
 }
 
 #if !defined(DIVA_EICON_CAPI)
-
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,34)
 /*
  * proc function for controller info
  */
+int proc_cnt=0;
+#if LINUX_VERSION_CODE > KERNEL_VERSION(3,9,0)
+int eof[1];
+#define PROC_RETURN(x,y) { \
+   if (!x) { \
+       x=1; \
+       return(y); \
+   } else { \
+       x=0; \
+       return(0); \
+   } \
+}
+static int diva_ctl_read_proc(struct file *filp, char *page, size_t count, loff_t *offp)
+#else
+#define PROC_RETURN(x,y) return(y)
 static int diva_ctl_read_proc(char *page, char **start, off_t off,
 			      int count, int *eof, struct capi_ctr *ctrl)
+#endif
 {
+#if LINUX_VERSION_CODE > KERNEL_VERSION(3,9,0)
+        loff_t off = *offp;
+#endif
 	diva_card *card = (diva_card *) ctrl->driverdata;
 	int len = 0;
 
@@ -175,35 +213,8 @@ static int diva_ctl_read_proc(char *page, char **start, off_t off,
 	if (len < off)
 		return 0;
 	*start = page + off;
-	return ((count < len - off) ? count : len - off);
+	PROC_RETURN(proc_cnt,((count < len-off) ? count : len-off));
 }
-#else
-static int diva_proc_show(struct seq_file *m, void *v)
-{
-	struct capi_ctr *ctrl = m->private;
-	diva_card *card = (diva_card *) ctrl->driverdata;
-
-	seq_printf(m, "%s\n", ctrl->name);
-	seq_printf(m, "Serial No. : %s\n", ctrl->serial);
-	seq_printf(m, "Id         : %d\n", card->Id);
-	seq_printf(m, "Channels   : %d\n", card->d.channels);
-
-	return 0;
-}
-
-static int diva_proc_open(struct inode *inode, struct file *file)
-{
-	    return single_open(file, diva_proc_show, PDE(inode)->data);
-}
-
-static const struct file_operations diva_proc_fops = {
-	.owner      = THIS_MODULE,
-	.open       = diva_proc_open,
-	.read       = seq_read,
-	.llseek     = seq_lseek,
-	.release    = single_release,
-};
-#endif
 
 /*
  * set additional os settings in capi_ctr struct
@@ -213,11 +224,7 @@ void diva_os_set_controller_struct(struct capi_ctr *ctrl)
 	ctrl->driver_name = DRIVERLNAME;
 	ctrl->load_firmware = 0;
 	ctrl->reset_ctr = 0;
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,34)
 	ctrl->ctr_read_proc = diva_ctl_read_proc;
-#else
-	ctrl->proc_fops = &diva_proc_fops;
-#endif
 	ctrl->owner = THIS_MODULE;
 }
 #endif
@@ -268,7 +275,14 @@ void diva_os_remove_soft_isr(diva_os_soft_isr_t * psoft_isr)
 		    (diva_os_thread_dpc_t *) psoft_isr->object;
 
     atomic_set (&(pdpc->soft_isr_disabled), 1);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6,0,0) || \
+	(defined(RHEL_RELEASE_CODE) && LINUX_VERSION_CODE >= KERNEL_VERSION(5,14,0))
+		cancel_work_sync(&(pdpc->divas_task));
+#else
+		/* This function removed in-tree in 6.x and eventually became a kernel warning, which RHEL 9.5 backported it
+		*/
 		flush_scheduled_work();
+#endif
 		diva_os_free(0, pdpc);
 	}
 }
@@ -297,11 +311,7 @@ static diva_capi_device_t* diva_capi_init_device (void) {
 	atomic_set(&capi->appl_registered, 0);
 	init_waitqueue_head(&capi->recvwait);
 	skb_queue_head_init(&capi->recvqueue);
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,37)
 	init_MUTEX(&capi->msg_write_lock);
-#else
-	sema_init(&capi->msg_write_lock, 1);
-#endif
 
 	capi->errcode = CAPI_NOERROR;
 
@@ -457,10 +467,11 @@ static u16 find_free_appl_id (void) {
 }
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,36)
-static int diva_capi_ioctl (struct inode *inode, struct file *file, unsigned int cmd, unsigned long arg) {
+static int diva_capi_ioctl (struct inode *inode, struct file *file, unsigned int cmd, unsigned long arg)
 #else
-static long diva_capi_ioctl (struct file *file, unsigned int cmd, unsigned long arg) {
+static long diva_capi_ioctl (struct file *file, unsigned int cmd, unsigned long arg)
 #endif
+{
 	diva_capi_device_t* capi = (diva_capi_device_t*)file->private_data;
 	int ret = -EINVAL;
 
@@ -628,7 +639,10 @@ static struct file_operations diva_capi_fops = {
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,36)
 	.ioctl   = diva_capi_ioctl,
 #else
-	.unlocked_ioctl	= diva_capi_ioctl,
+#ifdef CONFIG_COMPAT
+	.compat_ioctl   = diva_capi_ioctl,
+#endif
+	.unlocked_ioctl = diva_capi_ioctl,
 #endif
 	.open    = diva_capi_open,
 	.release = diva_capi_release
@@ -721,9 +735,9 @@ static int DIVA_INIT_FUNCTION divacapi_init (void) {
 	int ret = 0;
 
 
-	sprintf(DRIVERRELEASE_CAPI, "%s", DRRELEXTRA);
+	sprintf(DRIVERRELEASE_CAPI, "%d.%d%s", DRRELMAJOR, DRRELMINOR, DRRELEXTRA);
 	printk(KERN_INFO "%s\n", DRIVERNAME);
-	printk(KERN_INFO "%s: Rel:%s  Rev:", DRIVERLNAME, DRIVERRELEASE_CAPI);
+	printk(KERN_INFO "%s: Rel:%s", DRIVERLNAME, DRIVERRELEASE_CAPI);
 	strcpy(tmprev, main_revision);
 	printk("%s  Build: %s(%s)\n", getrev(tmprev), diva_capi_common_code_build, DIVA_BUILD);
 
@@ -777,6 +791,7 @@ static int DIVA_INIT_FUNCTION divacapi_init (void) {
 #endif
 #endif
 #endif
+
 #endif
 #endif
 		if (IS_ERR(tmp_class)) {

@@ -1,24 +1,30 @@
-/* $Id$
+
+/*
  *
- * DIVA-ISDN driver for Linux. (Control-Utility)
+  Copyright (c) Sangoma Technologies, 2018-2022
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
  *
- * Copyright 2001-2009 Cytronics & Melware (info@melware.de)
+  This source file is supplied for the use with
+  Sangoma (formerly Dialogic) range of Adapters.
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2, or (at your option)
- * any later version.
+  File Revision :    2.1
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+  This program is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; either version 2, or (at your option)
+  any later version.
  *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY OF ANY KIND WHATSOEVER INCLUDING ANY
+  implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+  See the GNU General Public License for more details.
  *
- * $Log$
+  You should have received a copy of the GNU General Public License
+  along with this program; if not, write to the Free Software
+  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  */
 
@@ -77,13 +83,13 @@ void no_printf (char * x ,...)
 {
   /* dummy debug function */
 }
-DIVA_DI_PRINTF diva_dprintf = no_printf;
+DIVA_DI_PRINTF __diva_dprintf = no_printf;
 
 char *cmd;
 
 void divactrl_usage(void)
 {
-  fprintf(stderr,"divactrl utility version 3.1.6-109.75-1   (c) 2001-2009 Cytronics & Melware\n");
+  fprintf(stderr,"divactrl utility version 9.6.8-124.26-1   (c) 2001-2009 Cytronics & Melware\n");
   fprintf(stderr,"usage: %s load     [arg1 arg2 argn]  (load and start card)\n", cmd);
   fprintf(stderr,"       %s ctrl     [arg1 arg2 argn]  (card controlling functions) \n", cmd);
   fprintf(stderr,"       %s mantool  [arg1 arg2 argn]  (B-Channel state trace utility)\n", cmd);
@@ -326,7 +332,7 @@ static int diva_cfg_lib_init (const char* device_name,
   char* data;
 
   if ((device_fd = open ("/dev/DivasDIDD", O_RDWR | O_NONBLOCK)) < 0) {
-    device_fd = open ("/proc/net/eicon/divadidd", O_RDWR | O_NONBLOCK);
+    device_fd = open ("/proc/net/isdn/eicon/divadidd", O_RDWR | O_NONBLOCK);
   }
   if (device_fd < 0) {
     perror ("cfglib write");

@@ -1,11 +1,16 @@
+
 /*
  *
-  Copyright (c) Dialogic, 2007.
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
  *
   This source file is supplied for the use with
-  Dialogic range of DIVA Server Adapters.
+  Sangoma (formerly Dialogic) range of Adapters.
  *
-  Dialogic File Revision :    2.1
+  File Revision :    2.1
  *
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -22,6 +27,7 @@
   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  */
+
 #ifndef __DIVA_XDI_DSRV_4PRI_INC__
 #define __DIVA_XDI_DSRV_4PRI_INC__
 /*
@@ -40,7 +46,14 @@ void diva_os_prepare_4pri_functions (PISDN_ADAPTER IoAdapter);
  || ((__x__)->cardType == CARDTYPE_DIVASRV_V2P_V10H_PCIE) \
  || ((__x__)->cardType == CARDTYPE_DIVASRV_V1P_V10H_PCIE) \
  || ((__x__)->cardType == CARDTYPE_DIVASRV_V4P_V10Z_PCIE) \
- || ((__x__)->cardType == CARDTYPE_DIVASRV_V8P_V10Z_PCIE))
+ || ((__x__)->cardType == CARDTYPE_DIVASRV_V8P_V10Z_PCIE) \
+ || ((__x__)->cardType == CARDTYPE_DIVASRV_V4P_V10H_PCIE_HYPERCOM) \
+ || ((__x__)->cardType == CARDTYPE_DIVASRV_V2P_V10H_PCIE_HYPERCOM) \
+ || ((__x__)->cardType == CARDTYPE_DIVASRV_V1P_V10H_PCIE_HYPERCOM) \
+ || ((__x__)->cardType == CARDTYPE_DIVASRV_V4P_V10Z_PCIE_HYPERCOM) \
+ || ((__x__)->cardType == CARDTYPE_DIVASRV_V8P_V10Z_PCIE_HYPERCOM) \
+ || ((__x__)->cardType == CARDTYPE_DIVASRV_M4P_V10Z_PCIE) \
+ || ((__x__)->cardType == CARDTYPE_DIVASRV_M8P_V10Z_PCIE))
 
 
 

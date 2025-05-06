@@ -1,11 +1,16 @@
+
 /*
  *
-  Copyright (c) Dialogic, 2007.
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
  *
   This source file is supplied for the use with
-  Dialogic range of DIVA Server Adapters.
+  Sangoma (formerly Dialogic) range of Adapters.
  *
-  Dialogic File Revision :    2.1
+  File Revision :    2.1
  *
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -22,6 +27,7 @@
   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  */
+
 #include "platform.h"
 #include <linux/stdarg.h>
 #include "debuglib.h"
@@ -48,7 +54,7 @@
    OS Dependent part of XDI driver for DIVA PRI Adapter
 
    DSP detection/validation by Anthony Booth (Eicon Networks, www.eicon.com)
--------------------------------------------------------------------------- */ 
+-------------------------------------------------------------------------- */
 
 #define DIVA_PRI_NO_PCI_BIOS_WORKAROUND 1
 
@@ -196,7 +202,7 @@ diva_pri_init_card (diva_os_xdi_adapter_t* a)
   a->xdi_adapter.Channels = CardProperties[a->CardOrdinal].Channels;
   a->xdi_adapter.e_max = CardProperties[a->CardOrdinal].E_info;
 
-  a->xdi_adapter.e_tbl =diva_os_malloc (0, a->xdi_adapter.e_max * sizeof(E_INFO)); 
+  a->xdi_adapter.e_tbl =diva_os_malloc (0, a->xdi_adapter.e_max * sizeof(E_INFO));
   if (!a->xdi_adapter.e_tbl) {
     diva_pri_cleanup_adapter (a);
     return (-1);
@@ -262,7 +268,7 @@ diva_pri_init_card (diva_os_xdi_adapter_t* a)
   */
   a->xdi_adapter.irq_info.irq_nr = a->resources.pci.irq;
   sprintf (a->xdi_adapter.irq_info.irq_name,
-            "DIVA PRI %ld", 
+            "DIVA PRI %ld",
             (long)a->xdi_adapter.serialNo);
 
   if (diva_os_register_irq (a, a->xdi_adapter.irq_info.irq_nr,
@@ -536,6 +542,9 @@ diva_pri_stop_adapter (diva_os_xdi_adapter_t* a)
 {
   PISDN_ADAPTER IoAdapter = &a->xdi_adapter;
   int i = 100;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,16,0)
+  divas_pci_card_resources_t *p_pci = &(a->resources.pci);
+#endif
 
   if (!IoAdapter->ram) {
     return (-1);
@@ -546,6 +555,7 @@ diva_pri_stop_adapter (diva_os_xdi_adapter_t* a)
     return (-1); /* nothing to stop */
   }
   IoAdapter->Initialized = 0;
+  DBG_LOG(("%s Adapter: %d", __FUNCTION__, IoAdapter->ANum));
 
   /*
     Disconnect Adapter from DIDD
@@ -577,6 +587,15 @@ diva_pri_stop_adapter (diva_os_xdi_adapter_t* a)
     Stop and reset adapter
   */
   IoAdapter->stop (IoAdapter) ;
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,16,0)
+  /*
+    Unmap Clock Data DMA from DIDD
+  */
+  diva_xdi_didd_unmap_clock_data_addr(IoAdapter->ANum,
+                                      p_pci->clock_data_bus_addr,
+                                      p_pci->hdev);
+#endif
 
   return (0);
 }
@@ -646,7 +665,7 @@ diva_pri_cmd_card_proc (struct _diva_os_xdi_adapter* a,
                                         cmd->command_data.write_sdram.offset,
                                         (byte*)&cmd[1],
                                         cmd->command_data.write_sdram.length,
-                                        pri_is_rev_2_card (a->CardOrdinal) ? 
+                                        pri_is_rev_2_card (a->CardOrdinal) ?
                                         MP2_MEMORY_SIZE : MP_MEMORY_SIZE);
       break;
 
@@ -678,7 +697,7 @@ diva_pri_cmd_card_proc (struct _diva_os_xdi_adapter* a,
       if (a->xdi_adapter.dma_map) {
         a->xdi_mbox.data_length = sizeof(diva_xdi_um_cfg_cmd_data_alloc_dma_descriptor_t);
         if ((a->xdi_mbox.data = diva_os_malloc (0, a->xdi_mbox.data_length))) {
-          diva_xdi_um_cfg_cmd_data_alloc_dma_descriptor_t* p = 
+          diva_xdi_um_cfg_cmd_data_alloc_dma_descriptor_t* p =
             (diva_xdi_um_cfg_cmd_data_alloc_dma_descriptor_t*)a->xdi_mbox.data;
           int nr = diva_alloc_dma_map_entry ((struct _diva_dma_map_entry*)a->xdi_adapter.dma_map);
           unsigned long dma_magic, dma_magic_hi;
@@ -739,7 +758,7 @@ diva_pri_cmd_card_proc (struct _diva_os_xdi_adapter* a,
     case DIVA_XDI_UM_CMD_READ_SDRAM:
       if (a->xdi_adapter.Address) {
         if ((a->xdi_mbox.data_length = cmd->command_data.read_sdram.length)) {
-          if ((a->xdi_mbox.data_length+cmd->command_data.read_sdram.offset) < a->xdi_adapter.MemorySize) { 
+          if ((a->xdi_mbox.data_length+cmd->command_data.read_sdram.offset) < a->xdi_adapter.MemorySize) {
             a->xdi_mbox.data = diva_os_malloc (0, a->xdi_mbox.data_length);
             if (a->xdi_mbox.data) {
               byte* src = a->xdi_adapter.Address;

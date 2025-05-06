@@ -1,11 +1,16 @@
+
 /*
  *
-  Copyright (c) Dialogic, 2007.
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
  *
   This source file is supplied for the use with
-  Dialogic Networks range of DIVA Server Adapters.
+  Sangoma (formerly Dialogic) range of Adapters.
  *
-  Dialogic File Revision :    2.1
+  File Revision :    2.1
  *
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -22,6 +27,7 @@
   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  */
+
 #include "platform.h"
 #include <linux/stdarg.h>
 #include "debuglib.h"
@@ -31,9 +37,9 @@
 #include "pr_pc.h"
 #include "di_defs.h"
 #include "dsp_defs.h"
-#include "di.h" 
+#include "di.h"
 #include "divasync.h"
-#include "vidi_di.h" 
+#include "vidi_di.h"
 #include "io.h"
 
 #include "xdi_msg.h"
@@ -43,6 +49,8 @@
 #include "mi_pc.h"
 #include "dsrv4bri.h" /* PLX constants */
 #include "dsrv_4pri.h"
+#include "diva_dma_fragment.h"
+#include "divatest.h" /* Adapter test framework */
 
 /*
 	IMPORTS
@@ -51,7 +59,6 @@ extern void* diva_xdiLoadFileFile;
 extern dword diva_xdiLoadFileLength;
 extern void  prepare_4pri_functions   (PISDN_ADAPTER IoAdapter);
 extern int   pri_4pri_FPGA_download   (PISDN_ADAPTER IoAdapter);
-extern int   start_4pri_hardware      (PISDN_ADAPTER IoAdapter);
 extern void diva_add_slave_adapter    (diva_os_xdi_adapter_t* a);
 extern void diva_xdi_display_adapter_features (int card);
 extern int diva_card_read_xlog (diva_os_xdi_adapter_t* a);
@@ -170,21 +177,42 @@ int diva_4pri_init_card (diva_os_xdi_adapter_t* a) {
 				break;
 
 			case 0x3001:
+			case 0x3004:
 				a->CardOrdinal = CARDTYPE_DIVASRV_V2P_V10H_PCIE;
-				a->dsp_mask    = 0x000003ff;
-				diva_tasks     = 2;
+				a->dsp_mask = 0x0000001f;
+				diva_tasks = 2;
 				break;
 
 			case 0x3002:
+			case 0x3005:
 				a->CardOrdinal = CARDTYPE_DIVASRV_V1P_V10H_PCIE;
 				a->dsp_mask    = 0x000003ff;
 				diva_tasks     = 1;
 				break;
 
 			case 0xE030:
+			case 0x3003:
 				a->CardOrdinal = CARDTYPE_DIVASRV_V4P_V10H_PCIE;
 				a->dsp_mask    = 0x00000007;
 				diva_tasks     = 4;
+				break;
+
+			case 0x3006:
+				a->CardOrdinal = CARDTYPE_DIVASRV_V4P_V10H_PCIE_HYPERCOM;
+				a->dsp_mask    = 0x00000007;
+				diva_tasks     = 4;
+				break;
+
+			case 0x3007:
+				a->CardOrdinal = CARDTYPE_DIVASRV_V2P_V10H_PCIE_HYPERCOM;
+				a->dsp_mask    = 0x0000001f;
+				diva_tasks     = 2;
+				break;
+
+			case 0x3008:
+				a->CardOrdinal = CARDTYPE_DIVASRV_V1P_V10H_PCIE_HYPERCOM;
+				a->dsp_mask    = 0x000003ff;
+				diva_tasks     = 1;
 				break;
 
 			default:
@@ -196,6 +224,7 @@ int diva_4pri_init_card (diva_os_xdi_adapter_t* a) {
 	/*
 		Set properties
 		*/
+	a->xdi_adapter.cardType   = a->CardOrdinal;
 	a->xdi_adapter.Properties = CardProperties[a->CardOrdinal];
 
 	memcpy (bar_length, _4pri_bar_length, sizeof(bar_length));
@@ -205,7 +234,7 @@ int diva_4pri_init_card (diva_os_xdi_adapter_t* a) {
 					a->xdi_adapter.serialNo,
 					a->resources.pci.bus,
 					a->resources.pci.func))
-    
+
 	/*
 		First initialization step: get and check hardware resoures.
 		Do not map resources and do not access card at this step.
@@ -322,9 +351,10 @@ int diva_4pri_init_card (diva_os_xdi_adapter_t* a) {
 	}
 
 	for (i = 0; i < diva_tasks; i++) {
-		diva_current = adapter_list[i];
+    diva_current = adapter_list[i];
 
-		diva_current->dsp_mask = 0x7fffffff;
+    diva_current->xdi_adapter.xconnectExportMode = MIN(DivaXconnectExportModeMax, diva_os_get_nr_li_exports (&diva_current->xdi_adapter));
+    diva_current->dsp_mask = 0x7fffffff;
     diva_current->xdi_adapter.a.io = &diva_current->xdi_adapter;
     diva_current->xdi_adapter.DIRequest = request;
     diva_current->interface.cmd_proc = diva_4pri_cmd_card_proc;
@@ -333,7 +363,7 @@ int diva_4pri_init_card (diva_os_xdi_adapter_t* a) {
 
     diva_current->xdi_adapter.Channels = CardProperties[a->CardOrdinal].Channels;
     diva_current->xdi_adapter.e_max    = CardProperties[a->CardOrdinal].E_info;
-    diva_current->xdi_adapter.e_tbl    = diva_os_malloc (0, diva_current->xdi_adapter.e_max * sizeof(E_INFO)); 
+    diva_current->xdi_adapter.e_tbl    = diva_os_malloc (0, diva_current->xdi_adapter.e_max * sizeof(E_INFO));
 
 		if (diva_current->xdi_adapter.e_tbl == 0) {
 			diva_4pri_cleanup_slave_adapters (a);
@@ -415,6 +445,8 @@ int diva_4pri_init_card (diva_os_xdi_adapter_t* a) {
 		address for all instances
 		*/
   for (i = 0; i < diva_tasks; i++) {
+		int LiChannels;
+
 		Slave            = a->xdi_adapter.QuadroList->QuadroAdapter[i];
 		offset           = Slave->ControllerNumber * (MP_SHARED_RAM_OFFSET + MP_SHARED_RAM_SIZE);
 		Slave->Address   = a->xdi_adapter.Address + offset;
@@ -429,10 +461,11 @@ int diva_4pri_init_card (diva_os_xdi_adapter_t* a) {
 			Nr DMA pages:
 			Tx 31+31+31
 			Rx 72
-			Li 32
 			*/
-
-		diva_init_dma_map (a->resources.pci.hdev, (struct _diva_dma_map_entry**)&Slave->dma_map, 200);
+		LiChannels = Slave->Properties.nrExportXconnectDescriptors[0][Slave->xconnectExportMode];
+		DBG_REG(("A(%d) use idi:%d Li:%d descriptors", Slave->ANum, 168, LiChannels))
+		diva_init_dma_map (a->resources.pci.hdev, (struct _diva_dma_map_entry**)&Slave->dma_map, 168+LiChannels);
+		Slave->fragment_map = diva_init_dma_fragment_map (Slave->dma_map, 15);
 	}
 	for (i = 0; i < diva_tasks; i++) {
 		Slave       = a->xdi_adapter.QuadroList->QuadroAdapter[i];
@@ -443,6 +476,7 @@ int diva_4pri_init_card (diva_os_xdi_adapter_t* a) {
 		Slave           = a->xdi_adapter.QuadroList->QuadroAdapter[i];
 		Slave->serialNo = ((dword)(Slave->ControllerNumber << 24)) | a->xdi_adapter.serialNo;
 		Slave->cardType = a->xdi_adapter.cardType;
+		Slave->software_options = a->xdi_adapter.software_options;
 		memcpy (Slave->hw_info, a->xdi_adapter.hw_info, sizeof(a->xdi_adapter.hw_info));
 	}
 
@@ -501,6 +535,8 @@ static int diva_4pri_cleanup_slave_adapters (diva_os_xdi_adapter_t* a) {
 
 			diva_cleanup_vidi (&diva_current->xdi_adapter);
 
+			diva_destroy_dma_fragment_map (diva_current->xdi_adapter.fragment_map);
+			diva_current->xdi_adapter.fragment_map = 0;
 			diva_free_dma_map (a->resources.pci.hdev, (struct _diva_dma_map_entry*)diva_current->xdi_adapter.dma_map);
 			diva_current->xdi_adapter.dma_map = 0;
 			diva_free_dma_map_pages (a->resources.pci.hdev,
@@ -559,7 +595,7 @@ static int diva_4pri_cleanup_adapter (diva_os_xdi_adapter_t* a) {
 		Unregister I/O
 		*/
 	if (a->resources.pci.bar[1] != 0 && a->resources.pci.addr[1]) {
-		diva_os_register_io_port (a, 0, a->resources.pci.bar[1], 
+		diva_os_register_io_port (a, 0, a->resources.pci.bar[1],
 															_4pri_bar_length[1],
 															&a->port_name[0]);
 		a->resources.pci.bar[1]  = 0;
@@ -609,9 +645,15 @@ static int diva_4pri_cmd_card_proc (struct _diva_os_xdi_adapter* a, diva_xdi_um_
 			break;
 
     case DIVA_XDI_UM_CMD_START_ADAPTER:
-			if (a->xdi_adapter.ControllerNumber == 0) {
-				ret = diva_4pri_start_adapter (&a->xdi_adapter, cmd->command_data.start.features);
-			}
+      if (a->xdi_adapter.ControllerNumber == 0) {
+        ret = diva_4pri_start_adapter (&a->xdi_adapter, cmd->command_data.start.features);
+      }
+      break;
+
+    case DIVA_XDI_UM_CMD_RAW_START_ADAPTER:
+      if (a->xdi_adapter.ControllerNumber == 0) {
+        ret = start_4pri_hardware (&a->xdi_adapter);
+      }
       break;
 
 		case DIVA_XDI_UM_CMD_STOP_ADAPTER:
@@ -636,23 +678,24 @@ static int diva_4pri_cmd_card_proc (struct _diva_os_xdi_adapter* a, diva_xdi_um_
 			}
 			break;
 
-		case DIVA_XDI_UM_CMD_GET_PCI_HW_CONFIG:
-			if (a->xdi_adapter.ControllerNumber == 0) {
-				a->xdi_mbox.data_length = sizeof(dword)*9;
-				a->xdi_mbox.data = diva_os_malloc (0, a->xdi_mbox.data_length);
-				if (a->xdi_mbox.data) {
-					int i;
-					dword* data = (dword*)a->xdi_mbox.data;
+    case DIVA_XDI_UM_CMD_GET_PCI_HW_CONFIG:
+      if (a->xdi_adapter.ControllerNumber == 0) {
+        a->xdi_mbox.data_length = 36;
+        a->xdi_mbox.data = diva_os_malloc(0, a->xdi_mbox.data_length);
+        if (a->xdi_mbox.data) {
+          int i;
+          void* const data = a->xdi_mbox.data;
 
-					for (i = 0; i < 8; i++) {
-						*data++ = a->resources.pci.bar[i];
-					}
-					*data++ = a->resources.pci.irq;
-					a->xdi_mbox.status = DIVA_XDI_MBOX_BUSY;
-					ret = 0;
-				}
-			}
-			break;
+          for (i = 0; i < 8; i++) {
+            ((dword*) data)[i] = a->resources.pci.bar[i];
+          }
+          ((dword*) data)[8] = a->resources.pci.irq;
+
+          a->xdi_mbox.status = DIVA_XDI_MBOX_BUSY;
+          ret = 0;
+        }
+      }
+      break;
 
 		case DIVA_XDI_UM_CMD_GET_CARD_STATE:
 			if (a->xdi_adapter.ControllerNumber == 0) {
@@ -723,29 +766,29 @@ static int diva_4pri_cmd_card_proc (struct _diva_os_xdi_adapter* a, diva_xdi_um_
 			ret = diva_card_read_xlog (a);
 			break;
 
-		case DIVA_XDI_UM_CMD_READ_SDRAM:
-			if (a->xdi_adapter.ControllerNumber == 0 && a->xdi_adapter.Address != 0 &&
-					diva_4pri_fpga_ready (&a->xdi_adapter) == 0) {
-				if ((a->xdi_mbox.data_length = cmd->command_data.read_sdram.length)) {
-					if ((a->xdi_mbox.data_length+cmd->command_data.read_sdram.offset) < a->xdi_adapter.MemorySize) { 
-						a->xdi_mbox.data = diva_os_malloc (0, a->xdi_mbox.data_length);
-						if (a->xdi_mbox.data) {
-							byte* src = a->xdi_adapter.Address;
-							byte* dst = a->xdi_mbox.data;
-							dword len = a->xdi_mbox.data_length;
+    case DIVA_XDI_UM_CMD_READ_SDRAM:
+      if (a->xdi_adapter.ControllerNumber == 0 && a->xdi_adapter.Address != 0 &&
+          diva_4pri_fpga_ready (&a->xdi_adapter) == 0) {
+        if ((a->xdi_mbox.data_length = cmd->command_data.read_sdram.length)) {
+          if ((a->xdi_mbox.data_length+cmd->command_data.read_sdram.offset) < a->xdi_adapter.MemorySize) {
+            a->xdi_mbox.data = diva_os_malloc (0, a->xdi_mbox.data_length);
+            if (a->xdi_mbox.data) {
+              byte* src = a->xdi_adapter.Address;
+              byte* dst = a->xdi_mbox.data;
+              dword len = a->xdi_mbox.data_length;
 
-							src += cmd->command_data.read_sdram.offset;
+              src += cmd->command_data.read_sdram.offset;
 
-							while (len--) {
-								*dst++ = *src++;
-							}
-							a->xdi_mbox.status = DIVA_XDI_MBOX_BUSY;
-							ret = 0;
-						}
-					}
-				}
-			}
-			break;
+              while (len--) {
+                *dst++ = *src++;
+              }
+              a->xdi_mbox.status = DIVA_XDI_MBOX_BUSY;
+              ret = 0;
+            }
+          }
+        }
+      }
+      break;
 
 		case DIVA_XDI_UM_CMD_GET_HW_INFO_STRUCT:
 			a->xdi_mbox.data_length = sizeof(a->xdi_adapter.hw_info);
@@ -822,7 +865,7 @@ static int diva_4pri_cmd_card_proc (struct _diva_os_xdi_adapter* a, diva_xdi_um_
       if (a->xdi_adapter.dma_map) {
         a->xdi_mbox.data_length = sizeof(diva_xdi_um_cfg_cmd_data_alloc_dma_descriptor_t);
         if ((a->xdi_mbox.data = diva_os_malloc (0, a->xdi_mbox.data_length))) {
-          diva_xdi_um_cfg_cmd_data_alloc_dma_descriptor_t* p = 
+          diva_xdi_um_cfg_cmd_data_alloc_dma_descriptor_t* p =
             (diva_xdi_um_cfg_cmd_data_alloc_dma_descriptor_t*)a->xdi_mbox.data;
           int nr = diva_alloc_dma_map_entry ((struct _diva_dma_map_entry*)a->xdi_adapter.dma_map);
           unsigned long dma_magic, dma_magic_hi;
@@ -959,10 +1002,11 @@ static int diva_4pri_reset_adapter (struct _diva_os_xdi_adapter* a) {
 		memset (&Slave->a.rx_stream[0],            0x00, sizeof(Slave->a.rx_stream));
 		memset (&Slave->a.tx_stream[0],            0x00, sizeof(Slave->a.tx_stream));
 
-    diva_cleanup_vidi (Slave);
+		diva_cleanup_vidi (Slave);
 
+		diva_reset_dma_fragment_map (Slave->fragment_map);
 		if (Slave->dma_map) {
-      diva_reset_dma_mapping (Slave->dma_map);
+			diva_reset_dma_mapping (Slave->dma_map);
 		}
 		if (Slave->dma_map2) {
 			diva_reset_dma_mapping (Slave->dma_map2);
@@ -1007,6 +1051,9 @@ static void diva_4pri_clear_interrupts (diva_os_xdi_adapter_t* a) {
 static int diva_4pri_stop_adapter_w_io (struct _diva_os_xdi_adapter* a, int do_io) {
 	PISDN_ADAPTER IoAdapter = &a->xdi_adapter;
 	int i;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,16,0)
+	divas_pci_card_resources_t *p_pci = &(a->resources.pci);
+#endif
 
 	if (!IoAdapter->ram) {
 		return (-1);
@@ -1015,6 +1062,7 @@ static int diva_4pri_stop_adapter_w_io (struct _diva_os_xdi_adapter* a, int do_i
 		DBG_ERR(("A: A(%d) can not stop 4PRI adapter - not running", IoAdapter->ANum))
 		return (-1); /* nothing to stop */
 	}
+	DBG_LOG(("%s Adapter: %d", __FUNCTION__, IoAdapter->ANum));
 
 	if (do_io != 0) {
 		/*
@@ -1044,12 +1092,23 @@ static int diva_4pri_stop_adapter_w_io (struct _diva_os_xdi_adapter* a, int do_i
 		*/
 	for (i = 0; i < IoAdapter->tasks; i++) {
 		diva_xdi_didd_remove_adapter(IoAdapter->QuadroList->QuadroAdapter[i]->ANum);
+		IoAdapter->QuadroList->QuadroAdapter[i]->shedule_stream_proc = 0;
+		IoAdapter->QuadroList->QuadroAdapter[i]->shedule_stream_proc_context = 0;
 	}
 
 	diva_os_cancel_soft_isr (&a->xdi_adapter.isr_soft_isr);
 	diva_os_cancel_soft_isr (&a->xdi_adapter.req_soft_isr);
 
 	IoAdapter->a.ReadyInt = 0;
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,16,0)
+	/*
+		Unmap Clock Data DMA from DIDD
+	*/
+	diva_xdi_didd_unmap_clock_data_addr(IoAdapter->ANum,
+	                                    p_pci->clock_data_bus_addr,
+	                                    p_pci->hdev);
+#endif
 
 	return (0);
 }
@@ -1241,3 +1300,5 @@ static int diva_4pri_write_sdram_block (PISDN_ADAPTER IoAdapter,
 
 	return (0);
 }
+
+// vim: set tabstop=2 softtabstop=2 shiftwidth=2 :

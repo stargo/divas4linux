@@ -1,18 +1,31 @@
-/* $Id: i4lididrv.c,v 1.1.2.2 2002/10/02 14:38:37 armin Exp $
+
+/*
  *
- * ISDN interface module for Dialogic active cards.
- * I4L - IDI Interface
- * 
- * Copyright 1998-2009 by Armin Schindler (mac@melware.de) 
- * Copyright 1999-2009 Cytronics & Melware (info@melware.de)
- * 
- * Thanks to	Deutsche Mailbox Saar-Lor-Lux GmbH
- *		for sponsoring and testing fax
- *		capabilities with Diva Server cards.
- *		(dor@deutschemailbox.de)
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
  *
- * This software may be used and distributed according to the terms
- * of the GNU General Public License, incorporated herein by reference.
+  This source file is supplied for the use with
+  Sangoma (formerly Dialogic) range of Adapters.
+ *
+  File Revision :    2.1
+ *
+  This program is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; either version 2, or (at your option)
+  any later version.
+ *
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY OF ANY KIND WHATSOEVER INCLUDING ANY
+  implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+  See the GNU General Public License for more details.
+ *
+  You should have received a copy of the GNU General Public License
+  along with this program; if not, write to the Free Software
+  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *
  */
 
 #include <linux/module.h>
@@ -21,8 +34,12 @@
 #include <linux/vmalloc.h>
 
 #include "i4lididrv.h"
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,39)
 #include <linux/smp_lock.h>
+#endif
 #include "divasync.h"
+
+#include "../avmb1/capicmd.h"  /* this should be moved in a common place */
 
 #define INCLUDE_INLINE_FUNCS
 
@@ -31,7 +48,7 @@ static eicon_card *cards = (eicon_card *) NULL;   /* glob. var , contains
 
 static char *DRIVERNAME = "Dialogic DIVA - native I4L Interface driver (http://www.melware.net)";
 static char *DRIVERLNAME = "diva2i4l";
-static char *DRIVERRELEASE = "3.1.6-109.75-1";
+static char *DRIVERRELEASE = "9.6.8-124.26-1";
 static char *eicon_revision = "$Revision: 1.1.2.2 $";
 extern char *eicon_idi_revision;
 
@@ -39,8 +56,10 @@ extern char *eicon_idi_revision;
 
 ulong DebugVar;
 
+static spinlock_t status_lock;
 static spinlock_t ll_lock;
 
+#define MAX_DESCRIPTORS  32
 extern void DIVA_DIDD_Read(DESCRIPTOR *, int);
 
 static dword notify_handle;
@@ -48,17 +67,27 @@ static DESCRIPTOR DAdapter;
 static DESCRIPTOR MAdapter;
 
 /* Parameter to be set by insmod */
-static char id[] = "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0";
+static char *id  = "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0";
 static int debug = 1;
 
-MODULE_DESCRIPTION(             "ISDN4Linux Interface for Dialogic active card driver");
+#ifdef MODULE_DESCRIPTION
+MODULE_DESCRIPTION(             "ISDN4Linux Interface for Diva active card driver");
+#endif
+#ifdef MODULE_AUTHOR
 MODULE_AUTHOR(                  "Armin Schindler");
-MODULE_SUPPORTED_DEVICE(        "ISDN subsystem and Dialogic active card driver");
-module_param_string(id, id, sizeof(id), 0444);
-MODULE_PARM_DESC(id, "ID-String for ISDN4Linux");
-module_param_named(debug, debug, int, 0444);
-MODULE_PARM_DESC(debug,	"Initial debug value");
+#endif
+#ifdef MODULE_SUPPORTED_DEVICE
+MODULE_SUPPORTED_DEVICE(        "ISDN subsystem and Diva active card driver");
+#endif
+#ifdef MODULE_PARM
+MODULE_PARM_DESC(id,   		"ID-String for ISDN4Linux");
+MODULE_PARM(id,           	"s");
+MODULE_PARM_DESC(debug,		"Initial debug value");
+MODULE_PARM(debug,           	"i");
+#endif
+#ifdef MODULE_LICENSE
 MODULE_LICENSE("GPL");
+#endif
 
 void no_printf (unsigned char * x ,...)
 {
@@ -273,26 +302,85 @@ eicon_idi_callback(ENTITY *de)
 }
 
 /*
-** Queue work 
+**  Kernel thread to prevent in_interrupt
 */
-static struct workqueue_struct *diva_wq;
+static DECLARE_TASK_QUEUE(tq_divad);
+static struct semaphore diva_thread_sem;
+static struct semaphore diva_thread_end;
+static int divad_pid = -1;
+static int divad_thread(void * data);
+static void diva_tx(void *data);
+static atomic_t thread_running;
+
+static void __init
+diva_init_thread(void)
+{
+  int pid = 0;
+
+  pid = kernel_thread(divad_thread, NULL, CLONE_KERNEL);
+  if (pid >= 0) {
+       divad_pid = pid;
+  }
+}
+
+static int
+divad_thread(void * data)
+{
+  atomic_inc(&thread_running);
+  if (atomic_read(&thread_running) > 1) {
+      printk(KERN_WARNING"%s: thread already running\n", DRIVERLNAME);
+      return(0);
+  }
+
+  printk(KERN_INFO "%s: thread started with pid %d\n", DRIVERLNAME, current->pid);
+  exit_mm(current);
+  exit_files(current);
+  exit_fs(current);
+
+  /* Set to RealTime */
+  current->policy = SCHED_FIFO;
+  current->rt_priority = 33;
+
+  strcpy(current->comm, "kdiva2i4ld");
+
+  for(;;) {
+    down_interruptible(&diva_thread_sem);
+    if(!(atomic_read(&thread_running)))
+      break;
+    if(signal_pending(current)) {
+         flush_signals(current);
+    } else {
+         run_task_queue(&tq_divad);
+    }
+  }
+  up(&diva_thread_end);
+  divad_pid = -1;
+  return 0;
+}
+
+static void
+stop_diva_thread(void)
+{
+    if (divad_pid >= 0) {
+         atomic_set(&thread_running, 0);
+         up(&diva_thread_sem);
+         down_interruptible(&diva_thread_end);
+    }
+}
 
 void
 eicon_tx_request(struct eicon_card *card)
 {
-	queue_work(diva_wq, &card->wq);
+  card->tq.routine = diva_tx;
+  card->tq.data = (void *)card;
+  queue_task(&card->tq, &tq_divad);
+  up(&diva_thread_sem);
 }
 
 static void
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,23)
-diva_tx(struct work_struct *ugli_api)
-{
-	struct eicon_card *card = container_of(ugli_api, struct eicon_card, wq);
-#else
 diva_tx(void *data)
 {
-	struct eicon_card *card = (eicon_card *) data;
-#endif
+        struct eicon_card *card = (eicon_card *) data;
 	struct sk_buff *skb;
 	struct sk_buff *skb2;
 	eicon_chan *chan;
@@ -549,11 +637,11 @@ eicon_command(eicon_card * card, isdn_ctrl * c)
 			if (c->parm.cmsg.Length < 8)
 				break;
 			switch(c->parm.cmsg.Command) {
-				case 0x80: /* CAPI_FACILITY */
-					if (c->parm.cmsg.Subcommand == 0x80) /* CAPI_REQ */
+				case CAPI_FACILITY:
+					if (c->parm.cmsg.Subcommand == CAPI_REQ)
 						return(capipmsg(card, chan, &c->parm.cmsg));
 					break;
-				case 0xff: /* CAPI_MANUFACTURER */
+				case CAPI_MANUFACTURER:
 				default:
 					break;
 			}
@@ -566,30 +654,29 @@ eicon_command(eicon_card * card, isdn_ctrl * c)
 static int
 find_free_number(void)
 {
-	int num = 0;
-	char cid[40];
-	eicon_card *p;
-	ulong flags;
+  int num = 0;
+  char cid[40];
+  eicon_card *p;
+  ulong flags;
 
-	spin_lock_irqsave(&ll_lock, flags);
-	
-	while(num < 100) {
-		sprintf(cid, "%s%d", id, num);
-		num++;
-		p = cards;
-		while (p) {
-			if (!strcmp(p->regname, cid))
-				break;
-			p = p->next;
+  spin_lock_irqsave(&ll_lock, flags);
+  while(num < 100) {
+    sprintf(cid, "%s%d", id, num);
+    num++;
+    p = cards;
+    while (p) {
+      if (!strcmp(p->regname, cid))
+        break;
+      p = p->next;
+    }
+		if (p)
+		{
+	    spin_unlock_irqrestore(&ll_lock, flags);
+  	  return(num - 1);
 		}
-		if (!p) {
-			spin_unlock_irqrestore(&ll_lock, flags);
-			return(num - 1);
-		}
-	}
-	
-	spin_unlock_irqrestore(&ll_lock, flags);
-	return(999);
+  }
+  spin_unlock_irqrestore(&ll_lock, flags);
+  return(999);
 }
 
 /*
@@ -631,16 +718,61 @@ if_command(isdn_ctrl * c)
 }
 
 static int
-if_writecmd(const u_char __user *buf, int len, int id, int channel)
+if_writecmd(const u_char * buf, int len, int user, int id, int channel)
 {
 	/* Not used */
         return (len);
 }
 
 static int
-if_readstatus(u_char __user *buf, int len, int id, int channel)
+if_readstatus(u_char * buf, int len, int user, int id, int channel)
 {
-	return -ENODEV;
+  int count = 0;
+  int cnt = 0;
+  u_char *p = buf;
+  struct sk_buff *skb;
+  ulong flags;
+
+        eicon_card *card = eicon_findcard(id);
+	
+        if (card) {
+                if (!card->flags & EICON_FLAGS_RUNNING)
+                        return -ENODEV;
+	
+		spin_lock_irqsave(&status_lock, flags);
+		while((skb = skb_dequeue(&card->statq))) {
+
+			if ((skb->len + count) > len)
+				cnt = len - count;
+			else
+				cnt = skb->len;
+
+			if (user)
+				copy_to_user(p, skb->data, cnt);
+			else
+				memcpy(p, skb->data, cnt);
+
+			count += cnt;
+			p += cnt;
+
+			if (cnt == skb->len) {
+				dev_kfree_skb(skb);
+				if (card->statq_entries > 0)
+					card->statq_entries--;
+			} else {
+				skb_pull(skb, cnt);
+				skb_queue_head(&card->statq, skb);
+				spin_unlock_irqrestore(&status_lock, flags);
+				return count;
+			}
+		}
+		card->statq_entries = 0;
+		spin_unlock_irqrestore(&status_lock, flags);
+		return count;
+        }
+        printk(KERN_ERR
+               "%s: if_readstatus called with invalid driverId!\n", DRIVERLNAME);
+        return 0;
 }
 
 static int
@@ -703,6 +835,46 @@ static inline int jiftime(char *s, long mark)
 void
 eicon_putstatus(eicon_card * card, char * buf)
 {
+  int count;
+  isdn_ctrl cmd;
+  u_char *p;
+  struct sk_buff *skb;
+  ulong flags;
+
+	if (!card) {
+		if (!(card = cards))
+			return;
+	}
+
+	spin_lock_irqsave(&status_lock, flags);
+	count = strlen(buf);
+	skb = alloc_skb(count, GFP_ATOMIC);
+	if (!skb) {
+		spin_unlock_irqrestore(&status_lock, flags);
+		printk(KERN_ERR "%s: could not alloc skb in putstatus\n", DRIVERLNAME);
+		return;
+	}
+	p = skb_put(skb, count);
+	memcpy(p, buf, count);
+
+	skb_queue_tail(&card->statq, skb);
+
+	if (card->statq_entries >= MAX_STATUS_BUFFER) {
+		if ((skb = skb_dequeue(&card->statq))) {
+			count -= skb->len;
+			dev_kfree_skb(skb);
+		} else
+			count = 0;
+	} else
+		card->statq_entries++;
+
+	spin_unlock_irqrestore(&status_lock, flags);
+        if (count) {
+                cmd.command = ISDN_STAT_STAVAIL;
+                cmd.driver = card->myid;
+                cmd.arg = count;
+		card->interface.statcallb(&cmd);
+        }
 }
 
 /*
@@ -764,13 +936,8 @@ eicon_alloccard(DESCRIPTOR *d)
 	skb_queue_head_init(&card->rackq);
 	skb_queue_head_init(&card->sackq);
 	skb_queue_head_init(&card->statq);
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,23)
-	INIT_WORK(&card->wq, diva_tx);
-#else
-	INIT_WORK(&card->wq, diva_tx, card);
-#endif
 	card->statq_entries = 0;
-	SET_MODULE_OWNER(&card->interface);
+	card->interface.owner = THIS_MODULE;
 	card->interface.maxbufsize = 4000;
 	card->interface.command = if_command;
 	card->interface.writebuf_skb = if_sendbuf;
@@ -1012,15 +1179,11 @@ eicon_addcard(DESCRIPTOR *d)
                         spin_lock_irqsave(&ll_lock, flags);
                         if (q) {
                                 q->next = p->next;
-                        	spin_unlock_irqrestore(&ll_lock, flags);
                                 eicon_freecard(p);
-                        	spin_lock_irqsave(&ll_lock, flags);
                                 p = q->next;
                         } else {
                                 cards = p->next;
-                        	spin_unlock_irqrestore(&ll_lock, flags);
                                 eicon_freecard(p);
-                        	spin_lock_irqsave(&ll_lock, flags);
                                 p = cards;
                         }
                         spin_unlock_irqrestore(&ll_lock, flags);
@@ -1073,9 +1236,7 @@ didd_callback(void *context, DESCRIPTOR* adapter, int removal)
             cards = cp->next;
           else
             lastcp->next = cp->next;
-          spin_unlock_irqrestore(&ll_lock, flags);
           eicon_freecard(cp);
-          spin_lock_irqsave(&ll_lock, flags);
           break;
         }
         lastcp = cp;
@@ -1160,14 +1321,33 @@ disconnect_didd(void)
 /*
 ** proc entry
 */
-extern struct proc_dir_entry *proc_net_eicon;
+extern struct proc_dir_entry *proc_net_isdn_eicon;
 static struct proc_dir_entry *i4lidi_proc_entry = NULL;
-
+int proc_cnt=0;
+#if LINUX_VERSION_CODE > KERNEL_VERSION(3,9,0)
+int eof[1];
+#define PROC_RETURN(x,y) { \
+   if (!x) { \
+       x=1; \
+       return(y); \
+   } else { \
+       x=0; \
+       return(0); \
+   } \
+}
+static int i4lidi_proc_read(struct file *filp, char *page, size_t count, loff_t *offp)
+#define PROC_RETURN(x,y) return(y)
+#else
 static int
 i4lidi_proc_read(char *page, char **start, off_t off, int count, int *eof, void *data)
+#endif
 {
   int len = 0;
   char tmprev[32];
+#if LINUX_VERSION_CODE > KERNEL_VERSION(3,9,0)
+  loff_t off = *offp;
+#endif
+
 
   len += sprintf(page+len, "%s\n", DRIVERNAME);
   len += sprintf(page+len, "name     : %s\n", DRIVERLNAME);
@@ -1181,21 +1361,32 @@ i4lidi_proc_read(char *page, char **start, off_t off, int count, int *eof, void 
     *eof = 1;
   if (len < off)
     return 0;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,9,0)
   *start = page + off;
-  return((count < len-off) ? count : len-off);
+#endif
+  PROC_RETURN(proc_cnt,((count < len-off) ? count : len-off));
 }
+
+#if LINUX_VERSION_CODE > KERNEL_VERSION(3,9,0)
+static const struct file_operations proc_file_fops = {
+ .owner = THIS_MODULE,
+ .read  = i4lidi_proc_read
+};
+#endif
 
 static void __init
 create_proc(void)
 {
+#if LINUX_VERSION_CODE > KERNEL_VERSION(3,9,0)
+  i4lidi_proc_entry = proc_create(DRIVERLNAME, S_IFREG | S_IRUGO | S_IWUSR, proc_net_isdn_eicon, &proc_file_fops);
+#else
   if(!(i4lidi_proc_entry = create_proc_entry(DRIVERLNAME,
-                          S_IFREG | S_IRUGO | S_IWUSR, proc_net_eicon)))
+                          S_IFREG | S_IRUGO | S_IWUSR, proc_net_isdn_eicon)))
   {
     printk(KERN_WARNING "%s: failed to create proc entry.\n", DRIVERLNAME);
     return;
   }
   i4lidi_proc_entry->read_proc = i4lidi_proc_read;
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,30)
   i4lidi_proc_entry->owner = THIS_MODULE;
 #endif
 }
@@ -1204,7 +1395,7 @@ static void __exit
 remove_proc(void)
 {
   if(i4lidi_proc_entry)
-      remove_proc_entry(DRIVERLNAME,  proc_net_eicon);
+      remove_proc_entry(DRIVERLNAME,  proc_net_isdn_eicon);
 }
 
 /*
@@ -1214,8 +1405,9 @@ static int __init
 i4l_idi_init(void)
 {
   int ret = 0;
-  char tmprev[50];
+  char tmprev[50], tmprev2[50];
 
+  status_lock = SPIN_LOCK_UNLOCKED;
   ll_lock = SPIN_LOCK_UNLOCKED;
 
   if (strlen(id) < 1)
@@ -1223,19 +1415,19 @@ i4l_idi_init(void)
 
   DebugVar = debug;
 
-  printk(KERN_INFO "%s\n", DRIVERNAME);
-  printk(KERN_INFO "%s: Rel:%s  Rev:",DRIVERLNAME , DRIVERRELEASE);
-  strcpy(tmprev, eicon_revision);
-  printk("%s/", eicon_getrev(tmprev));
-  strcpy(tmprev, eicon_idi_revision);
-  printk("%s\n", eicon_getrev(tmprev));
+  init_MUTEX_LOCKED(&diva_thread_sem);
+  init_MUTEX_LOCKED(&diva_thread_end);
 
-  diva_wq = create_singlethread_workqueue("kdiva2i4ld");
-  BUG_ON(!diva_wq);
+  printk(KERN_INFO "%s\n", DRIVERNAME);
+  strcpy(tmprev, eicon_revision);
+  strcpy(tmprev2, eicon_idi_revision);
+  printk(KERN_INFO "%s: Rel:%s  Rev: %s/%s\n",DRIVERLNAME , DRIVERRELEASE, eicon_getrev(tmprev), eicon_getrev(tmprev2));
+
+  diva_init_thread();
 
   if(!connect_didd()) {
     printk(KERN_ERR "%s: failed to connect to DIDD.\n", DRIVERLNAME);
-    destroy_workqueue(diva_wq);
+    stop_diva_thread();
     ret = -EIO;
     goto out;
   }    
@@ -1264,7 +1456,7 @@ i4l_idi_exit(void)
     card = card->next;
   }
 
-  destroy_workqueue(diva_wq);
+  stop_diva_thread();
   disconnect_didd();
 
   card = cc;

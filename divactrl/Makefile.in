@@ -7,11 +7,11 @@
 DIVA_BUILD=local
 
 SHELL			= /bin/sh
-CFLAGS			= -Wall -O2 -DUNIX -DLINUX -Wno-pointer-sign -Wno-strict-aliasing -Wno-unused-but-set-variable \
+CFLAGS			= -Wall -O2 -DUNIX -DLINUX \
                           -DDIVA_ISTREAM=1 -DDIVA_OS_DSP_FILE=1 \
                           -DDIVA_BUILD=\"$(DIVA_BUILD)\"
 CFLAGS += $(shell echo 'int main(int argc, char** argv) { if (sizeof(void*) > 4) return 0; return 1; }' > tmp.c && gcc tmp.c -o tmp 2>&1 >/dev/null && rm -f tmp.c && ./tmp && echo " -DPLATFORM_GT_32BIT")
-INCLUDES		= -I. -Iinclude -Iinclude/common \
+INCLUDES		= -I. -Iinclude -Iinclude/common -include include/lstdio.h \
                           -I@CONFIG_KERNELDIR@/@KERNEL_DIVADIR@
 LDFLAGS			= -L../lib @LIBS@
 FILES    		= divactrl.o load/divaload.o common/log_b.o load/os.o \
@@ -37,7 +37,7 @@ DATA_DIR		= @CONFIG_DATADIR@
 INSTALL_PROGRAM	= $(INSTALL) -o 0 -g 0 -m 0750
 INSTALL_DATA	= $(INSTALL) -o 0 -g 0 -m 0644
 CC			= @CC@
-COPTS			= -DDATADIR=\"$(shell echo $(DATA_DIR))\"
+COPTS			= -DDATADIR=\"$(shell echo $(DESTDIR)$(DATA_DIR))\"
 
 
 .SUFFIXES:

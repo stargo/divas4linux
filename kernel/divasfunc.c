@@ -1,13 +1,31 @@
-/* $Id: divasfunc.c,v 1.22 2003/09/09 06:46:29 schindler Exp $
+
+/*
  *
- * Low level driver for Dialogic DIVA Server ISDN cards.
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
  *
- * Copyright 2000-2009 by Armin Schindler (mac@melware.de)
- * Copyright 2000-2009 Cytronics & Melware (info@melware.de)
- * Copyright 2000-2007 Dialogic
+  This source file is supplied for the use with
+  Sangoma (formerly Dialogic) range of Adapters.
  *
- * This software may be used and distributed according to the terms
- * of the GNU General Public License, incorporated herein by reference.
+  File Revision :    2.1
+ *
+  This program is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; either version 2, or (at your option)
+  any later version.
+ *
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY OF ANY KIND WHATSOEVER INCLUDING ANY
+  implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+  See the GNU General Public License for more details.
+ *
+  You should have received a copy of the GNU General Public License
+  along with this program; if not, write to the Free Software
+  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *
  */
 
 #include "platform.h"
@@ -62,7 +80,7 @@ void diva_get_vserial_number(PISDN_ADAPTER IoAdapter, char *buf)
 
 static void diva_trap_nfy_proc (PISDN_ADAPTER IoAdapter, dword nr) {
 	if (IoAdapter->Initialized != 0 && IoAdapter->trapped == 0) {
-		diva_os_shedule_user_mode_event (nr, DivaUserModeEventTypeDebug);
+		diva_os_shedule_user_mode_event (nr);
 	}
 }
 
@@ -116,15 +134,47 @@ void diva_xdi_didd_remove_adapter(int card)
 	memset(&(a->IdTable), 0x00, 256);
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,16,0)
+/*
+ * unmap clock_data DMA handle
+ */
+void diva_xdi_didd_unmap_clock_data_addr(int card, dword clock_data_bus_addr, void *pci_dev)
+{
+	IDI_SYNC_REQ syncreq;
+	ADAPTER *a = &IoAdapters[card - 1]->a;
+
+	memset(&(syncreq.xdi_clock_data.info), 0x00, sizeof(diva_xdi_get_clock_data_t));
+	syncreq.xdi_clock_data.Req = 0;
+	syncreq.xdi_clock_data.Rc = IDI_SYNC_REQ_XDI_UNMAP_CLOCK_DATA_ADDR;
+	syncreq.xdi_clock_data.info.bus_addr_lo = clock_data_bus_addr;
+	syncreq.xdi_clock_data.info.pci_dev_handle = pci_dev;
+	DBG_TRC(("%s A(%d) bus_addr=%08x pci_dev=%p",
+			 __FUNCTION__,
+			 card,
+			 syncreq.xdi_clock_data.info.bus_addr_lo,
+			 syncreq.xdi_clock_data.info.pci_dev_handle))
+	DAdapter.request((ENTITY *) & syncreq);
+	if (syncreq.xdi_clock_data.Rc != 0xff)
+		DBG_ERR(("IDI_SYNC_REQ_XDI_UNMAP_CLOCK_DATA_ADDR A(%d) failed !", card))
+}
+#endif
+
 /*
  * start debug
  */
+#if __GNUC__ > 4 || (__GNUC__ == 4 && (__GNUC_MINOR__ >= 9))
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdate-time" 
+#endif
 static void start_dbg(void)
 {
 	DbgRegister("DIVAS", DRIVERRELEASE_DIVAS, (debugmask) ? debugmask : DBG_DEFAULT);
 	DBG_LOG(("DIVA ISDNXDI BUILD (%s[%s])",
 		 DIVA_BUILD, diva_xdi_common_code_build))
 }
+#if __GNUC__ > 4 || (__GNUC__ == 4 && (__GNUC_MINOR__ >= 9))
+#pragma GCC diagnostic pop
+#endif
 
 /*
  * stop debug
@@ -166,7 +216,7 @@ static int DIVA_INIT_FUNCTION connect_didd(void)
 	int x = 0;
 	int dadapter = 0;
 	IDI_SYNC_REQ req;
-	static DESCRIPTOR DIDD_Table[MAX_DESCRIPTORS];
+	DESCRIPTOR DIDD_Table[MAX_DESCRIPTORS];
 
 	DIVA_DIDD_Read(DIDD_Table, sizeof(DIDD_Table));
 
@@ -238,8 +288,10 @@ int DIVA_INIT_FUNCTION divasfunc_init(int dbgmask)
 /*
  * exit
  */
-void DIVA_EXIT_FUNCTION divasfunc_exit(void)
+void divasfunc_exit(void)
 {
 	divasa_xdi_driver_unload();
 	disconnect_didd();
 }
+
+// vim: set tabstop=2 softtabstop=2 shiftwidth=2 :

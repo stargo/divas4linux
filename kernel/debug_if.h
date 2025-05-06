@@ -1,9 +1,16 @@
+
 /*
  *
-  Copyright (c) Dialogic, 2007.
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
  *
-  This source file is supplied for the use with Dialogic
-  range of DIVA Server Adapters.
+  This source file is supplied for the use with
+  Sangoma (formerly Dialogic) range of Adapters.
+ *
+  File Revision :    2.1
  *
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -20,6 +27,7 @@
   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  */
+
 #ifndef __DIVA_DEBUG_IF_H__
 #define __DIVA_DEBUG_IF_H__
 #define MSG_TYPE_DRV_ID		0x0001

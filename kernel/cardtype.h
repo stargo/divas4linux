@@ -1,11 +1,16 @@
+
 /*
  *
-  Copyright (c) Dialogic, 2007.
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
  *
   This source file is supplied for the use with
-  Dialogic range of DIVA Server Adapters.
+  Sangoma (formerly Dialogic) range of Adapters.
  *
-  Dialogic File Revision :    2.1
+  File Revision :    2.1
  *
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -22,6 +27,7 @@
   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  */
+
 #ifndef _CARDTYPE_H_
 #define _CARDTYPE_H_
 #ifndef CARDTYPE_H_WANT_DATA
@@ -218,7 +224,7 @@
 #define CARDTYPE_DIVASRV_2P_M_V10_PCI     83  /* Diva Server 2PRI/E1/T1 */
 #define CARDTYPE_DIVASRV_SOFTIP_V20       84  /* Diva Server SoftIP */
 #define CARDTYPE_DIVASRV_4P_M_V10_PCI     85  /* Diva Server 4PRI/E1/T1 */
-#define CARDTYPE_DIVASRV_dummy_86         86  /* unused */
+#define CARDTYPE_DIVAPASSIVE_P_V10_PCI    86  /* Diva Passive PRI */
         /* V version of Diva Server cards */
 #define CARDTYPE_DIVASRV_V_B_2M_V2_PCI    87
 #define CARDTYPE_DIVASRV_V_Q_8M_V2_PCI    88
@@ -261,10 +267,29 @@
 #define CARDTYPE_DIVASRV_P_24UM_V30_PCI   116  /* Diva UM-PRI/T1-24 */
 #define CARDTYPE_DIVASRV_P_30UM_V30_PCIE  117  /* Diva UM-PRI/E1-30 PCIe */
 #define CARDTYPE_DIVASRV_P_24UM_V30_PCIE  118  /* Diva UM-PRI/T1-24 PCIe */
-        /* Lancaster */
-#define CARDTYPE_LANCASTER_BRI            119  /* Lancaster v1 (LEP) */
+        /* Diva L-Series passive board */
+#define CARDTYPE_DIVA_L_P_V10_PCIE        119  /* L-Series PRI PCIe WITHOUT Echo Canceller Chip */
+#define CARDTYPE_DIVA_L_2P_V10_PCIE       120  /* L-Series 2PRI PCIe */
+#define CARDTYPE_DIVA_L_4P_V10_PCIE       121  /* L-Series 4PRI PCIe */
+#define CARDTYPE_DIVA_L_8P_V10_PCIE       122  /* L-Series 8PRI PCIe */
+#define CARDTYPE_DIVASRV_HOST_MEDIA_BOARD 123  /* Diva Server Sipcontrol Resource */
+        /* Hypercom variants  */
+#define CARDTYPE_DIVASRV_V_ANALOG_2P_PCIE_HYPERCOM 124
+#define CARDTYPE_DIVASRV_V_ANALOG_4P_PCIE_HYPERCOM 125
+#define CARDTYPE_DIVASRV_V_ANALOG_8P_PCIE_HYPERCOM 126
+#define CARDTYPE_DIVASRV_V4P_V10H_PCIE_HYPERCOM    127  /* Hermes */
+#define CARDTYPE_DIVASRV_V2P_V10H_PCIE_HYPERCOM    128  /* Hermes */
+#define CARDTYPE_DIVASRV_V1P_V10H_PCIE_HYPERCOM    129  /* Hermes */
+#define CARDTYPE_DIVASRV_V4P_V10Z_PCIE_HYPERCOM    130  /* Zeus */
+#define CARDTYPE_DIVASRV_V8P_V10Z_PCIE_HYPERCOM    131  /* Zeus */
+#define CARDTYPE_DIVA_L_1P_V10_PCIE       132  /* L-Series PRI PCIe OneSpan WITH Echo Canceller Chip */
+
+        /* Zeus M4 variant  */
+#define CARDTYPE_DIVASRV_M4P_V10Z_PCIE    133  /* Zeus */
+#define CARDTYPE_DIVASRV_M8P_V10Z_PCIE    134  /* Zeus */
+
         /* next free card type identifier */
-#define CARDTYPE_MAX                      120
+#define CARDTYPE_MAX                      135
 /*
  * The card families
  */
@@ -272,7 +297,8 @@
 #define FAMILY_S            2       /* all S cards           */
 #define FAMILY_MAESTRA      3       /* all Diva Server cards */
 #define FAMILY_VIRTUAL      4       /* all virtual adapters  */
-#define FAMILY_MAX          5
+#define FAMILY_PASSIVE      5       /* all Diva Passive cards*/
+#define FAMILY_MAX          6
 /*
  * The basic card types
  */
@@ -311,7 +337,8 @@
 #define CARD_MAE4PHV        33      /* V-4PRI HS adapters             */
 #define CARD_MAE4PFV        34      /* V-4PRI FS adapters             */
 #define CARD_MAE8PFV        35      /* V-8PRI FS adapters             */
-#define CARD_MAX            36
+#define CARD_PASSIVEP       36      /* Passive PRI adapters           */
+#define CARD_MAX            37
 /*
  * The internal card types of the S family
  */
@@ -409,6 +436,9 @@
 typedef struct CARD_PROPERTIES
 {
 #if !(CARDTYPE_EXCLUDE_CARD_NAME)
+#ifdef __cplusplus
+const
+#endif
     char           *Name;       /* official marketing name                  */
 #endif
     unsigned short  PnPId;      /* plug and play ID (for non PCMIA cards)   */
@@ -428,7 +458,14 @@ typedef struct CARD_PROPERTIES
     unsigned char   CsId;       /* Card Subtype Id                          */
     unsigned short  PnPId2;     /* plug and play ID (subtype)               */
     unsigned int    HardwareFeatures;
+    OSCONST unsigned char (*nrExportXconnectDescriptors)[3];
 } CARD_PROPERTIES;
+typedef enum {
+  DivaXconnectExportModeExtended = 0,
+  DivaXconnectExportModeDisabled = 1,
+  DivaXconnectExportModeStandard = 2,
+  DivaXconnectExportModeMax = DivaXconnectExportModeStandard
+} divaXconnectExportMode_t;
 typedef struct CARD_RESOURCE
 {   unsigned char   Int [10];
     unsigned short  IoFirst;
@@ -485,6 +522,13 @@ typedef struct CARD_RESOURCE
 #else
 #define DI_SOFT_V110  0
 #endif
+/*--- XCONNECT export descriptors ------------------------------------------*/
+OSCONST unsigned char divaXconnectExportsAnalog[3]   = {  32, 1, 32 };
+OSCONST unsigned char divaXconnectExportsBri[3]      = {   8, 1,  6 };
+OSCONST unsigned char divaXconnectExportsPri[3]      = {  64, 1, 64 };
+OSCONST unsigned char divaXconnectExportsPriBf[3]    = { 128, 1, 64 };
+OSCONST unsigned char divaXconnectExportsPriSoftIP[3]= { 128, 1, 64 };
+OSCONST unsigned char divaXconnectExportsNone[3]     = {   0, 0,  0 };
 /*--- CardProperties [Index=CARDTYPE_....] ---------------------------------*/
 #ifdef __cplusplus
 extern
@@ -496,308 +540,308 @@ OSCONST CARD_PROPERTIES CardProperties [ ] =
     IDI_ADAPTER_DIVA,   FAMILY_DIVA,    DI_V1x0 | DI_FAX3,
     CARD_DIVA,          CARD_I_NONE,    BUS_MCA,    CHIP_DSP,
     1,  2,   0,            8,    0,     CSID_NONE,           0x0000,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //   1
     CARDTYPE_CARD_NAME("Diva ISA")                           0x0000, 0x0100,
     IDI_ADAPTER_DIVA,   FAMILY_DIVA,    DI_V1x0 | DI_FAX3,
     CARD_DIVA,          CARD_I_NONE,    BUS_ISA,    CHIP_DSP,
     1,  2,   0,            8,    0,     CSID_NONE,           0x0000,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //   2
     CARDTYPE_CARD_NAME("Diva/PCM")                           0x0000, 0x0100,
     IDI_ADAPTER_DIVA,   FAMILY_DIVA,    DI_V1x0 | DI_FAX3,
     CARD_DIVA,          CARD_I_NONE,    BUS_PCM,    CHIP_DSP,
     1,  2,   0,            8,    0,     CSID_NONE,           0x0000,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //   3
     CARDTYPE_CARD_NAME("Diva PRO ISA")                       0x0031, 0x0100,
     IDI_ADAPTER_DIVA,   FAMILY_DIVA,    DI_V1x0 | DI_FAX3 | DI_MODEM | DI_CODEC,
     CARD_PRO,           CARD_I_NONE,    BUS_ISA,    CHIP_DSP,
     1,  2,   0,            8,    0,     CSID_NONE,           0x0000,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //   4
     CARDTYPE_CARD_NAME("Diva PRO PC-Card")                   0x0000, 0x0100,
     IDI_ADAPTER_DIVA,   FAMILY_DIVA,    DI_V1x0 | DI_FAX3 | DI_MODEM,
     CARD_PRO,           CARD_I_NONE,    BUS_PCM,    CHIP_DSP,
     1,  2,   0,            8,    0,     CSID_NONE,           0x0000,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //   5
     CARDTYPE_CARD_NAME("Diva PICCOLA ISA")                   0x0051, 0x0100,
     IDI_ADAPTER_DIVA,   FAMILY_DIVA,    DI_V120 | SOFT_DSP_ADD_FEATURES,
     CARD_PICO,          CARD_I_NONE,    BUS_ISA,    CHIP_HSCX,
     1,  2,   0,            8,    0,     CSID_NONE,           0x0000,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //   6
     CARDTYPE_CARD_NAME("Diva PICCOLA PCM")                   0x0000, 0x0100,
     IDI_ADAPTER_DIVA,   FAMILY_DIVA,    DI_V120 | SOFT_DSP_ADD_FEATURES,
     CARD_PICO,          CARD_I_NONE,    BUS_PCM,    CHIP_HSCX,
     1,  2,   0,            8,    0,     CSID_NONE,           0x0000,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //   7
     CARDTYPE_CARD_NAME("Diva PRO 2.0 S/T PCI")               0xE001, 0x0200,
     IDI_ADAPTER_DIVA,   FAMILY_DIVA,    DI_V1x0 | DI_FAX3 | DI_MODEM | DI_POTS,
     CARD_PRO,           CARD_I_NONE,    BUS_PCI,    CHIP_DSP,
     1,  2,   0,            8,   0,      CSID_NONE,           0xE001,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //   8
     CARDTYPE_CARD_NAME("Diva 2.0 S/T PCI")                   0xE002, 0x0200,
     IDI_ADAPTER_DIVA,   FAMILY_DIVA,    DI_V120 | DI_POTS | SOFT_DSP_ADD_FEATURES,
     CARD_PICO,          CARD_I_NONE,    BUS_PCI,    CHIP_HSCX,
     1,  2,   0,            8,   0,      CSID_NONE,           0xE002,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //   9
     CARDTYPE_CARD_NAME("QUADRO ISA")                         0x0000, 0x0100,
     IDI_ADAPTER_S,      FAMILY_S,       DI_NULL,
     CARD_QUAD,          CARD_I_QUAD,    BUS_ISA,    CHIP_NONE,
     4,  2,   E_INFO_BRIS,  0,   0x800,  CSID_NONE,           0x0000,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //  10
     CARDTYPE_CARD_NAME("S ISA")                              0x0000, 0x0100,
     IDI_ADAPTER_S,      FAMILY_S,       DI_CODEC,
     CARD_S,             CARD_I_S,       BUS_ISA,    CHIP_NONE,
     1,  1,   E_INFO_BRIS,  0,   0x800,  CSID_NONE,           0x0000,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //  11
     CARDTYPE_CARD_NAME("S MCA")                              0x6A93, 0x0100,
     IDI_ADAPTER_S,      FAMILY_S,       DI_CODEC,
     CARD_S,             CARD_I_S,       BUS_MCA,    CHIP_NONE,
     1,  1,   E_INFO_BRIS,  16,  0x400,  CSID_NONE,           0x0000,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //  12
     CARDTYPE_CARD_NAME("SX ISA")                             0x0000, 0x0100,
     IDI_ADAPTER_S,      FAMILY_S,       DI_NULL,
     CARD_SX,            CARD_I_SX,      BUS_ISA,    CHIP_NONE,
     1,  2,   E_INFO_BRIS,  0,   0x800,  CSID_NONE,           0x0000,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //  13
     CARDTYPE_CARD_NAME("SX MCA")                             0x6A93, 0x0100,
     IDI_ADAPTER_S,      FAMILY_S,       DI_NULL,
     CARD_SX,            CARD_I_SX,      BUS_MCA,    CHIP_NONE,
     1,  2,   E_INFO_BRIS,  16,  0x400,  CSID_NONE,           0x0000,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //  14
     CARDTYPE_CARD_NAME("SXN ISA")                            0x0000, 0x0100,
     IDI_ADAPTER_S,      FAMILY_S,       DI_NULL,
     CARD_SXN,           CARD_I_SCOM,    BUS_ISA,    CHIP_NONE,
     1,  2,   E_INFO_BRIS,  0,   0x800,  CSID_NONE,           0x0000,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //  15
     CARDTYPE_CARD_NAME("SXN MCA")                            0x6A93, 0x0100,
     IDI_ADAPTER_S,      FAMILY_S,       DI_NULL,
     CARD_SXN,           CARD_I_SCOM,    BUS_MCA,    CHIP_NONE,
     1,  2,   E_INFO_BRIS,  16,  0x400,  CSID_NONE,           0x0000,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //  16
     CARDTYPE_CARD_NAME("SCOM ISA")                           0x0000, 0x0100,
     IDI_ADAPTER_S,      FAMILY_S,       DI_CODEC,
     CARD_SCOM,          CARD_I_SCOM,    BUS_ISA,    CHIP_NONE,
     1,  2,   E_INFO_BRIS,  0,   0x800,  CSID_NONE,           0x0000,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //  17
     CARDTYPE_CARD_NAME("SCOM MCA")                           0x6A93, 0x0100,
     IDI_ADAPTER_S,      FAMILY_S,       DI_CODEC,
     CARD_SCOM,          CARD_I_SCOM,    BUS_MCA,    CHIP_NONE,
     1,  2,   E_INFO_BRIS,  16,  0x400,  CSID_NONE,           0x0000,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //  18
     CARDTYPE_CARD_NAME("S2M ISA")                            0x0000, 0x0100,
     IDI_ADAPTER_PR,     FAMILY_S,       DI_NULL,
     CARD_PR,            CARD_I_PR,      BUS_ISA,    CHIP_NONE,
     1,  30,  E_INFO_PRI,   0,   0x4000, CSID_NONE,           0x0000,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //  19
     CARDTYPE_CARD_NAME("S2M MCA")                            0x6ABB, 0x0100,
     IDI_ADAPTER_PR,     FAMILY_S,       DI_NULL,
     CARD_PR,            CARD_I_PR,      BUS_MCA,    CHIP_NONE,
     1,  30,  E_INFO_PRI,   16,  0x4000, CSID_NONE,           0x0000,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //  20
     CARDTYPE_CARD_NAME("Diva Server BRI-2M ISA")             0x0041, 0x0100,
     IDI_ADAPTER_MAESTRA,FAMILY_MAESTRA, DI_V1x0 | DI_FAX3 | DI_MODEM,
     CARD_MAE,           CARD_I_NONE,    BUS_ISA,    CHIP_DSP,
     1,  2,   E_INFO_BRI1,  8,   0,      CSID_NONE,           0x0000,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //  21
     CARDTYPE_CARD_NAME("Diva Server BRI-2M PCI")             0xE010, 0x0100,
     IDI_ADAPTER_MAESTRA,FAMILY_MAESTRA, DI_V1x0 | DI_FAX3 | DI_MODEM,
     CARD_MAE,           CARD_I_NONE,    BUS_PCI,    CHIP_DSP,
     1,  2,   E_INFO_BRI1,  8,   0,      CSID_NONE,           0xE010,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //  22
     CARDTYPE_CARD_NAME("Diva Server 4BRI-8M PCI")            0xE012, 0x0100,
     IDI_ADAPTER_MAESTRA,FAMILY_MAESTRA, DI_V1x0 | DI_FAX3 | DI_MODEM,
     CARD_MAEQ,          CARD_I_NONE,    BUS_PCI,    CHIP_DSP,
     4,  2,   E_INFO_BRI,   8,   0,      CSID_NONE,           0xE012,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //  23
     CARDTYPE_CARD_NAME("Diva Server PRI-30M PCI")            0xE014, 0x0100,
     IDI_ADAPTER_MAESTRA,FAMILY_MAESTRA, DI_V1x0 | DI_FAX3 | DI_MODEM,
     CARD_MAEP,          CARD_I_NONE,    BUS_PCI,    CHIP_DSP,
     1,  30,  E_INFO_PRI,   8,   0,      CSID_NONE,           0xE014,
-    0x00000000
+    0x00000000, &divaXconnectExportsPri
 },
 {   //  24
     CARDTYPE_CARD_NAME("Diva Server PRI-2M PCI")             0xE014, 0x0100,
     IDI_ADAPTER_MAESTRA,FAMILY_MAESTRA, DI_V1x0 | DI_FAX3 | DI_MODEM,
     CARD_MAEP,          CARD_I_NONE,    BUS_PCI,    CHIP_DSP,
     1,  30,  E_INFO_PRI,   8,   0,      CSID_NONE,           0xE014,
-    0x00000000
+    0x00000000, &divaXconnectExportsPri
 },
 {   //  25
     CARDTYPE_CARD_NAME("Diva Server PRI-9M PCI")             0x0000, 0x0100,
     IDI_ADAPTER_MAESTRA,FAMILY_MAESTRA, DI_V1x0 | DI_FAX3 | DI_MODEM,
     CARD_MAEP,          CARD_I_NONE,    BUS_PCI,    CHIP_DSP,
     1,  30,  E_INFO_PRI,   8,   0,      CSID_NONE,           0x0000,
-    0x00000000
+    0x00000000, &divaXconnectExportsPri
 },
 {   //  26
     CARDTYPE_CARD_NAME("Diva 2.0 S/T ISA")                   0x0071, 0x0200,
     IDI_ADAPTER_DIVA,   FAMILY_DIVA,    DI_V120 | DI_POTS | SOFT_DSP_ADD_FEATURES,
     CARD_PICO,          CARD_I_NONE,    BUS_ISA,    CHIP_HSCX,
     1,  2,   0,            8,   0,      CSID_NONE,           0x0000,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //  27
     CARDTYPE_CARD_NAME("Diva 2.0 U ISA")                     0x0091, 0x0200,
     IDI_ADAPTER_DIVA,   FAMILY_DIVA,    DI_V120 | DI_POTS | SOFT_DSP_ADD_FEATURES,
     CARD_PICO,          CARD_I_NONE,    BUS_ISA,    CHIP_HSCX,
     1,  2,   0,            8,   0,      CSID_NONE,           0x0000,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //  28
     CARDTYPE_CARD_NAME("Diva 2.0 U PCI")                     0xE004, 0x0200,
     IDI_ADAPTER_DIVA,   FAMILY_DIVA,    DI_V120 | DI_POTS | SOFT_DSP_ADD_FEATURES,
     CARD_PICO,          CARD_I_NONE,    BUS_PCI,    CHIP_HSCX,
     1,  2,   0,            8,   0,      CSID_NONE,           0xE004,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //  29
     CARDTYPE_CARD_NAME("Diva PRO 2.0 S/T ISA")               0x0061, 0x0200,
     IDI_ADAPTER_DIVA,   FAMILY_DIVA,    DI_V1x0 | DI_FAX3 | DI_MODEM | DI_POTS,
     CARD_PRO,           CARD_I_NONE,    BUS_ISA,    CHIP_DSP,
     1,  2,   0,            8,   0,      CSID_NONE,           0x0000,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //  30
     CARDTYPE_CARD_NAME("Diva PRO 2.0 U ISA")                 0x0081, 0x0200,
     IDI_ADAPTER_DIVA,   FAMILY_DIVA,    DI_V1x0 | DI_FAX3 | DI_MODEM | DI_POTS,
     CARD_PRO,           CARD_I_NONE,    BUS_ISA,    CHIP_DSP,
     1,  2,   0,            8,   0,      CSID_NONE,           0x0000,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //  31
     CARDTYPE_CARD_NAME("Diva PRO 2.0 U PCI")                 0xE003, 0x0200,
     IDI_ADAPTER_DIVA,   FAMILY_DIVA,    DI_V1x0 | DI_FAX3 | DI_MODEM | DI_POTS,
     CARD_PRO,           CARD_I_NONE,    BUS_PCI,    CHIP_DSP,
     1,  2,   0,            8,   0,      CSID_NONE,           0xE003,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //  32
     CARDTYPE_CARD_NAME("Diva MOBILE")                        0x0000, 0x0100,
     IDI_ADAPTER_DIVA,   FAMILY_DIVA,    DI_V120 | SOFT_DSP_ADD_FEATURES,
     CARD_PICO,          CARD_I_NONE,    BUS_PCM,    CHIP_HSCX,
     1,  2,   0,            8,   0,      CSID_NONE,           0x0000,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //  33
     CARDTYPE_CARD_NAME("TDK DFI3600")                        0x0000, 0x0100,
     IDI_ADAPTER_DIVA,   FAMILY_DIVA,    DI_V120 | SOFT_DSP_ADD_FEATURES,
     CARD_PICO,          CARD_I_NONE,    BUS_PCM,    CHIP_HSCX,
     1,  2,   0,            8,   0,      CSID_NONE,           0x0000,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //  34 (OEM version of 4 - "Diva PRO PC-Card")
     CARDTYPE_CARD_NAME("New Media ISDN")                     0x0000, 0x0100,
     IDI_ADAPTER_DIVA,   FAMILY_DIVA,    DI_V1x0 | DI_FAX3 | DI_MODEM,
     CARD_PRO,           CARD_I_NONE,    BUS_PCM,    CHIP_DSP,
     1,  2,   0,            8,   0,      CSID_NONE,           0x0000,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //  35 (OEM version of 7 - "Diva PRO 2.0 S/T PCI")
     CARDTYPE_CARD_NAME("BT ExLane PCI")                      0xE101, 0x0200,
     IDI_ADAPTER_DIVA,   FAMILY_DIVA,    DI_V1x0 | DI_FAX3 | DI_MODEM | DI_POTS,
     CARD_PRO,           CARD_I_NONE,    BUS_PCI,    CHIP_DSP,
     1,  2,   0,            8,   0,      CSID_NONE,           0xE101,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //  36 (OEM version of 29 - "Diva PRO 2.0 S/T ISA")
     CARDTYPE_CARD_NAME("BT ExLane ISA")                      0x1061, 0x0200,
     IDI_ADAPTER_DIVA,   FAMILY_DIVA,    DI_V1x0 | DI_FAX3 | DI_MODEM | DI_POTS,
     CARD_PRO,           CARD_I_NONE,    BUS_ISA,    CHIP_DSP,
     1,  2,   0,            8,   0,      CSID_NONE,           0x0000,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //  37
     CARDTYPE_CARD_NAME("Diva 2.01 S/T ISA")                  0x00A1, 0x0300,
     IDI_ADAPTER_DIVA,   FAMILY_DIVA,    DI_V120 | SOFT_DSP_ADD_FEATURES,
     CARD_DIVALOW,       CARD_I_NONE,    BUS_ISA,    CHIP_IPAC,
     1,  2,   0,            8,   0,      CSID_NONE,           0x0000,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //  38
     CARDTYPE_CARD_NAME("Diva 2.01 U ISA")                    0x00B1, 0x0300,
     IDI_ADAPTER_DIVA,   FAMILY_DIVA,    DI_V120 | SOFT_DSP_ADD_FEATURES,
     CARD_DIVALOW,       CARD_I_NONE,    BUS_ISA,    CHIP_IPAC,
     1,  2,   0,            8,   0,      CSID_NONE,           0x0000,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //  39
     CARDTYPE_CARD_NAME("Diva 2.01 S/T PCI")                  0xE005, 0x0300,
     IDI_ADAPTER_DIVA,   FAMILY_DIVA,    DI_V120 | SOFT_DSP_ADD_FEATURES,
     CARD_DIVALOW,       CARD_I_NONE,    BUS_PCI,    CHIP_IPAC,
     1,  2,   0,            8,   0,      CSID_NONE,           0xE005,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //  40
     CARDTYPE_CARD_NAME("Diva 2.01 U PCI")                    0x0000, 0x0300,
     IDI_ADAPTER_DIVA,   FAMILY_DIVA,    DI_V120 | SOFT_DSP_ADD_FEATURES,
     CARD_DIVALOW,       CARD_I_NONE,    BUS_PCI,    CHIP_IPAC,
     1,  2,   0,            8,   0,      CSID_NONE,           0x0000,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //  41
     CARDTYPE_CARD_NAME("Diva MOBILE V.90")                   0x0000, 0x0100,
     IDI_ADAPTER_DIVA,   FAMILY_DIVA,    DI_V120 | SOFT_DSP_ADD_FEATURES,
     CARD_PICO,          CARD_I_NONE,    BUS_PCM,    CHIP_HSCX,
     1,  2,   0,            8,   0,      CSID_NONE,           0x0000,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //  42
     CARDTYPE_CARD_NAME("TDK DFI3600 V.90")                   0x0000, 0x0100,
     IDI_ADAPTER_DIVA,   FAMILY_DIVA,    DI_V120 | SOFT_DSP_ADD_FEATURES,
     CARD_PICO,          CARD_I_NONE,    BUS_PCM,    CHIP_HSCX,
     1,  2,   0,            8,   0,      CSID_NONE,           0x0000,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //  43
     CARDTYPE_CARD_NAME("Diva Server PRI-23M PCI")            0xE014, 0x0100,
     IDI_ADAPTER_MAESTRA,FAMILY_MAESTRA, DI_V1x0 | DI_FAX3 | DI_MODEM,
     CARD_MAEP,          CARD_I_NONE,    BUS_PCI,    CHIP_DSP,
     1,  30,  E_INFO_PRI,   8,   0,      CSID_NONE,           0xE014,
-    0x00000000
+    0x00000000, &divaXconnectExportsPri
 },
 {   //  44
     CARDTYPE_CARD_NAME("Diva 2.01 S/T USB")                  0x1000, 0x0300,
@@ -811,56 +855,56 @@ OSCONST CARD_PROPERTIES CardProperties [ ] =
     IDI_ADAPTER_DIVA   ,FAMILY_DIVA,    DI_V1x0 | DI_FAX3 | DI_MODEM | DI_CODEC,
     CARD_CT,            CARD_I_NONE,    BUS_PCI,    CHIP_DSP,
     1,  2,   E_INFO_BRI,   0,   0,      CSID_NONE,           0xE006,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //  46
     CARDTYPE_CARD_NAME("Diva CT U PCI")                      0xE007, 0x0300,
     IDI_ADAPTER_DIVA   ,FAMILY_DIVA,    DI_V1x0 | DI_FAX3 | DI_MODEM | DI_CODEC,
     CARD_CT,            CARD_I_NONE,    BUS_PCI,    CHIP_DSP,
     1,  2,   E_INFO_BRI,   0,   0,      CSID_NONE,           0xE007,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //  47
     CARDTYPE_CARD_NAME("Diva CT Lite S/T PCI")               0xE008, 0x0300,
     IDI_ADAPTER_DIVA   ,FAMILY_DIVA,    DI_V1x0 | DI_FAX3 | DI_MODEM | DI_CODEC,
     CARD_CT,            CARD_I_NONE,    BUS_PCI,    CHIP_DSP,
     1,  2,   E_INFO_BRI,   0,   0,      CSID_NONE,           0xE008,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //  48
     CARDTYPE_CARD_NAME("Diva CT Lite U PCI")                 0xE009, 0x0300,
     IDI_ADAPTER_DIVA   ,FAMILY_DIVA,    DI_V1x0 | DI_FAX3 | DI_MODEM | DI_CODEC,
     CARD_CT,            CARD_I_NONE,    BUS_PCI,    CHIP_DSP,
     1,  2,   E_INFO_BRI,   0,   0,      CSID_NONE,           0xE009,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //  49
     CARDTYPE_CARD_NAME("Diva ISDN+V.90 PC Card")             0x8D8C, 0x0100,
     IDI_ADAPTER_DIVA,   FAMILY_DIVA,    DI_V1x0 | DI_FAX3 | DI_MODEM | DI_CODEC,
     CARD_DIVALOW,   CARD_I_NONE,    BUS_PCM,    CHIP_IPAC,
     1,  2,   0,            8,   0,      CSID_NONE,           0x0000,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //  50
     CARDTYPE_CARD_NAME("Diva ISDN+V.90 PCI")                 0xE00A, 0x0100,
     IDI_ADAPTER_DIVA,   FAMILY_DIVA,    DI_V120  | SOFT_DSP_ADD_FEATURES,
     CARD_DIVALOW,       CARD_I_NONE,    BUS_PCI,    CHIP_IPAC,
     1,  2,   0,            8,   0,      CSID_NONE,           0xE00A,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //  51 (DivaTA)
     CARDTYPE_CARD_NAME("Diva TA")                            0x0000, 0x0300,
     IDI_ADAPTER_DIVA,   FAMILY_DIVA,    DI_V110 | DI_FAX3 | SOFT_DSP_ADD_FEATURES,
     CARD_DIVATA,        CARD_I_NONE,    BUS_COM,    CHIP_EXTERN,
     1,  1,   0,            8,   0,      CSID_NONE,           0x0000,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //  52 (Diva Server 4BRI-8M PCI adapter enabled for Voice)
     CARDTYPE_CARD_NAME("Diva Server Voice 4BRI-8M PCI")      0xE016, 0x0100,
     IDI_ADAPTER_MAESTRA,FAMILY_MAESTRA, DI_V1x0 | DI_FAX3 | DI_MODEM | DI_VOICE_OVER_IP,
     CARD_MAEQ,          CARD_I_NONE,    BUS_PCI,    CHIP_DSP,
     4,  2,   E_INFO_BRI,   8,   0,      CSID_NONE,           0xE016,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //  53 (Diva Server 4BRI 2.0 adapter)
     //CARDTYPE_CARD_NAME("Diva Server 4BRI-8M 2.0 PCI")        0xE013, 0x0200,
@@ -868,7 +912,7 @@ OSCONST CARD_PROPERTIES CardProperties [ ] =
     IDI_ADAPTER_MAESTRA,FAMILY_MAESTRA, DI_V1x0 | DI_FAX3 | DI_MODEM,
     CARD_MAEQ,          CARD_I_NONE,    BUS_PCI,    CHIP_DSP,
     4,  2,   E_INFO_BRI,   8,   0,      CSID_NONE,           0xE013,
-    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC, &divaXconnectExportsBri
 },
 {   //  54 (Diva Server PRI 2.0 adapter)
     //CARDTYPE_CARD_NAME("Diva Server PRI 2.0 PCI")            0xE015, 0x0200,
@@ -876,28 +920,28 @@ OSCONST CARD_PROPERTIES CardProperties [ ] =
     IDI_ADAPTER_MAESTRA,FAMILY_MAESTRA, DI_V1x0 | DI_FAX3 | DI_MODEM,
     CARD_MAEP,          CARD_I_NONE,    BUS_PCI,    CHIP_DSP,
     1,  31,  E_INFO_PRI,   8,   0,      CSID_NONE,           0xE015,
-    0x00000000
+    0x00000000, &divaXconnectExportsPri
 },
 {   //  55 (Diva Server 4BRI-8M 2.0 PCI adapter enabled for Voice)
     CARDTYPE_CARD_NAME("Diva Server Voice 4BRI-8M 2.0 PCI")  0xE017, 0x0200,
     IDI_ADAPTER_MAESTRA,FAMILY_MAESTRA, DI_V1x0 | DI_FAX3 | DI_MODEM | DI_VOICE_OVER_IP,
     CARD_MAEQ,          CARD_I_NONE,    BUS_PCI,    CHIP_DSP,
     4,  2,   E_INFO_BRI,   8,   0,      CSID_NONE,           0xE017,
-    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC, &divaXconnectExportsBri
 },
 {   //  56 (Diva Server PRI 2.0 PCI adapter enabled for Voice)
     CARDTYPE_CARD_NAME("Diva Server Voice PRI 2.0 PCI")      0xE019, 0x0200,
     IDI_ADAPTER_MAESTRA,FAMILY_MAESTRA, DI_V1x0 | DI_FAX3 | DI_MODEM | DI_VOICE_OVER_IP,
     CARD_MAEP,          CARD_I_NONE,    BUS_PCI,    CHIP_DSP,
     1,  31,  E_INFO_PRI,   8,   0,      CSID_NONE,           0xE019,
-    0x00000000
+    0x00000000, &divaXconnectExportsPri
 },
 {   //  57 (DivaLan )                       no ID
     CARDTYPE_CARD_NAME("Diva LAN")                           0x0000, 0x0300,
     IDI_ADAPTER_DIVA,   FAMILY_DIVA,    DI_V110 | DI_FAX3 | SOFT_DSP_ADD_FEATURES,
     CARD_DIVALAN,       CARD_I_NONE,    BUS_LAN,    CHIP_EXTERN,
     1,  1,   0,            8,   0,      CSID_NONE,           0x0000,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //  58
     //CARDTYPE_CARD_NAME("Diva 2.02 PCI S/T")                  0xE00B, 0x0300,
@@ -905,14 +949,14 @@ OSCONST CARD_PROPERTIES CardProperties [ ] =
     IDI_ADAPTER_DIVA,   FAMILY_DIVA, DI_V120 | SOFT_DSP_ADD_FEATURES | DI_SOFT_V110,
     CARD_DIVALOW,       CARD_I_NONE,    BUS_PCI,    CHIP_IPACX,
     1,  2,   0,            8,   0,      CSID_NONE,           0xE00B,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //  59
     CARDTYPE_CARD_NAME("Diva 2.02 PCI U")                    0xE00C, 0x0300,
     IDI_ADAPTER_DIVA,   FAMILY_DIVA,    DI_V120 | SOFT_DSP_ADD_FEATURES,
     CARD_DIVALOW,       CARD_I_NONE,    BUS_PCI,    CHIP_IPACX,
     1,  2,   0,            8,   0,      CSID_NONE,           0xE00C,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //  60
     //CARDTYPE_CARD_NAME("Diva Server BRI-2M 2.0 PCI")         0xE018, 0x0200,
@@ -920,7 +964,7 @@ OSCONST CARD_PROPERTIES CardProperties [ ] =
     IDI_ADAPTER_MAESTRA,FAMILY_MAESTRA, DI_V1x0 | DI_FAX3 | DI_MODEM,
     CARD_MAE2,          CARD_I_NONE,    BUS_PCI,    CHIP_DSP,
     1,  2,   E_INFO_BRI,   8,   0,      CSID_NONE,           0xE018,
-    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC, &divaXconnectExportsBri
 },
 {   //  61  (the previous name was Diva Server BRI-2F 2.0 PCI)
     //CARDTYPE_CARD_NAME("Diva Server 2FX")                    0xE01A, 0x0200,
@@ -928,21 +972,21 @@ OSCONST CARD_PROPERTIES CardProperties [ ] =
     IDI_ADAPTER_MAESTRA,FAMILY_MAESTRA, DI_V1x0 | DI_FAX3 | DI_MODEM | DI_SOFT_V110,
     CARD_MAE2,          CARD_I_NONE,    BUS_PCI,    CHIP_IPACX,
     1,  2,   E_INFO_BRI,   8,   0,      CSID_NONE,           0xE01A,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //  62
     CARDTYPE_CARD_NAME(" Diva ISDN USB 2.0")                 0x1003, 0x0300,
     IDI_ADAPTER_DIVA   ,FAMILY_DIVA,    DI_V120 | SOFT_DSP_ADD_FEATURES,
     CARD_DIVALOW,       CARD_I_NONE,    BUS_USB,    CHIP_IPACX,
     1,  2,   0,            8,   0,      CSID_NONE,           0x0000,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //  63 (Diva Server BRI-2M 2.0 PCI adapter enabled for Voice)
     CARDTYPE_CARD_NAME("Diva Server Voice BRI-2M 2.0 PCI")   0xE01B, 0x0200,
     IDI_ADAPTER_MAESTRA,FAMILY_MAESTRA, DI_V1x0 | DI_FAX3 | DI_MODEM | DI_VOICE_OVER_IP,
     CARD_MAE2,          CARD_I_NONE,    BUS_PCI,    CHIP_DSP,
     1,  2,   E_INFO_BRI,   8,   0,      CSID_NONE,           0xE01B,
-    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC, &divaXconnectExportsBri
 },
 {   //  64
     //CARDTYPE_CARD_NAME("Diva Pro 3.0 PCI")                   0xE00D, 0x0300,
@@ -950,42 +994,42 @@ OSCONST CARD_PROPERTIES CardProperties [ ] =
     IDI_ADAPTER_DIVA   ,FAMILY_DIVA,    DI_V1x0 | DI_FAX3 | DI_MODEM,
     CARD_PRO,           CARD_I_NONE,    BUS_PCI,    CHIP_DSP,
     1,  2,   0,            0,   0,      CSID_NONE,           0xE00D,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //  65
     CARDTYPE_CARD_NAME("Diva ISDN + CT 2.0")                 0xE00E, 0x0300,
     IDI_ADAPTER_DIVA   ,FAMILY_DIVA,    DI_V1x0 | DI_FAX3 | DI_MODEM | DI_CODEC,
     CARD_CT,            CARD_I_NONE,    BUS_PCI,    CHIP_DSP,
     1,   2,  E_INFO_BRI,   0,   0,      CSID_NONE,           0xE00E,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //  66
     CARDTYPE_CARD_NAME("Diva Mobile V.90 PC Card")           0x8331, 0x0100,
     IDI_ADAPTER_DIVA,   FAMILY_DIVA,    DI_V120 | SOFT_DSP_ADD_FEATURES,
     CARD_PICO,          CARD_I_NONE,    BUS_PCM,    CHIP_IPACX,
     1,  2,   0,            8,   0,      CSID_NONE,           0x0000,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //  67
     CARDTYPE_CARD_NAME("Diva ISDN PC Card")                  0x8311, 0x0100,
     IDI_ADAPTER_DIVA,   FAMILY_DIVA,    DI_V120 | SOFT_DSP_ADD_FEATURES,
     CARD_PICO,          CARD_I_NONE,    BUS_PCM,    CHIP_IPACX,
     1,  2,   0,            8,   0,      CSID_NONE,           0x0000,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //  68
     CARDTYPE_CARD_NAME("Diva ISDN PC Card")                  0x0000, 0x0100,
     IDI_ADAPTER_DIVA,   FAMILY_DIVA,    DI_V1x0 | DI_FAX3 | DI_MODEM,
     CARD_PRO,           CARD_I_NONE,    BUS_PCM,    CHIP_DSP,
     1,  2,   0,            8,   0,      CSID_NONE,           0x0000,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //  69 rebranded, previously Diva Pro PC Card 2.0
     CARDTYPE_CARD_NAME("Diva Pro 3.0 PC Card")               0x2038, 0x0300,
     IDI_ADAPTER_DIVA,   FAMILY_DIVA,    DI_V1x0 | DI_FAX3 | DI_MODEM,
     CARD_PRO,           CARD_I_NONE,    BUS_PCM,    CHIP_DSP,
     1,  2,   0,            8,   0,      CSID_NONE,           0x0000,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //  70 (Diva Server PRI 3.0 adapter, 30M)
     //CARDTYPE_CARD_NAME("Diva Server PRI/E1-30")              0xE01C, 0x0300,
@@ -993,7 +1037,8 @@ OSCONST CARD_PROPERTIES CardProperties [ ] =
     IDI_ADAPTER_MAESTRA,FAMILY_MAESTRA, DI_V1x0 | DI_FAX3 | DI_MODEM,
     CARD_MAEP3,         CARD_I_NONE,    BUS_PCI,    CHIP_DSP,
     1,  31,  E_INFO_PRI,   8,   0,      CSID_NONE,           0x1C03,
-    DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO | DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO | DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC,
+    &divaXconnectExportsPri
 },
 {   //  71 (Diva Server PRI 3.0 adapter, 24M)
     //CARDTYPE_CARD_NAME("Diva Server PRI/T1-24")              0xE01C, 0x0300,
@@ -1001,7 +1046,8 @@ OSCONST CARD_PROPERTIES CardProperties [ ] =
     IDI_ADAPTER_MAESTRA,FAMILY_MAESTRA, DI_V1x0 | DI_FAX3 | DI_MODEM,
     CARD_MAEP3,         CARD_I_NONE,    BUS_PCI,    CHIP_DSP,
     1,  24,  E_INFO_PRI,   8,   0,      CSID_NONE,           0x1C02,
-    DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO | DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO | DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC,
+    &divaXconnectExportsPri
 },
 {   //  72 (Diva Server PRI 3.0 adapter, 8M)
     //CARDTYPE_CARD_NAME("Diva Server PRI/E1/T1-8")            0xE01C, 0x0300,
@@ -1009,7 +1055,8 @@ OSCONST CARD_PROPERTIES CardProperties [ ] =
     IDI_ADAPTER_MAESTRA,FAMILY_MAESTRA, DI_V1x0 | DI_FAX3 | DI_MODEM,
     CARD_MAEP3,         CARD_I_NONE,    BUS_PCI,    CHIP_DSP,
     1,  31,  E_INFO_PRI,   8,   0,      CSID_NONE,           0x1C01,
-    DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO | DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO | DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC,
+    &divaXconnectExportsPri
 },
 {   //  73 (Diva Server PRI 3.0 adapter, 30V)
     //CARDTYPE_CARD_NAME("Diva Server V-PRI/E1-30")            0xE01C, 0x0300,
@@ -1017,7 +1064,8 @@ OSCONST CARD_PROPERTIES CardProperties [ ] =
     IDI_ADAPTER_MAESTRA,FAMILY_MAESTRA, 0,
     CARD_MAEP3V,        CARD_I_NONE,    BUS_PCI,    CHIP_DSP,
     1,  31,  E_INFO_PRI,   8,   0,      CSID_NONE,           0x1C06,
-    DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO | DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO | DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC,
+    &divaXconnectExportsPri
 },
 {   //  74 (Diva Server PRI 3.0 adapter, 24V)
     //CARDTYPE_CARD_NAME("Diva Server V-PRI/T1-24")            0xE01C, 0x0300,
@@ -1025,7 +1073,8 @@ OSCONST CARD_PROPERTIES CardProperties [ ] =
     IDI_ADAPTER_MAESTRA,FAMILY_MAESTRA, 0,
     CARD_MAEP3V,        CARD_I_NONE,    BUS_PCI,    CHIP_DSP,
     1,  24,  E_INFO_PRI,   8,   0,      CSID_NONE,           0x1C05,
-    DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO | DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO | DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC,
+    &divaXconnectExportsPri
 },
 {   //  75 (Diva Server PRI 3.0 adapter, 0M)
     //CARDTYPE_CARD_NAME("Diva Server PRI/E1/T1")              0xE01C, 0x0300,
@@ -1033,14 +1082,15 @@ OSCONST CARD_PROPERTIES CardProperties [ ] =
     IDI_ADAPTER_MAESTRA,FAMILY_MAESTRA, DI_V120,
     CARD_MAEP3,         CARD_I_NONE,    BUS_PCI,    CHIP_DSP,
     1,  31,  E_INFO_PRI,   8,   0,      CSID_NONE,           0x1C04,
-    DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO | DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO | DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC,
+    &divaXconnectExportsPri
 },
 {   //  76 (M-Adapter, Virtual multiplex adapter)
     CARDTYPE_CARD_NAME("Diva M-Adapter")                     0x0000, 0x0100,
     IDI_MADAPTER,       FAMILY_VIRTUAL, 0,
     CARD_MTPX,          CARD_I_NONE,    BUS_NONE,   CHIP_NONE,
     1,  120, 0xffff,       0,   0,      CSID_NONE,           0x0000,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //  77 (Diva Server 4POTS)
     //CARDTYPE_CARD_NAME("Diva Server Analog-4P")              0xE024, 0x0100,
@@ -1048,7 +1098,8 @@ OSCONST CARD_PROPERTIES CardProperties [ ] =
     IDI_ADAPTER_MAESTRA,FAMILY_MAESTRA, DI_FAX3 | DI_MODEM,
     CARD_POTS,          CARD_I_NONE,    BUS_PCI,    CHIP_DSP,
     1,  4,   E_INFO_PRI,   8,   0,      CSID_NONE,           0xE024,
-    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC | DIVA_CARDTYPE_HARDWARE_PROPERTY_NO_1TR6
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC | DIVA_CARDTYPE_HARDWARE_PROPERTY_NO_1TR6,
+    &divaXconnectExportsAnalog
 },
 {   //  78 (Diva Server 8POTS)
     //CARDTYPE_CARD_NAME("Diva Server Analog-8P")              0xE028, 0x0100,
@@ -1056,7 +1107,8 @@ OSCONST CARD_PROPERTIES CardProperties [ ] =
     IDI_ADAPTER_MAESTRA,FAMILY_MAESTRA, DI_FAX3 | DI_MODEM,
     CARD_POTS,          CARD_I_NONE,    BUS_PCI,    CHIP_DSP,
     1,  8,   E_INFO_PRI,   8,   0,      CSID_NONE,           0xE028,
-    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC | DIVA_CARDTYPE_HARDWARE_PROPERTY_NO_1TR6
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC | DIVA_CARDTYPE_HARDWARE_PROPERTY_NO_1TR6,
+    &divaXconnectExportsAnalog
 },
 {   //  79
     //CARDTYPE_CARD_NAME("Diva Server V-2PRI/E1/T1")           0xE01E, 0x0100,
@@ -1065,7 +1117,8 @@ OSCONST CARD_PROPERTIES CardProperties [ ] =
     CARD_MAE2PV,        CARD_I_NONE,    BUS_PCI,    CHIP_DSP_BF,
     2,  31,  E_INFO_PRI,   8,   0,      CSID_DIVASRV_2P_V_V10_PCI, 0xE01E,
     DIVA_CARDTYPE_HARDWARE_PROPERTY_TEMPERATURE | DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO |
-    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC | DIVA_CARDTYPE_HARDWARE_PROPERTY_NO_1TR6
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC | DIVA_CARDTYPE_HARDWARE_PROPERTY_NO_1TR6,
+    &divaXconnectExportsPriBf
 },
 {   //  80
     //CARDTYPE_CARD_NAME("Diva Server IPM-300")                0xE02A, 0x0100,
@@ -1074,7 +1127,8 @@ OSCONST CARD_PROPERTIES CardProperties [ ] =
     CARD_MAE2P,         CARD_I_NONE,    BUS_PCI,    CHIP_DSP_BF,
     2,  31,  E_INFO_PRI,   8,   0,      CSID_NONE,           0xE02A,
     DIVA_CARDTYPE_HARDWARE_PROPERTY_TEMPERATURE | DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO |
-    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC | DIVA_CARDTYPE_HARDWARE_PROPERTY_NO_1TR6
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC | DIVA_CARDTYPE_HARDWARE_PROPERTY_NO_1TR6,
+    &divaXconnectExportsPriBf
 },
 {   //  81
     //CARDTYPE_CARD_NAME("Diva Server V-4PRI/E1/T1")           0xE020, 0x0100,
@@ -1083,7 +1137,8 @@ OSCONST CARD_PROPERTIES CardProperties [ ] =
     CARD_MAE4PV,        CARD_I_NONE,    BUS_PCI,    CHIP_DSP_BF,
     4,  31,  E_INFO_PRI,   8,   0,      CSID_DIVASRV_4P_V_V10_PCI, 0xE020,
     DIVA_CARDTYPE_HARDWARE_PROPERTY_TEMPERATURE | DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO |
-    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC | DIVA_CARDTYPE_HARDWARE_PROPERTY_NO_1TR6
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC | DIVA_CARDTYPE_HARDWARE_PROPERTY_NO_1TR6,
+    &divaXconnectExportsPriBf
 },
 {   //  82
     //CARDTYPE_CARD_NAME("Diva Server IPM-600")                0xE02C, 0x0100,
@@ -1092,7 +1147,8 @@ OSCONST CARD_PROPERTIES CardProperties [ ] =
     CARD_MAE4P,         CARD_I_NONE,    BUS_PCI,    CHIP_DSP_BF,
     4,  31,  E_INFO_PRI,   8,   0,      CSID_NONE,           0xE02C,
     DIVA_CARDTYPE_HARDWARE_PROPERTY_TEMPERATURE | DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO |
-    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC | DIVA_CARDTYPE_HARDWARE_PROPERTY_NO_1TR6
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC | DIVA_CARDTYPE_HARDWARE_PROPERTY_NO_1TR6,
+    &divaXconnectExportsPriBf
 },
 {   //  83
     //CARDTYPE_CARD_NAME("Diva Server 2PRI/E1/T1")             0xE01E,     0x0100,
@@ -1101,14 +1157,15 @@ OSCONST CARD_PROPERTIES CardProperties [ ] =
     CARD_MAE2P,         CARD_I_NONE,    BUS_PCI,    CHIP_DSP_BF,
     2,  31,  E_INFO_PRI,   8,   0,      CSID_DIVASRV_2P_M_V10_PCI, 0x1E01,
     DIVA_CARDTYPE_HARDWARE_PROPERTY_TEMPERATURE | DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO |
-    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC | DIVA_CARDTYPE_HARDWARE_PROPERTY_NO_1TR6
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC | DIVA_CARDTYPE_HARDWARE_PROPERTY_NO_1TR6,
+    &divaXconnectExportsPriBf
 },
 {   //  84
     CARDTYPE_CARD_NAME("Dialogic Diva softIP")                 0x0000, 0x0000,
     IDI_ADAPTER_MAESTRA,FAMILY_VIRTUAL, 0,
     CARD_SOFTIP,        CARD_I_NONE,    BUS_SOFT,   CHIP_NONE,
     1,  30,  E_INFO_PRI,   8,   0,      CSID_NONE,           0x0000,
-    0x00000000
+    0x00000000, &divaXconnectExportsPriSoftIP
 },
 {   //  85
     //CARDTYPE_CARD_NAME("Diva Server 4PRI/E1/T1")             0xE020, 0x0100,
@@ -1117,14 +1174,16 @@ OSCONST CARD_PROPERTIES CardProperties [ ] =
     CARD_MAE4P,         CARD_I_NONE,    BUS_PCI,    CHIP_DSP_BF,
     4,  31,  E_INFO_PRI,   8,   0,      CSID_DIVASRV_4P_M_V10_PCI, 0x2001,
     DIVA_CARDTYPE_HARDWARE_PROPERTY_TEMPERATURE | DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO |
-    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC | DIVA_CARDTYPE_HARDWARE_PROPERTY_NO_1TR6
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC | DIVA_CARDTYPE_HARDWARE_PROPERTY_NO_1TR6,
+    &divaXconnectExportsPriBf
 },
-{   //  86
-    CARDTYPE_CARD_NAME("unused")                             0x0000, 0x0100,
-    IDI_ADAPTER_MAESTRA,FAMILY_MAESTRA, 0,
-    0,                  CARD_I_NONE,    BUS_PCI,    CHIP_DSP,
-    4,  24,  E_INFO_PRI,   8,   0,      CSID_NONE,           0x0000,
-    0x00000000
+{   //  86 (Diva Passive PRI adapter)
+    CARDTYPE_CARD_NAME("Dialogic Diva Passive PRI PCI v1") 0xE050, 0x0300,
+    IDI_ADAPTER_MAESTRA,FAMILY_PASSIVE, DI_V1x0 | DI_FAX3 | DI_MODEM,
+    CARD_PASSIVEP,      CARD_I_NONE,    BUS_PCI,    CHIP_NONE,
+    1,  31,  E_INFO_PRI,   8,   0,      CSID_NONE,           0xE050,
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO | DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC,
+    &divaXconnectExportsPri
 },
 {   //  87
     //CARDTYPE_CARD_NAME("Diva Server V-BRI-2")                0xE018, 0x0200,
@@ -1133,7 +1192,8 @@ OSCONST CARD_PROPERTIES CardProperties [ ] =
     IDI_ADAPTER_MAESTRA,FAMILY_MAESTRA, DI_V1x0 | DI_MODEM,
     CARD_MAE2V,         CARD_I_NONE,    BUS_PCI,    CHIP_DSP,
     1,  2,   E_INFO_BRI,   8,   0,      CSID_NONE,           0x1800,
-    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC,
+    &divaXconnectExportsBri
 },
 {   //  88
     //CARDTYPE_CARD_NAME("Diva Server V-4BRI-8")               0xE013, 0x0200,
@@ -1142,7 +1202,8 @@ OSCONST CARD_PROPERTIES CardProperties [ ] =
     IDI_ADAPTER_MAESTRA,FAMILY_MAESTRA, DI_V1x0 | DI_MODEM,
     CARD_MAEQV,         CARD_I_NONE,    BUS_PCI,    CHIP_DSP,
     4,  2,   E_INFO_BRI,   8,   0,      CSID_NONE,           0x1300,
-    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC,
+    &divaXconnectExportsBri
 },
 {   //  89
     //CARDTYPE_CARD_NAME("Diva Server V-Analog-4P")            0xE024, 0x0100,
@@ -1151,7 +1212,8 @@ OSCONST CARD_PROPERTIES CardProperties [ ] =
     IDI_ADAPTER_MAESTRA,FAMILY_MAESTRA, DI_MODEM,
     CARD_POTSV,         CARD_I_NONE,    BUS_PCI,    CHIP_DSP,
     1,  4,   E_INFO_PRI,   8,   0,      CSID_NONE,           0x2400,
-    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC | DIVA_CARDTYPE_HARDWARE_PROPERTY_NO_1TR6
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC | DIVA_CARDTYPE_HARDWARE_PROPERTY_NO_1TR6,
+    &divaXconnectExportsAnalog
 },
 {   //  90
     //CARDTYPE_CARD_NAME("Diva Server V-Analog-8P")            0xE028, 0x0100,
@@ -1160,7 +1222,8 @@ OSCONST CARD_PROPERTIES CardProperties [ ] =
     IDI_ADAPTER_MAESTRA,FAMILY_MAESTRA, DI_MODEM,
     CARD_POTSV,         CARD_I_NONE,    BUS_PCI,    CHIP_DSP,
     1,  8,   E_INFO_PRI,   8,   0,      CSID_NONE,           0x2800,
-    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC | DIVA_CARDTYPE_HARDWARE_PROPERTY_NO_1TR6
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC | DIVA_CARDTYPE_HARDWARE_PROPERTY_NO_1TR6,
+    &divaXconnectExportsAnalog
 },
 {   //  91
     //CARDTYPE_CARD_NAME("Diva ISDN USB 4.0")                  0x1005, 0x0100,
@@ -1168,7 +1231,7 @@ OSCONST CARD_PROPERTIES CardProperties [ ] =
     IDI_ADAPTER_DIVA,   FAMILY_DIVA,    DI_V120,
     CARD_DIVALOW,       CARD_I_NONE,    BUS_USB,    CHIP_HFC,
     1,  2,  0,             8,   0,      CSID_NONE,           0x0000,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //  92
     //CARDTYPE_CARD_NAME("Diva Server Analog-2P")              0xE022, 0x0100,
@@ -1177,7 +1240,8 @@ OSCONST CARD_PROPERTIES CardProperties [ ] =
     CARD_POTS,          CARD_I_NONE,    BUS_PCI,    CHIP_DSP,
     1,  2,   E_INFO_PRI,   8,   0,      CSID_NONE,           0xE022,
     DIVA_CARDTYPE_HARDWARE_PROPERTY_TEMPERATURE | DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC |
-    DIVA_CARDTYPE_HARDWARE_PROPERTY_NO_1TR6
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_NO_1TR6,
+    &divaXconnectExportsAnalog
 },
 {   //  93
     //CARDTYPE_CARD_NAME("Diva Server V-Analog-2P")            0xE022, 0x0100,
@@ -1187,7 +1251,8 @@ OSCONST CARD_PROPERTIES CardProperties [ ] =
     CARD_POTSV,         CARD_I_NONE,    BUS_PCI,    CHIP_DSP,
     1,  2,   E_INFO_PRI,   8,   0,      CSID_NONE,           0x2200,
     DIVA_CARDTYPE_HARDWARE_PROPERTY_TEMPERATURE | DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC |
-    DIVA_CARDTYPE_HARDWARE_PROPERTY_NO_1TR6
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_NO_1TR6,
+    &divaXconnectExportsAnalog
 },
 {   //  94 Diva Server PRI/E1-30 PCIe
     //CARDTYPE_CARD_NAME("Diva Server PRI/E1-30 PCIe")         0xE01C, 0x0300,
@@ -1196,7 +1261,8 @@ OSCONST CARD_PROPERTIES CardProperties [ ] =
     CARD_MAEP3,         CARD_I_NONE,    BUS_PCIE,   CHIP_DSP,
     1,  31,  E_INFO_PRI,   8,   0,      CSID_DIVASRV_P_30M_V30_PCIE, 0x1C03,
     DIVA_CARDTYPE_HARDWARE_PROPERTY_TEMPERATURE | DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO |
-    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC_INFO
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC_INFO,
+    &divaXconnectExportsPri
 },
 {   //  95 Diva Server PRI/T1-24 PCIe
     //CARDTYPE_CARD_NAME("Diva Server PRI/T1-24 PCIe")         0xE01C, 0x0300,
@@ -1205,7 +1271,8 @@ OSCONST CARD_PROPERTIES CardProperties [ ] =
     CARD_MAEP3,         CARD_I_NONE,    BUS_PCIE,   CHIP_DSP,
     1,  24,  E_INFO_PRI,   8,   0,      CSID_DIVASRV_P_24M_V30_PCIE, 0x1C02,
     DIVA_CARDTYPE_HARDWARE_PROPERTY_TEMPERATURE | DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO |
-    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC_INFO
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC_INFO,
+    &divaXconnectExportsPri
 },
 {   //  96 Diva Server V-PRI/E1-30 PCIe
     //CARDTYPE_CARD_NAME("Diva Server V-PRI/E1-30 PCIe")       0xE01C, 0x0300,
@@ -1214,7 +1281,8 @@ OSCONST CARD_PROPERTIES CardProperties [ ] =
     CARD_MAEP3V,        CARD_I_NONE,    BUS_PCIE,   CHIP_DSP,
     1,  31,  E_INFO_PRI,   8,   0,      CSID_DIVASRV_P_30V_V30_PCIE, 0x1C06,
     DIVA_CARDTYPE_HARDWARE_PROPERTY_TEMPERATURE | DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO |
-    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC_INFO
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC_INFO,
+    &divaXconnectExportsPri
 },
 {   //  97 Diva Server V-PRI/T1-24 PCIe
     //CARDTYPE_CARD_NAME("Diva Server V-PRI/T1-24 PCIe")       0xE01C, 0x0300,
@@ -1223,7 +1291,8 @@ OSCONST CARD_PROPERTIES CardProperties [ ] =
     CARD_MAEP3V,        CARD_I_NONE,    BUS_PCIE,   CHIP_DSP,
     1,  24,  E_INFO_PRI,   8,   0,      CSID_DIVASRV_P_24V_V30_PCIE, 0x1C05,
     DIVA_CARDTYPE_HARDWARE_PROPERTY_TEMPERATURE | DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO |
-    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC_INFO
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC_INFO,
+    &divaXconnectExportsPri
 },
 {   //  98 Diva Server PRI/E1/T1-CTI PCIe
     //CARDTYPE_CARD_NAME("Diva Server PRI/E1/T1-CTI PCIe")     0xE01C, 0x0300,
@@ -1232,7 +1301,8 @@ OSCONST CARD_PROPERTIES CardProperties [ ] =
     CARD_MAEP3,         CARD_I_NONE,    BUS_PCIE,   CHIP_DSP,
     1,  31,  E_INFO_PRI,   8,   0,      CSID_DIVASRV_P_2V_V30_PCIE, 0x1C04,
     DIVA_CARDTYPE_HARDWARE_PROPERTY_TEMPERATURE | DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO |
-  DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC_INFO
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC_INFO,
+    &divaXconnectExportsPri
 },
 {   //  99
     //CARDTYPE_CARD_NAME("Diva 4BRI-8 PCIe v1")                0xE02E, 0x0200,
@@ -1241,7 +1311,8 @@ OSCONST CARD_PROPERTIES CardProperties [ ] =
     CARD_MAEQ,          CARD_I_NONE,    BUS_PCIE,   CHIP_DSP,
     4,  2,   E_INFO_BRI,   8,   0,      CSID_DIVASRV_4BRI_V1_PCIE, 0xE02E,
     DIVA_CARDTYPE_HARDWARE_PROPERTY_TEMPERATURE | DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO |
-    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC | DIVA_CARDTYPE_HARDWARE_PROPERTY_SEAVILLE
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC | DIVA_CARDTYPE_HARDWARE_PROPERTY_SEAVILLE,
+    &divaXconnectExportsBri
 },
 {   //  100
     //CARDTYPE_CARD_NAME("Diva V-4BRI-8 PCIe v1")              0xE02E, 0x0200,
@@ -1251,7 +1322,8 @@ OSCONST CARD_PROPERTIES CardProperties [ ] =
     CARD_MAEQV,         CARD_I_NONE,    BUS_PCIE,   CHIP_DSP,
     4,  2,   E_INFO_BRI,   8,   0,      CSID_DIVASRV_4BRI_V1_V_PCIE, 0x2E01,
     DIVA_CARDTYPE_HARDWARE_PROPERTY_TEMPERATURE | DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO |
-    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC | DIVA_CARDTYPE_HARDWARE_PROPERTY_SEAVILLE
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC | DIVA_CARDTYPE_HARDWARE_PROPERTY_SEAVILLE,
+    &divaXconnectExportsBri
 },
 {   //  101
     //CARDTYPE_CARD_NAME("Diva BRI-2 PCIe v1")                   0xE032, 0x0200,
@@ -1260,7 +1332,8 @@ OSCONST CARD_PROPERTIES CardProperties [ ] =
     CARD_MAE2,          CARD_I_NONE,    BUS_PCIE,    CHIP_DSP,
     1,  2,   E_INFO_BRI,   8,   0,      CSID_DIVASRV_BRI_V1_PCIE,      0xE032,
     DIVA_CARDTYPE_HARDWARE_PROPERTY_TEMPERATURE | DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO |
-    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC | DIVA_CARDTYPE_HARDWARE_PROPERTY_SEAVILLE
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC | DIVA_CARDTYPE_HARDWARE_PROPERTY_SEAVILLE,
+    &divaXconnectExportsBri
 },
 {   //  102
     //CARDTYPE_CARD_NAME("Diva V-BRI-2 PCIe v1")                 0xE032, 0x0200,
@@ -1270,14 +1343,15 @@ OSCONST CARD_PROPERTIES CardProperties [ ] =
     CARD_MAE2V,         CARD_I_NONE,    BUS_PCIE,    CHIP_DSP,
     1,  2,   E_INFO_BRI,   8,   0,      CSID_DIVASRV_BRI_V1_V_PCIE,    0x3201,
     DIVA_CARDTYPE_HARDWARE_PROPERTY_TEMPERATURE | DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO |
-    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC | DIVA_CARDTYPE_HARDWARE_PROPERTY_SEAVILLE
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC | DIVA_CARDTYPE_HARDWARE_PROPERTY_SEAVILLE,
+    &divaXconnectExportsBri
 },
 {   //  103 is a 2FX without fax and modem
     CARDTYPE_CARD_NAME("Dialogic Diva BRI-CTI PCI v2")         0xE034, 0x0200,
     IDI_ADAPTER_MAESTRA,FAMILY_MAESTRA, 0,
     CARD_MAE2,          CARD_I_NONE,    BUS_PCI,    CHIP_IPACX,
     1,  2,   E_INFO_BRI,   8,   0,      CSID_NONE,           0xE034,
-    0x00000000
+    0x00000000, &divaXconnectExportsNone
 },
 {   //  104
     CARDTYPE_CARD_NAME("Dialogic Diva Analog-2 PCIe v1")      0xE036, 0x0100,
@@ -1286,7 +1360,8 @@ OSCONST CARD_PROPERTIES CardProperties [ ] =
     1,  2,   E_INFO_PRI,   8,   0,      CSID_NONE,           0xE036,
     DIVA_CARDTYPE_HARDWARE_PROPERTY_TEMPERATURE | DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO |
     DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC | DIVA_CARDTYPE_HARDWARE_PROPERTY_SEAVILLE |
-    DIVA_CARDTYPE_HARDWARE_PROPERTY_NO_1TR6
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_NO_1TR6,
+    &divaXconnectExportsAnalog
 },
 {   //  105
     //CARDTYPE_CARD_NAME("Dialogic Diva V-Analog-2 PCIe v1")    0xE036, 0x0100,
@@ -1296,7 +1371,8 @@ OSCONST CARD_PROPERTIES CardProperties [ ] =
     1,  2,   E_INFO_PRI,   8,   0,      CSID_NONE,           0x3601,
     DIVA_CARDTYPE_HARDWARE_PROPERTY_TEMPERATURE | DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO |
     DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC | DIVA_CARDTYPE_HARDWARE_PROPERTY_SEAVILLE |
-    DIVA_CARDTYPE_HARDWARE_PROPERTY_NO_1TR6
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_NO_1TR6,
+    &divaXconnectExportsAnalog
 },
 {   //  106
     CARDTYPE_CARD_NAME("Dialogic Diva Analog-4 PCIe v1")      0xE038, 0x0100,
@@ -1305,7 +1381,8 @@ OSCONST CARD_PROPERTIES CardProperties [ ] =
     1,  4,   E_INFO_PRI,   8,   0,      CSID_NONE,           0xE038,
     DIVA_CARDTYPE_HARDWARE_PROPERTY_TEMPERATURE | DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO |
     DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC | DIVA_CARDTYPE_HARDWARE_PROPERTY_SEAVILLE |
-    DIVA_CARDTYPE_HARDWARE_PROPERTY_NO_1TR6
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_NO_1TR6,
+    &divaXconnectExportsAnalog
 },
 {   //  107
     //CARDTYPE_CARD_NAME("Dialogic Diva V-Analog-4 PCIe v1")    0xE038, 0x0100,
@@ -1315,7 +1392,8 @@ OSCONST CARD_PROPERTIES CardProperties [ ] =
     1,  4,   E_INFO_PRI,   8,   0,      CSID_NONE,           0x3801,
     DIVA_CARDTYPE_HARDWARE_PROPERTY_TEMPERATURE | DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO |
     DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC | DIVA_CARDTYPE_HARDWARE_PROPERTY_SEAVILLE |
-    DIVA_CARDTYPE_HARDWARE_PROPERTY_NO_1TR6
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_NO_1TR6,
+    &divaXconnectExportsAnalog
 },
 {   //  108
     CARDTYPE_CARD_NAME("Dialogic Diva Analog-8 PCIe v1")      0xE03A, 0x0100,
@@ -1324,7 +1402,8 @@ OSCONST CARD_PROPERTIES CardProperties [ ] =
     1,  8,   E_INFO_PRI,   8,   0,      CSID_NONE,           0xE03A,
     DIVA_CARDTYPE_HARDWARE_PROPERTY_TEMPERATURE | DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO |
     DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC | DIVA_CARDTYPE_HARDWARE_PROPERTY_SEAVILLE |
-    DIVA_CARDTYPE_HARDWARE_PROPERTY_NO_1TR6
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_NO_1TR6,
+    &divaXconnectExportsAnalog
 },
 {   //  109
     //CARDTYPE_CARD_NAME("Dialogic Diva V-Analog-8 PCIe v1")    0xE03A, 0x0100,
@@ -1334,7 +1413,8 @@ OSCONST CARD_PROPERTIES CardProperties [ ] =
     1,  8,   E_INFO_PRI,   8,   0,      CSID_NONE,           0x3A01,
     DIVA_CARDTYPE_HARDWARE_PROPERTY_TEMPERATURE | DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO |
     DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC | DIVA_CARDTYPE_HARDWARE_PROPERTY_SEAVILLE |
-    DIVA_CARDTYPE_HARDWARE_PROPERTY_NO_1TR6
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_NO_1TR6,
+    &divaXconnectExportsAnalog
 },
 {   //  110 Hermes
     CARDTYPE_CARD_NAME("Dialogic Diva V-4PRI PCIe HS v1") 0xE030, 0x0100,
@@ -1342,8 +1422,9 @@ OSCONST CARD_PROPERTIES CardProperties [ ] =
     CARD_MAE4PHV,       CARD_I_NONE,    BUS_PCIE,    CHIP_DSP_BF,
     4,  31,  E_INFO_PRI,   8,   0,      CSID_PCIE, 0xE030,
     DIVA_CARDTYPE_HARDWARE_PROPERTY_TEMPERATURE | DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO |
-    DIVA_CARDTYPE_HARDWARE_PROPERTY_SEAVILLE |
-    DIVA_CARDTYPE_HARDWARE_PROPERTY_NO_1TR6
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC | DIVA_CARDTYPE_HARDWARE_PROPERTY_SEAVILLE |
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_NO_1TR6,
+    &divaXconnectExportsPriBf
 },
 {   //  111 Hermes
     CARDTYPE_CARD_NAME("Dialogic Diva V-2PRI PCIe HS v1") 0xE030, 0x0100,
@@ -1351,8 +1432,9 @@ OSCONST CARD_PROPERTIES CardProperties [ ] =
     CARD_MAE2PHV,       CARD_I_NONE,    BUS_PCIE,    CHIP_DSP_BF,
     2,  31,  E_INFO_PRI,   8,   0,      CSID_PCIE, 0x3001,
     DIVA_CARDTYPE_HARDWARE_PROPERTY_TEMPERATURE | DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO |
-    DIVA_CARDTYPE_HARDWARE_PROPERTY_SEAVILLE |
-    DIVA_CARDTYPE_HARDWARE_PROPERTY_NO_1TR6
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC | DIVA_CARDTYPE_HARDWARE_PROPERTY_SEAVILLE |
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_NO_1TR6,
+    &divaXconnectExportsPriBf
 },
 {   //  112 Hermes
     CARDTYPE_CARD_NAME("Dialogic Diva V-1PRI PCIe HS v1") 0xE030, 0x0100,
@@ -1360,7 +1442,8 @@ OSCONST CARD_PROPERTIES CardProperties [ ] =
     CARD_MAE1PHV,       CARD_I_NONE,    BUS_PCIE,    CHIP_DSP_BF,
     1,  31,  E_INFO_PRI,   8,   0,      CSID_PCIE, 0x3002,
     DIVA_CARDTYPE_HARDWARE_PROPERTY_TEMPERATURE | DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO |
-    DIVA_CARDTYPE_HARDWARE_PROPERTY_SEAVILLE
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC | DIVA_CARDTYPE_HARDWARE_PROPERTY_SEAVILLE,
+    &divaXconnectExportsPriBf
 },
 {   //  113 Zeus
     CARDTYPE_CARD_NAME("Dialogic Diva V-4PRI PCIe FS v1") 0xE03C, 0x0100,
@@ -1369,7 +1452,8 @@ OSCONST CARD_PROPERTIES CardProperties [ ] =
     4,  31,  E_INFO_PRI,   8,   0,      CSID_PCIE, 0xE03C,
     DIVA_CARDTYPE_HARDWARE_PROPERTY_TEMPERATURE | DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO |
     DIVA_CARDTYPE_HARDWARE_PROPERTY_CUSTOM_PCIE |
-    DIVA_CARDTYPE_HARDWARE_PROPERTY_NO_1TR6
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_NO_1TR6,
+    &divaXconnectExportsPriBf
 },
 {   //  114 Zeus
     CARDTYPE_CARD_NAME("Dialogic Diva V-8PRI PCIe FS v1") 0xE03C, 0x0100,
@@ -1378,21 +1462,24 @@ OSCONST CARD_PROPERTIES CardProperties [ ] =
     8,  31,  E_INFO_PRI,   8,   0,      CSID_PCIE, 0x3C01,
     DIVA_CARDTYPE_HARDWARE_PROPERTY_TEMPERATURE | DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO |
     DIVA_CARDTYPE_HARDWARE_PROPERTY_CUSTOM_PCIE |
-    DIVA_CARDTYPE_HARDWARE_PROPERTY_NO_1TR6
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_NO_1TR6,
+    &divaXconnectExportsPriBf
 },
 {   //  115
     CARDTYPE_CARD_NAME("Dialogic Diva UM-PRI/E1-30 PCI v3")   0xE01C, 0x0300,
     IDI_ADAPTER_MAESTRA,FAMILY_MAESTRA, DI_V1x0 | DI_MODEM,
     CARD_MAEP3UM,       CARD_I_NONE,    BUS_PCI,    CHIP_DSP,
     1,  31,  E_INFO_PRI,   8,   0,      CSID_NONE,           0x1C0D,
-    DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO | DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO | DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC,
+    &divaXconnectExportsPri
 },
 {   //  116
     CARDTYPE_CARD_NAME("Dialogic Diva UM-PRI/T1-24 PCI v3")   0xE01C, 0x0300,
     IDI_ADAPTER_MAESTRA,FAMILY_MAESTRA, DI_V1x0 | DI_MODEM,
     CARD_MAEP3UM,       CARD_I_NONE,    BUS_PCI,    CHIP_DSP,
     1,  24,  E_INFO_PRI,   8,   0,      CSID_NONE,           0x1C0E,
-    DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO | DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO | DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC,
+    &divaXconnectExportsPri
 },
 {   //  117
     CARDTYPE_CARD_NAME("Dialogic Diva UM-PRI/E1-30 PCIe v3")  0xE01C, 0x0300,
@@ -1400,7 +1487,8 @@ OSCONST CARD_PROPERTIES CardProperties [ ] =
     CARD_MAEP3UM,       CARD_I_NONE,    BUS_PCIE,   CHIP_DSP,
     1,  31,  E_INFO_PRI,   8,   0,      CSID_DIVASRV_P_30UM_V30_PCIE, 0x1C0D,
     DIVA_CARDTYPE_HARDWARE_PROPERTY_TEMPERATURE | DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO |
-    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC_INFO
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC_INFO,
+    &divaXconnectExportsPri
 },
 {   //  118
     CARDTYPE_CARD_NAME("Dialogic Diva UM-PRI/T1-24 PCIe v3")  0xE01C, 0x0300,
@@ -1408,16 +1496,156 @@ OSCONST CARD_PROPERTIES CardProperties [ ] =
     CARD_MAEP3UM,       CARD_I_NONE,    BUS_PCIE,   CHIP_DSP,
     1,  24,  E_INFO_PRI,   8,   0,      CSID_DIVASRV_P_24UM_V30_PCIE, 0x1C0E,
     DIVA_CARDTYPE_HARDWARE_PROPERTY_TEMPERATURE | DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO |
-    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC_INFO
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC_INFO,
+    &divaXconnectExportsPri
 },
-{    //119
-    CARDTYPE_CARD_NAME("Lancaster v1")           0x0000, 0x0000,
-    IDI_ADAPTER_DIVA,   FAMILY_DIVA, 0,
-    CARD_DIVALOW,       CARD_I_NONE,    BUS_NONE,    CHIP_IPACX,
-    1,  2,   0,            8,   0,      CSID_NONE,      0x0000,
-    0x00000000
+{   //  119 WITHOUT echo canceller chip
+    CARDTYPE_CARD_NAME("Dialogic Blue OneSpan-24/30-S-LP Telephony Board") 0xE03E, 0x0300,
+    IDI_ADAPTER_MAESTRA,FAMILY_PASSIVE, 0,
+    CARD_PASSIVEP,      CARD_I_NONE,    BUS_PCIE,    CHIP_NONE,
+    1,  31,  E_INFO_PRI,   8,   0,      CSID_NONE,           0xE03E,
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO | DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC,
+    &divaXconnectExportsPri
+},
+{   //  120
+    CARDTYPE_CARD_NAME("Dialogic Blue TwoSpan-48/60-H-HL Telephony Board") 0xE040, 0x0300,
+    IDI_ADAPTER_MAESTRA,FAMILY_PASSIVE, 0,
+    CARD_PASSIVEP,      CARD_I_NONE,    BUS_PCIE,    CHIP_NONE,
+    2,  31,  E_INFO_PRI,   8,   0,      CSID_NONE,           0xE040,
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO | DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC,
+    &divaXconnectExportsPri
+},
+{   //  121
+    CARDTYPE_CARD_NAME("Dialogic Blue FourSpan-96/120-H-HL Telephony Board") 0xE042, 0x0300,
+    IDI_ADAPTER_MAESTRA,FAMILY_PASSIVE, 0,
+    CARD_PASSIVEP,      CARD_I_NONE,    BUS_PCIE,    CHIP_NONE,
+    4,  31,  E_INFO_PRI,   8,   0,      CSID_NONE,           0xE042,
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO | DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC,
+    &divaXconnectExportsPri
+},
+{   //  122
+    CARDTYPE_CARD_NAME("Dialogic Blue EightSpan-192/240-H-HL Telephony Board") 0xE044, 0x0300,
+    IDI_ADAPTER_MAESTRA,FAMILY_PASSIVE, 0,
+    CARD_PASSIVEP,      CARD_I_NONE,    BUS_PCIE,    CHIP_NONE,
+    8,  31,  E_INFO_PRI,   8,   0,      CSID_NONE,           0xE044,
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO | DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC,
+    &divaXconnectExportsPri
+},
+{   //  123
+    CARDTYPE_CARD_NAME("Dialogic Diva Host Media Board") 0x0000, 0x0000,
+    IDI_ADAPTER_MAESTRA,FAMILY_VIRTUAL, 0,
+    CARD_SOFTIP,        CARD_I_NONE,    BUS_SOFT,   CHIP_NONE,
+    2,  30,  E_INFO_PRI,   8,   0,      CSID_NONE,           0x0000,
+    0x00000000, &divaXconnectExportsPriSoftIP
+},
+{   //  124
+    CARDTYPE_CARD_NAME("Diva UM-Analog-2 PCIe Hypercom")   0xE036, 0x0100,
+    IDI_ADAPTER_MAESTRA,FAMILY_MAESTRA, DI_MODEM,
+    CARD_POTSV,         CARD_I_NONE,    BUS_PCIE,    CHIP_DSP,
+    1,  2,   E_INFO_PRI,   8,   0,      CSID_NONE,           0x3602,
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_TEMPERATURE | DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO |
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC | DIVA_CARDTYPE_HARDWARE_PROPERTY_SEAVILLE |
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_NO_1TR6,
+    &divaXconnectExportsAnalog
+},
+{   //  125
+    CARDTYPE_CARD_NAME("Diva UM-Analog-4 PCIe Hypercom")   0xE038, 0x0100,
+    IDI_ADAPTER_MAESTRA,FAMILY_MAESTRA, DI_MODEM,
+    CARD_POTSV,         CARD_I_NONE,    BUS_PCIE,    CHIP_DSP,
+    1,  4,   E_INFO_PRI,   8,   0,      CSID_NONE,           0x3802,
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_TEMPERATURE | DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO |
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC | DIVA_CARDTYPE_HARDWARE_PROPERTY_SEAVILLE |
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_NO_1TR6,
+    &divaXconnectExportsAnalog
+},
+{   //  126
+    CARDTYPE_CARD_NAME("Diva UM-Analog-8 PCIe Hypercom")   0xE03A, 0x0100,
+    IDI_ADAPTER_MAESTRA,FAMILY_MAESTRA, DI_MODEM,
+    CARD_POTSV,         CARD_I_NONE,    BUS_PCIE,    CHIP_DSP,
+    1,  8,   E_INFO_PRI,   8,   0,      CSID_NONE,           0x3A02,
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_TEMPERATURE | DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO |
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC | DIVA_CARDTYPE_HARDWARE_PROPERTY_SEAVILLE |
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_NO_1TR6,
+    &divaXconnectExportsAnalog
+},
+{   //  127 Hermes
+    CARDTYPE_CARD_NAME("Diva M-4PRI PCIe HS Hypercom") 0xE030, 0x0100,
+    IDI_ADAPTER_MAESTRA, FAMILY_MAESTRA, DI_MODEM,
+    CARD_MAE4PHV,       CARD_I_NONE,    BUS_PCIE,    CHIP_DSP_BF,
+    4,  31,  E_INFO_PRI,   8,   0,      CSID_PCIE, 0x3006,
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_TEMPERATURE | DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO |
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC | DIVA_CARDTYPE_HARDWARE_PROPERTY_SEAVILLE |
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_NO_1TR6,
+    &divaXconnectExportsPriBf
+},
+{   //  128 Hermes
+    CARDTYPE_CARD_NAME("Diva M-2PRI PCIe HS Hypercom") 0xE030, 0x0100,
+    IDI_ADAPTER_MAESTRA, FAMILY_MAESTRA, DI_MODEM,
+    CARD_MAE2PHV,       CARD_I_NONE,    BUS_PCIE,    CHIP_DSP_BF,
+    2,  31,  E_INFO_PRI,   8,   0,      CSID_PCIE, 0x3007,
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_TEMPERATURE | DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO |
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC | DIVA_CARDTYPE_HARDWARE_PROPERTY_SEAVILLE |
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_NO_1TR6,
+    &divaXconnectExportsPriBf
+},
+{   //  129 Hermes
+    CARDTYPE_CARD_NAME("Diva M-1PRI PCIe HS Hypercom") 0xE030, 0x0100,
+    IDI_ADAPTER_MAESTRA, FAMILY_MAESTRA, DI_MODEM,
+    CARD_MAE1PHV,       CARD_I_NONE,    BUS_PCIE,    CHIP_DSP_BF,
+    1,  31,  E_INFO_PRI,   8,   0,      CSID_PCIE, 0x3008,
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_TEMPERATURE | DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO |
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC | DIVA_CARDTYPE_HARDWARE_PROPERTY_SEAVILLE,
+    &divaXconnectExportsPriBf
+},
+{   //  130 Zeus
+    CARDTYPE_CARD_NAME("Diva M-4PRI PCIe FS Hypercom") 0xE03C, 0x0100,
+    IDI_ADAPTER_MAESTRA, FAMILY_MAESTRA, DI_MODEM,
+    CARD_MAE4PFV,       CARD_I_NONE,    BUS_PCIE,    CHIP_DSP_BF,
+    4,  31,  E_INFO_PRI,   8,   0,      CSID_PCIE, 0x3C04,
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_TEMPERATURE | DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO |
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_CUSTOM_PCIE |
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_NO_1TR6,
+    &divaXconnectExportsPriBf
+},
+{   //  131 Zeus
+    CARDTYPE_CARD_NAME("Diva M-8PRI PCIe FS Hypercom") 0xE03C, 0x0100,
+    IDI_ADAPTER_MAESTRA, FAMILY_MAESTRA, DI_MODEM,
+    CARD_MAE8PFV,       CARD_I_NONE,    BUS_PCIE,    CHIP_DSP_BF,
+    8,  31,  E_INFO_PRI,   8,   0,      CSID_PCIE, 0x3C05,
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_TEMPERATURE | DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO |
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_CUSTOM_PCIE |
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_NO_1TR6,
+    &divaXconnectExportsPriBf
+},
+{   //  132 WITH echo canceller chip
+    CARDTYPE_CARD_NAME("Dialogic Blue OneSpan-24/30-H-HL Telephony Board") 0xE046, 0x0300,
+    IDI_ADAPTER_MAESTRA,FAMILY_PASSIVE, 0,
+    CARD_PASSIVEP,      CARD_I_NONE,    BUS_PCIE,    CHIP_NONE,
+    1,  31,  E_INFO_PRI,   8,   0,      CSID_NONE,           0xE046,
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO | DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC,
+    &divaXconnectExportsPri
+},
+{   //  133 Zeus
+    CARDTYPE_CARD_NAME("Diva M-4PRI PCIe FS") 0xE03C, 0x0100,
+    IDI_ADAPTER_MAESTRA, FAMILY_MAESTRA, DI_MODEM,
+    CARD_MAE4PFV,       CARD_I_NONE,    BUS_PCIE,    CHIP_DSP_BF,
+    4,  31,  E_INFO_PRI,   8,   0,      CSID_PCIE, 0x3C08,
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_TEMPERATURE | DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO |
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_CUSTOM_PCIE |
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_NO_1TR6,
+    &divaXconnectExportsPriBf
+},
+{   //  134 Zeus
+    CARDTYPE_CARD_NAME("Diva M-8PRI PCIe FS") 0xE03C, 0x0100,
+    IDI_ADAPTER_MAESTRA, FAMILY_MAESTRA, DI_MODEM,
+    CARD_MAE8PFV,       CARD_I_NONE,    BUS_PCIE,    CHIP_DSP_BF,
+    8,  31,  E_INFO_PRI,   8,   0,      CSID_PCIE, 0x3C09,
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_TEMPERATURE | DIVA_CARDTYPE_HARDWARE_PROPERTY_FPGA_INFO |
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_CUSTOM_PCIE |
+    DIVA_CARDTYPE_HARDWARE_PROPERTY_NO_1TR6,
+    &divaXconnectExportsPriBf
 }
-} ;
+};
 #if CARDTYPE_H_WANT_RESOURCE_DATA
 /*--- CardResource [Index=CARDTYPE_....]   ---------------------------(GEI)-*/
 #ifdef __cplusplus
@@ -1544,7 +1772,22 @@ OSCONST CARD_RESOURCE CardResource [ ] =  {
 /*116*/{ { 0,0,0,0,0,0,0,0,0,0      },   0x0,0x0,0,      0x0,0x0,0           },
 /*117*/{ { 0,0,0,0,0,0,0,0,0,0      },   0x0,0x0,0,      0x0,0x0,0           },
 /*118*/{ { 0,0,0,0,0,0,0,0,0,0      },   0x0,0x0,0,      0x0,0x0,0           },
-/*119*/{ { 0,0,0,0,0,0,0,0,0,0      },   0x0,0x0,0,      0x0,0x0,0           } // DIVA LEP BRI-PCI
+/*119*/{ { 0,0,0,0,0,0,0,0,0,0      },   0x0,0x0,0,      0x0,0x0,0           }, // DIVA L PRI PCIe WITHOUT echo canceller chip
+/*120*/{ { 0,0,0,0,0,0,0,0,0,0      },   0x0,0x0,0,      0x0,0x0,0           }, // DIVA L 2PRI PCIe
+/*121*/{ { 0,0,0,0,0,0,0,0,0,0      },   0x0,0x0,0,      0x0,0x0,0           }, // DIVA L 4PRI PCIe
+/*122*/{ { 0,0,0,0,0,0,0,0,0,0      },   0x0,0x0,0,      0x0,0x0,0           }, // DIVA L 8PRI PCIe
+/*123*/{ { 0,0,0,0,0,0,0,0,0,0      },   0x0,0x0,0,      0x0,0x0,0           }, // Sipcontrol Resource
+/*124*/{ { 0,0,0,0,0,0,0,0,0,0      },   0x0,0x0,0,      0x0,0x0,0           }, // Hypercom Analog
+/*125*/{ { 0,0,0,0,0,0,0,0,0,0      },   0x0,0x0,0,      0x0,0x0,0           },
+/*126*/{ { 0,0,0,0,0,0,0,0,0,0      },   0x0,0x0,0,      0x0,0x0,0           },
+/*127*/{ { 0,0,0,0,0,0,0,0,0,0      },   0x0,0x0,0,      0x0,0x0,0           }, // Hypercom Hermes
+/*128*/{ { 0,0,0,0,0,0,0,0,0,0      },   0x0,0x0,0,      0x0,0x0,0           },
+/*129*/{ { 0,0,0,0,0,0,0,0,0,0      },   0x0,0x0,0,      0x0,0x0,0           },
+/*130*/{ { 0,0,0,0,0,0,0,0,0,0      },   0x0,0x0,0,      0x0,0x0,0           }, // Hypercom Zeus
+/*131*/{ { 0,0,0,0,0,0,0,0,0,0      },   0x0,0x0,0,      0x0,0x0,0           },
+/*132*/{ { 0,0,0,0,0,0,0,0,0,0      },   0x0,0x0,0,      0x0,0x0,0           }, // DIVA L PRI PCIe WITH echo canceller chip
+/*133*/{ { 0,0,0,0,0,0,0,0,0,0      },   0x0,0x0,0,      0x0,0x0,0           }, // Zeus M-4 
+/*134*/{ { 0,0,0,0,0,0,0,0,0,0      },   0x0,0x0,0,      0x0,0x0,0           }  // Zeus M-8 
 };
 #endif /*CARDTYPE_H_WANT_RESOURCE_DATA*/
 #else /*!CARDTYPE_H_WANT_DATA*/
@@ -1628,7 +1871,7 @@ extern OSCONST CARD_RESOURCE        CardResource [] ;
 #define CARD_D_NEW_DSP_COMBIFILE 63
 typedef struct CARD_FILES_DATA
 {
-    char *              Name;
+    const char *        Name;
     unsigned char       Type;
 }
 CARD_FILES_DATA;
@@ -1844,6 +2087,42 @@ CARD_FILES CardFiles [] =
     }
   },
   { /* CARD_MAEQ */       /* currently not supported */
+    CARD_FILE_NONE,
+    {
+      CARD_FILE_NONE, CARD_FILE_NONE, CARD_FILE_NONE, CARD_FILE_NONE, CARD_FILE_NONE
+    },
+    CARD_FILE_NONE,
+    {
+      CARD_FILE_NONE, CARD_FILE_NONE, CARD_FILE_NONE, CARD_FILE_NONE,
+      CARD_FILE_NONE, CARD_FILE_NONE, CARD_FILE_NONE, CARD_FILE_NONE,
+      CARD_FILE_NONE
+    }
+  },
+  { /* CARD_MAEP */       /* currently not supported */
+    CARD_FILE_NONE,
+    {
+      CARD_FILE_NONE, CARD_FILE_NONE, CARD_FILE_NONE, CARD_FILE_NONE, CARD_FILE_NONE
+    },
+    CARD_FILE_NONE,
+    {
+      CARD_FILE_NONE, CARD_FILE_NONE, CARD_FILE_NONE, CARD_FILE_NONE,
+      CARD_FILE_NONE, CARD_FILE_NONE, CARD_FILE_NONE, CARD_FILE_NONE,
+      CARD_FILE_NONE
+    }
+  },
+  { /* CARD_MAEP */       /* currently not supported */
+    CARD_FILE_NONE,
+    {
+      CARD_FILE_NONE, CARD_FILE_NONE, CARD_FILE_NONE, CARD_FILE_NONE, CARD_FILE_NONE
+    },
+    CARD_FILE_NONE,
+    {
+      CARD_FILE_NONE, CARD_FILE_NONE, CARD_FILE_NONE, CARD_FILE_NONE,
+      CARD_FILE_NONE, CARD_FILE_NONE, CARD_FILE_NONE, CARD_FILE_NONE,
+      CARD_FILE_NONE
+    }
+  },
+  { /* CARD_MAEP */       /* currently not supported */
     CARD_FILE_NONE,
     {
       CARD_FILE_NONE, CARD_FILE_NONE, CARD_FILE_NONE, CARD_FILE_NONE, CARD_FILE_NONE

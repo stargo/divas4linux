@@ -83,7 +83,7 @@ static unsigned long cum_freq[No_of_symbols+1]; /*Cumulative symbol frequencies*
 
 /* SIZE OF ARITHMETIC CODE VALUES. */
 
-#define Code_value_bits 30              /* Number of bits in a code value   */
+#define Code_value_bits 62              /* Number of bits in a code value   */
 typedef unsigned long code_value;  /* Type of an arithmetic code value */
 
 #define Top_value (((long)1<<Code_value_bits)-1) /*Largest code value*/
@@ -120,7 +120,7 @@ static int lobuffer;                   /* one if z lo tail in effect */
 static unsigned char* dst_buffer;
 static unsigned int   dst_buffer_length;
 
-#define putc(__x__,__y__) dst_buffer[dst_buffer_length++]=(__x__)
+#define __diva_putc(__x__,__y__) dst_buffer[dst_buffer_length++]=(__x__)
 
 
 /* INITIALIZE FOR BIT OUTPUT. */
@@ -139,11 +139,11 @@ static __inline void output_bit( int bit )
     bits_to_go -= 1;
     if (bits_to_go==0) {                        /* Output buffer if it is   */
         if ( buffer != 0 ) {
-          if ( lobuffer != 0 ) putc( 0x40, stdout);
+          if ( lobuffer != 0 ) __diva_putc( 0x40, stdout);
           if ( zbuffer > 0 && buffer == 0x40 ) lobuffer = 1; 
           if ( buffer != 0x40) lobuffer = 0; /* 0x40 just because its cool */
-          for ( ;zbuffer > 0; zbuffer--) putc( 0, stdout);
-          if ( lobuffer != 1)putc( (char) buffer, stdout );  
+          for ( ;zbuffer > 0; zbuffer--) __diva_putc( 0, stdout);
+          if ( lobuffer != 1)__diva_putc( (char) buffer, stdout );  
         }
         else zbuffer++;
         bits_to_go = 8;
@@ -157,11 +157,11 @@ static void done_outputing_bits( void )
 {  /* write out remaining bits most of the time */
    if ( buffer != 0 )  {
        if ( bits_to_go != 0 ) buffer >>= bits_to_go;
-       if ( lobuffer != 0 ) putc( 0x40, stdout);
+       if ( lobuffer != 0 ) __diva_putc( 0x40, stdout);
        if ( zbuffer > 0 && buffer == 0x40 ) lobuffer = 1; 
        if ( buffer != 0x40) lobuffer = 0;
-       for ( ;zbuffer > 0; zbuffer--) putc( 0, stdout);
-       if ( lobuffer != 1)putc( (char) buffer, stdout );  
+       for ( ;zbuffer > 0; zbuffer--) __diva_putc( 0, stdout);
+       if ( lobuffer != 1)__diva_putc( (char) buffer, stdout );  
    }
 }
 
@@ -211,7 +211,7 @@ int main( int argc, char *argv[] )
     for (;;) {                                  /* Loop through characters. */
         int ch; int symbol;
         if ( ( ticker++ % 1024 ) == 0 )
-            putc( '.', stderr );
+            __diva_putc( '.', stderr );
         ch = getc(stdin);                       /* Read the next character. */
         if (ch==EOF) break;                     /* Exit loop on end-of-file.*/
         symbol = char_to_index[ch];             /* Translate to an index.   */
@@ -231,7 +231,7 @@ int main( int argc, char *argv[] )
 //    encode_symbol(EOF_symbol,cum_freq);         /* Encode the EOF symbol.   */
     done_encoding();                            /* Send the last few bits.  */
     done_outputing_bits();
-    putc( '\n', stderr );
+    __diva_putc( '\n', stderr );
     return 0;
 }
 #else

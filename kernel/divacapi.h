@@ -1,12 +1,16 @@
 
 /*
  *
-  Copyright (c) Dialogic, 2007.
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
  *
   This source file is supplied for the use with
-  Dialogic range of DIVA Server Adapters.
+  Sangoma (formerly Dialogic) range of Adapters.
  *
-  Dialogic File Revision :    2.1
+  File Revision :    2.1
  *
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -23,18 +27,6 @@
   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  */
-
-/*#define DEBUG */
-
-
-
-
-  
-  
-
-
-
-
 
 #define IMPLEMENT_DTMF 1
 #define IMPLEMENT_LINE_INTERCONNECT2 1
@@ -82,7 +74,7 @@
 #define MAX_DATA_B3        8
 #define MAX_DATA_ACK       MAX_DATA_B3
 #define MAX_MULTI_IE       6
-#define MAX_MSG_SIZE       256
+#define MAX_MSG_SIZE       2100
 #define MAX_MSG_PARMS      20
 #define MAX_CPN_MASK_SIZE  16
 #define MAX_MSN_CONFIG     10
@@ -102,7 +94,7 @@
 
 #define INTERNAL_IND_BUFFER_SIZE      768
 
-#define DTMF_PARAMETER_BUFFER_SIZE    16
+#define DTMF_PARAMETER_BUFFER_SIZE    64
 #define ADV_VOICE_COEF_BUFFER_SIZE    50
 
 #define LI_PLCI_B_QUEUE_ENTRIES       256
@@ -158,6 +150,7 @@ struct measure_spectrum_setup_s {
   word reserved;
   word flags;
   word peaks;
+  word aperture;
 };
 
 struct measure_cepstrum_setup_s {
@@ -183,6 +176,8 @@ struct measure_single_tone_setup_s {
   word min_level;
   word max_amplitude_modulation;
   word max_frequency_modulation;
+  word max_dropout;
+  word aperture;
 };
 
 struct measure_dual_tone_setup_s {
@@ -193,6 +188,8 @@ struct measure_dual_tone_setup_s {
   word min_level;
   word max_high_low_twist;
   word max_low_high_twist;
+  word max_dropout;
+  word aperture;
 };
 
 struct measure_fskdet_setup_s {
@@ -394,7 +391,24 @@ struct _APPL {
   word   *    DataFlags;
   dword         BadDataB3Resp;
   byte          access;
+
+
+  diva_entity_queue_t saved_action_q;
+
 };
+
+
+typedef struct _diva_saved_capi_appl_action_hdr {
+  diva_entity_link_t link;
+  word messageNr;
+  void (*action)(struct _PLCI*, struct _diva_saved_capi_appl_action_hdr*);
+} diva_saved_capi_appl_action_hdr_t;
+
+typedef struct _diva_saved_capi_appl_stream_action {
+  diva_saved_capi_appl_action_hdr_t hdr;
+  int                               length;
+  byte                              stream_data[256];
+} diva_saved_capi_appl_stream_action_t;
 
 
 struct _PLCI {
@@ -410,13 +424,14 @@ struct _PLCI {
   APPL      *appl;
   PLCI      *relatedPTYPLCI;
   byte          Id;
+  byte          NextId;
   byte          State;
   byte          sig_req;
   byte          nl_req;
   byte          SuppState;
   byte          channels;
   byte          tel;
-  byte          B1_resource;
+  word          B1_resource;
   byte          B1_options;
   byte          B2_prot;
   byte          B3_prot;
@@ -443,7 +458,6 @@ struct _PLCI {
   byte          nl_assign_rc;
   byte          b_channel;
   byte          adv_nl;
-  byte          manufacturer;
   byte          call_dir;
   byte          hook_state;
   byte          spoofed_msg;
@@ -452,6 +466,7 @@ struct _PLCI {
   byte          cr_enquiry;
   word          hangup_flow_ctrl_timer;
 
+  word          ch_flow_ring_list;
   word          ncci_ring_list;
   byte          inc_dis_ncci_table[MAX_CHANNELS_PER_PLCI];
   t_std_internal_command internal_command_queue[MAX_INTERNAL_COMMAND_LEVELS];
@@ -499,13 +514,16 @@ struct _PLCI {
   word          adjust_b_info;
   word          adjust_b_prev_b1_facilities;
   byte          adjust_b_restore;
-  byte          adjust_b_prev_b1_resource;
+  word          adjust_b_prev_b1_resource;
 
   word          dtmf_rec_active;
+  word          dtmf_rec_active_modem_fax;
   word          dtmf_rec_pulse_ms;
   word          dtmf_rec_pause_ms;
   byte          dtmf_pending_dtmf_digit_code;
   byte          dtmf_pending_mf_digit_code;
+  byte          dtmf_pending_r2fwd_digit_code;
+  byte          dtmf_pending_r2bwd_digit_code;
   byte          dtmf_send_requests;
   word          dtmf_send_pulse_ms;
   word          dtmf_send_pause_ms;
@@ -514,19 +532,32 @@ struct _PLCI {
   byte          dtmf_parameter_length;
   byte          dtmf_parameter_buffer[DTMF_PARAMETER_BUFFER_SIZE];
 
-
   t_capidtmf_state capidtmf_state;
+
+
+
+  word          dtmf_ondata_rec_active;
+  word          dtmf_ondata_rec_pulse_ms;
+  word          dtmf_ondata_rec_pause_ms;
+  byte          dtmf_ondata_pending_dtmf_digit_code;
+  byte          tone_last_indication_code;
+
+  t_capidtmf_state capidtmf_ondata_state;
+
 
 
   word          li_bchannel_id;    /* BRI: 1..2, PRI: (1),2,..32 */
   byte          li_channel_bits;
   byte          li_notify_update;
   byte          li_update_waiting;
+  byte          li_error;
   PLCI      *li_update_wait_next;
   word          li_msg_number;
   word          li_cmd;
   word          li_write_command;
   word          li_write_channel;
+  byte          li_write_needs_sync;
+  byte          li_write_is_sync;
   word          li_plci_b_write_pos;
   word          li_plci_b_read_pos;
   word          li_plci_b_req_pos;
@@ -538,9 +569,6 @@ struct _PLCI {
   word          ec_span_ms;
   word          ec_predelay_ms;
   word          ec_sparse_span_ms;
-
-
-  byte          tone_last_indication_code;
 
 
   word          measure_active;
@@ -557,6 +585,12 @@ struct _PLCI {
   word          tx_digital_gain;
   word          rx_digital_gain;
 
+  byte          sig_tx_tone[5];
+  byte          sig_tx_digits[4];
+  byte          sig_tx_set_detector[5];
+  byte          sig_tx_set_generator[5];
+  byte          sig_tx_task_control[5];
+  byte          sig_tx_set_modulation[7];
 
   word          rtp_cmd;
   byte          rtp_send_requests;
@@ -587,6 +621,8 @@ struct _PLCI {
   PLCI       *relatedConsultPLCI;
   word          lastrejectcause;
   byte          ncrl_esccai[6];
+
+  byte          stream_data[256];
 };
 
 
@@ -613,6 +649,10 @@ struct _DIVA_CAPI_ADAPTER {
   byte          max_listen;
   byte          listen_active;
   PLCI      *plci;
+  byte          first_free_plci_id;
+  byte          last_free_plci_id;
+  byte          ncrl_plci_id;
+  byte          hangup_flow_control_plcis;
   byte          ch_ncci[MAX_NL_CHANNEL+1];
   byte          ncci_ch[MAX_NCCI+1];
   byte          ncci_plci[MAX_NCCI+1];
@@ -623,7 +663,7 @@ struct _DIVA_CAPI_ADAPTER {
   byte          ch_flow_control[MAX_NL_CHANNEL+1];  /* Used by XON protocol */
   byte          ch_flow_control_pending;
   byte          ch_flow_plci[MAX_NL_CHANNEL+1];
-  int           last_flow_control_ch;
+  byte          ch_flow_next[MAX_NL_CHANNEL+1];
 
   dword         Info_Mask[MAX_APPL];
   dword         CIP_Mask[MAX_APPL];
@@ -703,6 +743,7 @@ struct _DIVA_CAPI_ADAPTER {
 #define APPL_FLAG_OLD_LI_SPEC           0x01
 #define APPL_FLAG_PRIV_EC_SPEC          0x02
 #define APPL_FLAG_OLD_EC_SELECTOR       0x04
+#define APPL_FLAG_USES_STREAMING        0x08
 
 
 /*------------------------------------------------------------------*/
@@ -837,13 +878,14 @@ struct t30_info_s {
 #define T30_OPERATING_MODE_CLASS1       2
 #define T30_OPERATING_MODE_CAPI         3
 #define T30_OPERATING_MODE_CAPI_NEG     4
-#define T30_OPERATING_MODE_COUNT        5
+#define T30_OPERATING_MODE_MONITOR      5
+#define T30_OPERATING_MODE_COUNT        6
 
         /* EDATA transmit messages */
 #define EDATA_T30_DIS         0x01
 #define EDATA_T30_FTT         0x02
 #define EDATA_T30_MCF         0x03
-#define EDATA_T30_PARAMETERS  0x04
+#define EDATA_T30_PROGRESS    0x04
 
         /* EDATA receive messages */
 #define EDATA_T30_DCS         0x81
@@ -859,7 +901,7 @@ struct t30_info_s {
 #define T30_SUCCESS                         0
 #define T30_ERR_NO_ENERGY_DETECTED          1
 #define T30_ERR_TIMEOUT_NO_RESPONSE         2
-#define T30_ERR_RETRY_NO_RESPONSE           3
+/* #define T30_ERR_RETRY_NO_RESPONSE           3 */
 #define T30_ERR_TOO_MANY_REPEATS            4
 #define T30_ERR_UNEXPECTED_MESSAGE          5
 #define T30_ERR_UNEXPECTED_DCN              6
@@ -973,6 +1015,7 @@ struct t30_info_s {
 #define T30_NSF_CONTROL_BIT_NEGOTIATE_RESP  0x0008
 #define T30_NSF_CONTROL_BIT_INFO_IND        0x0010
 #define T30_NSF_CONTROL_BIT_DIS_DTC_INFO    0x0020
+#define T30_NSF_CONTROL_BIT_PROGRESS_REPORT 0x0040
 
 #define T30_NSF_ELEMENT_NSF_FIF             0x00
 #define T30_NSF_ELEMENT_NSC_FIF             0x01
@@ -981,6 +1024,15 @@ struct t30_info_s {
 #define T30_NSF_ELEMENT_FAX_DEVICE          0x04
 #define T30_NSF_ELEMENT_DIS_FIF             0x05
 #define T30_NSF_ELEMENT_DTC_FIF             0x06
+#define T30_NSF_ELEMENT_DCS_FIF_REPORT      0x07
+#define T30_NSF_ELEMENT_TRAIN_CHECK_REPORT  0x08
+#define T30_NSF_ELEMENT_CFR_REPORT          0x09
+#define T30_NSF_ELEMENT_PAGE_QUALITY_REPORT 0x0a
+#define T30_NSF_ELEMENT_MCF_REPORT          0x0b
+#define T30_NSF_ELEMENT_PARTIAL_PAGE_REPORT 0x0c
+#define T30_NSF_ELEMENT_PPR_REPORT          0x0d
+#define T30_NSF_ELEMENT_TIMEOUT_REPORT      0x0e
+#define T30_NSF_ELEMENT_RESULT_REPORT       0x0f
 
 
 /*------------------------------------------------------------------*/
@@ -1050,6 +1102,7 @@ struct async_s {
 #define ESC_VSWITCH      0x800|VSWITCHIE    /* Escape VSwitch       */
 #define ESC_CAI          0x800|CAI          /* Escape CAI           */
 #define ESC_SMSG         0x800|SMSG         /* Escape SegmentedMsg  */
+#define ESC_OLINE        0x800|OLINE        /* Escape Originating Line ANI II */
 #define CST              0x14               /* Call State i.e.      */
 #define PI               0x1E               /* Progress Indicator   */
 #define NI               0x27               /* Notification Ind     */
@@ -1163,12 +1216,19 @@ struct async_s {
 #define FAX_DISCONNECT_INFO_COMMAND_2   55
 #define AUDIO_COMMAND_1                 56
 #define AUDIO_COMMAND_2                 57
-#define RESET_B3_N_RESET_COMMAND_1      58
-#define RTP_COMMAND_1                   59
-#define RTP_COMMAND_2                   60
-#define T38_COMMAND_1                   61
-#define T38_COMMAND_2                   62
-#define STD_INTERNAL_COMMAND_COUNT      63
+#define SIG_TX_COMMAND_1                58
+#define SIG_TX_COMMAND_2                59
+#define SIG_TX_COMMAND_3                60
+#define SIG_TX_COMMAND_4                61
+#define SIG_TX_COMMAND_5                62
+#define SIG_TX_COMMAND_6                63
+#define SIG_TX_COMMAND_7                64
+#define RESET_B3_N_RESET_COMMAND_1      65
+#define RTP_COMMAND_1                   66
+#define RTP_COMMAND_2                   67
+#define T38_COMMAND_1                   68
+#define T38_COMMAND_2                   69
+#define STD_INTERNAL_COMMAND_COUNT      70
 
 #define UID              0x2d               /* User Id for Mgmt      */
 
@@ -1178,6 +1238,7 @@ struct async_s {
 #define CALL_DIR_ANSWER          0x08       /*   state of B-Channel Operation */
 #define CALL_DIR_FORCE_OUTG_NL   0x10       /* for RESET_B3 reconnect, after DISC_B3... */
 #define CALL_DIR_OUTG_NL         0x20       /* direction of NL establishment  */
+#define CALL_DIR_MONITOR         0x80       /* B-Channel operation monitoring */
 
 #define AWAITING_MANUF_CON 0x80             /* command spoofing flags */
 #define SPOOFING_REQUIRED  0xff
@@ -1329,6 +1390,8 @@ struct async_s {
 #define DSP_ENABLE_DTMF_FRAME_FLUSHING          0x0020
 #define DSP_ENABLE_HOOK_DETECTION               0x0040
 #define DSP_ENABLE_DTMF_SUPPRESSION             0x0080
+#define DSP_ENABLE_R2FWD_DETECTION              0x0100
+#define DSP_ENABLE_R2BWD_DETECTION              0x0200
 
 #define UDATA_REQUEST_MIXER_TAP_DATA        27
 #define UDATA_INDICATION_MIXER_TAP_DATA     27
@@ -1342,15 +1405,6 @@ struct async_s {
 /* Mixer interface to IDI                                           */
 /*------------------------------------------------------------------*/
 
-
-#define LI2_FLAG_BCONNECT_A_B  0x01000000
-#define LI2_FLAG_BCONNECT_B_A  0x02000000
-#define LI2_FLAG_MONITOR_A_B   0x04000000
-#define LI2_FLAG_MONITOR_B_A   0x08000000
-#define LI2_FLAG_MIX_A_B       0x10000000
-#define LI2_FLAG_MIX_B_A       0x20000000
-#define LI2_FLAG_PCCONNECT_A_B 0x40000000
-#define LI2_FLAG_PCCONNECT_B_A 0x80000000
 
 #define MIXER_BCHANNELS_BRI    2
 #define MIXER_IC_CHANNELS_BRI  MIXER_BCHANNELS_BRI
@@ -1395,6 +1449,7 @@ extern word li_total_channels;
 #define LI_NOTIFY_UPDATE_ENQUEUE   2
 
 #define LI_CHANNEL_INVOLVED        0x01
+#define LI_CHANNEL_USED_SOURCE_B   0x02
 #define LI_CHANNEL_TX_DATA         0x04
 #define LI_CHANNEL_RX_DATA         0x08
 #define LI_CHANNEL_CONFERENCE      0x10
@@ -1408,6 +1463,7 @@ extern word li_total_channels;
 #define LI_CHFLAG_NULL_PLCI        0x08
 #define LI_CHFLAG_NOT_SEND_X       0x10
 #define LI_CHFLAG_NOT_RECEIVE_X    0x20
+#define LI_CHFLAG_LINE_SIDE        0x80
 
 #define LI_FLAG_INTERCONNECT       0x01
 #define LI_FLAG_MONITOR            0x02
@@ -1431,7 +1487,8 @@ extern word li_total_channels;
 #define LI_PLCI_B_LAST_FLAG        ((dword) 0x80000000L)
 #define LI_PLCI_B_DISC_FLAG        ((dword) 0x40000000L)
 #define LI_PLCI_B_SKIP_FLAG        ((dword) 0x20000000L)
-#define LI_PLCI_B_FLAG_MASK        ((dword) 0xe0000000L)
+#define LI_PLCI_B_ERROR_FLAG       ((dword) 0x10000000L)
+#define LI_PLCI_B_FLAG_MASK        ((dword) 0xf0000000L)
 
 #define UDATA_REQUEST_SET_MIXER_COEFS_BRI       24
 #define UDATA_REQUEST_SET_MIXER_COEFS_PRI_SYNC  25
@@ -1521,6 +1578,13 @@ extern word li_total_channels;
 
 
 /*------------------------------------------------------------------*/
+/* B-channel operation monitoring                                   */
+/*------------------------------------------------------------------*/
+
+#define PRIV_BCHANNEL_OPERATION_MONITOR  255
+
+
+/*------------------------------------------------------------------*/
 /* RTP interface to IDI                                             */
 /*------------------------------------------------------------------*/
 
@@ -1550,7 +1614,7 @@ extern word li_total_channels;
 #define RTP_PRIM_PAYLOAD_PCMA_8000     8
 #define RTP_PRIM_PAYLOAD_G722_16000    9
 #define RTP_PRIM_PAYLOAD_QCELP_8000    12
-#define RTP_PRIM_PAYLOAD_G728_8000     14
+#define RTP_PRIM_PAYLOAD_G728_8000     15
 #define RTP_PRIM_PAYLOAD_G729_8000     18
 #define RTP_PRIM_PAYLOAD_RTAUDIO_8000  26
 #define RTP_PRIM_PAYLOAD_ILBC_8000     27
@@ -1752,6 +1816,14 @@ extern word li_total_channels;
 /*------------------------------------------------------------------*/
 
 
+#define PRIV_SELECTOR_DTMF_ONDATA  250
+
+#define DTMF_LISTEN_R2BWD_START          0xeb
+#define DTMF_LISTEN_R2BWD_STOP           0xec
+#define DTMF_SEND_R2BWD                  0xed
+#define DTMF_LISTEN_R2FWD_START          0xee
+#define DTMF_LISTEN_R2FWD_STOP           0xef
+#define DTMF_SEND_R2FWD                  0xf0
 #define DTMF_LISTEN_HOOK_START           0xf1
 #define DTMF_LISTEN_HOOK_STOP            0xf2
 #define DTMF_SEND_HOOK                   0xf3
@@ -1866,6 +1938,10 @@ extern word li_total_channels;
 #define DTMF_SIGNAL_SIT_VACANT_CIRCUIT          (DTMF_TONE_DIGIT_BASE + 37)
 #define DTMF_SIGNAL_SIT_REORDER                 (DTMF_TONE_DIGIT_BASE + 38)
 #define DTMF_SIGNAL_SIT_NO_CIRCUIT_FOUND        (DTMF_TONE_DIGIT_BASE + 39)
+#define DTMF_SIGNAL_SS5_F1                      (DTMF_TONE_DIGIT_BASE + 59)
+#define DTMF_SIGNAL_SS5_F2                      (DTMF_TONE_DIGIT_BASE + 60)
+#define DTMF_SIGNAL_SS5_F1_F2                   (DTMF_TONE_DIGIT_BASE + 61)
+#define DTMF_SIGNAL_HOLD_MUSIC                  (DTMF_TONE_DIGIT_BASE + 62)
 #define DTMF_SIGNAL_INTERCEPT_TONE              (DTMF_TONE_DIGIT_BASE + 63)
 
 #define DTMF_SIGNAL_MODEM_CALLING_TONE          (DTMF_TONE_DIGIT_BASE + 64)
@@ -1898,7 +1974,7 @@ extern word li_total_channels;
 #define DTMF_SIGNAL_HOOK_STATE_OFF_HOOK         (DTMF_TONE_DIGIT_BASE + 126)
 #define DTMF_SIGNAL_HOOK_STATE_ON_HOOK          (DTMF_TONE_DIGIT_BASE + 127)
 
-#define DTMF_SUPPRESSION_ACTIVE_FLAG   0x0100
+#define DTMF_SUPPRESSION_ACTIVE_FLAG   0x0400
 #define DTMF_PRIV_EDGE_ACTIVE_FLAG     0x0008
 #define DTMF_PRIV_LISTEN_ACTIVE_FLAG   0x0010
 #define DTMF_PRIV_SEND_FLAG            0x0010
@@ -1910,6 +1986,10 @@ extern word li_total_channels;
 #define DTMF_MF_SEND_FLAG              0x0080
 #define DTMF_HOOK_LISTEN_ACTIVE_FLAG   0x0004
 #define DTMF_HOOK_SEND_FLAG            0x0004
+#define DTMF_R2FWD_LISTEN_ACTIVE_FLAG  0x0100
+#define DTMF_R2FWD_SEND_FLAG           0x0100
+#define DTMF_R2BWD_LISTEN_ACTIVE_FLAG  0x0200
+#define DTMF_R2BWD_SEND_FLAG           0x0200
 
 #define PRIVATE_DTMF_TONE              5
 
@@ -2126,6 +2206,79 @@ extern word li_total_channels;
 
 
 
+
+/*------------------------------------------------------------------*/
+/* SIG transmit                                                     */
+/*------------------------------------------------------------------*/
+#define DSP_CTRL_SIG_TRANSMIT                   0x08
+/*
+FTY parameters:
+  <byte> message length
+  <byte> DSP_CTRL_SIG_TRANSMIT
+  <byte> transmit signal type
+  DSP_CTRL_SIG_TX_TONE:
+    <byte> signal tone code (defines DSP_SIGNAL_...)
+    <byte> signal protocol (defines DSP_SIGNAL_PROTOCOL_...)
+  DSP_CTRL_SIG_TX_DIGITS:
+    <byte> steady digit (defines DSP_DTMF_.../DSP_MF_..., 0x80 for none/off)
+    <byte>...<byte> digits (defines DSP_DTMF_.../DSP_MF_...)
+  DSP_CTRL_SIG_TX_SET_DETECTOR:
+    <word> detector flags
+  DSP_CTRL_SIG_TX_SET_GENERATOR:
+    <word> generator flags
+  DSP_CTRL_SIG_TX_TASK_CONTROL:
+    <word> control flags
+  DSP_CTRL_SIG_TX_SET_MODULATION:
+    <word> options
+    <word> rx norm low
+    <word> rx norm high
+  DSP_CTRL_SIG_TX_DATA:
+    <byte> norm
+    <byte>...<byte> data
+  DSP_CTRL_SIG_TX_PEER_HANGUP:
+*/
+
+#define DSP_CTRL_SIG_TX_TONE                 0
+#define DSP_CTRL_SIG_TX_DIGITS               1
+#define DSP_CTRL_SIG_TX_SET_DETECTOR         2
+#define DSP_CTRL_SIG_TX_SET_GENERATOR        3
+#define DSP_CTRL_SIG_TX_TASK_CONTROL         4
+#define DSP_CTRL_SIG_TX_SET_MODULATION       5
+#define DSP_CTRL_SIG_TX_DATA                 6
+#define DSP_CTRL_SIG_TX_PEER_HANGUP          7
+
+#define DSP_CTRL_SIG_ENABLE_DTMF_DETECTION   0x0001
+#define DSP_CTRL_SIG_ENABLE_MF_DETECTION     0x0004
+#define DSP_CTRL_SIG_ENABLE_R2FWD_DETECTION  0x0008
+#define DSP_CTRL_SIG_ENABLE_R2BWD_DETECTION  0x0010
+#define DSP_CTRL_SIG_ENABLE_TONE_DETECTION   0x0020
+#define DSP_CTRL_SIG_ENABLE_HOOK_DETECTION   0x0040
+#define DSP_CTRL_SIG_ENABLE_EXTD_DETECTION   0x0080
+
+#define DSP_CTRL_SIG_ENABLE_GENERATION       0x0001
+#define DSP_CTRL_SIG_STOP_GENERATION_ON_DATA 0x0002
+#define DSP_CTRL_SIG_FEED_BACK_GENERATOR     0x0004
+#define DSP_CTRL_SIG_MUTE_TRANSMIT_DATA      0x0008
+
+#define DSP_CTRL_SIG_INHIBIT_L1_ACTIVE       0x0001
+
+#define DSP_CTRL_SIG_MODULATION_ENABLE       0x0001
+#define DSP_CTRL_SIG_CARRIER_ENABLE          0x0002
+
+#define DSP_CTRL_SIG_NORM_LOW_NONE           0x0000
+#define DSP_CTRL_SIG_NORM_LOW_V23_OFF_HOOK   0x0002
+#define DSP_CTRL_SIG_NORM_LOW_V23_ON_HOOK    0x0004
+#define DSP_CTRL_SIG_NORM_LOW_BELL202_CID    0x0008
+
+#define DSP_CTRL_SIG_DATA_V23_OFF_HOOK       1
+#define DSP_CTRL_SIG_DATA_V23_ON_HOOK        2
+#define DSP_CTRL_SIG_DATA_BELL202_CID        3
+
+/*------------------------------------------------------------------*/
+/* Stream control                                                   */
+/*------------------------------------------------------------------*/
+#define DSP_CTRL_STREAM_COMMAND                 0x0e
+
 /*------------------------------------------------------------------*/
 /* Advanced voice                                                   */
 /*------------------------------------------------------------------*/
@@ -2161,6 +2314,7 @@ extern word li_total_channels;
 #define ADJUST_B_MODE_USER_CONNECT  0x0020
 #define ADJUST_B_MODE_CONNECT       0x0040
 #define ADJUST_B_MODE_RESTORE       0x0080
+#define ADJUST_B_MODE_LI_INVOLVED   0x0100
 
 #define ADJUST_B_START                     0
 #define ADJUST_B_SAVE_MEASURE_1            1
@@ -2170,42 +2324,50 @@ extern word li_total_channels;
 #define ADJUST_B_REMOVE_L23_2              5
 #define ADJUST_B_SAVE_EC_1                 6
 #define ADJUST_B_SAVE_DTMF_PARAMETER_1     7
-#define ADJUST_B_SAVE_AUDIO_PARAMETER_1    8
-#define ADJUST_B_SAVE_PITCH_PARAMETER_1    9
-#define ADJUST_B_SAVE_VOICE_1              10
-#define ADJUST_B_SWITCH_L1_1               11
-#define ADJUST_B_SWITCH_L1_2               12
-#define ADJUST_B_UNSWITCH_L1_1             13
-#define ADJUST_B_UNSWITCH_L1_2             14
-#define ADJUST_B_RESTORE_VOICE_1           15
-#define ADJUST_B_RESTORE_VOICE_2           16
-#define ADJUST_B_RESTORE_PITCH_PARAMETER_1 17
-#define ADJUST_B_RESTORE_PITCH_PARAMETER_2 18
-#define ADJUST_B_RESTORE_AUDIO_PARAMETER_1 19
-#define ADJUST_B_RESTORE_AUDIO_PARAMETER_2 20
-#define ADJUST_B_RESTORE_DTMF_PARAMETER_1  21
-#define ADJUST_B_RESTORE_DTMF_PARAMETER_2  22
-#define ADJUST_B_RESTORE_EC_1              23
-#define ADJUST_B_RESTORE_EC_2              24
-#define ADJUST_B_ASSIGN_L23_1              25
-#define ADJUST_B_ASSIGN_L23_2              26
-#define ADJUST_B_CONNECT_1                 27
-#define ADJUST_B_CONNECT_2                 28
-#define ADJUST_B_CONNECT_3                 29
-#define ADJUST_B_CONNECT_4                 30
-#define ADJUST_B_CONNECT_5                 31
-#define ADJUST_B_RESTORE_DTMF_1            32
-#define ADJUST_B_RESTORE_DTMF_2            33
-#define ADJUST_B_RESTORE_MIXER_1           34
-#define ADJUST_B_RESTORE_MIXER_2           35
-#define ADJUST_B_RESTORE_MIXER_3           36
-#define ADJUST_B_RESTORE_MIXER_4           37
-#define ADJUST_B_RESTORE_MIXER_5           38
-#define ADJUST_B_RESTORE_MIXER_6           39
-#define ADJUST_B_RESTORE_MIXER_7           40
-#define ADJUST_B_RESTORE_MEASURE_1         41
-#define ADJUST_B_RESTORE_MEASURE_2         42
-#define ADJUST_B_END                       43
+#define ADJUST_B_SAVE_SIG_TX_1             8
+#define ADJUST_B_SAVE_AUDIO_PARAMETER_1    9
+#define ADJUST_B_SAVE_PITCH_PARAMETER_1    10
+#define ADJUST_B_SAVE_VOICE_1              11
+#define ADJUST_B_SWITCH_L1_1               12
+#define ADJUST_B_SWITCH_L1_2               13
+#define ADJUST_B_UNSWITCH_L1_1             14
+#define ADJUST_B_UNSWITCH_L1_2             15
+#define ADJUST_B_RESTORE_VOICE_1           16
+#define ADJUST_B_RESTORE_VOICE_2           17
+#define ADJUST_B_RESTORE_PITCH_PARAMETER_1 18
+#define ADJUST_B_RESTORE_PITCH_PARAMETER_2 19
+#define ADJUST_B_RESTORE_AUDIO_PARAMETER_1 20
+#define ADJUST_B_RESTORE_AUDIO_PARAMETER_2 21
+#define ADJUST_B_RESTORE_SIG_TX_1          22
+#define ADJUST_B_RESTORE_SIG_TX_2          23
+#define ADJUST_B_RESTORE_SIG_TX_3          24
+#define ADJUST_B_RESTORE_SIG_TX_4          25
+#define ADJUST_B_RESTORE_SIG_TX_5          26
+#define ADJUST_B_RESTORE_SIG_TX_6          27
+#define ADJUST_B_RESTORE_SIG_TX_7          28
+#define ADJUST_B_RESTORE_DTMF_PARAMETER_1  29
+#define ADJUST_B_RESTORE_DTMF_PARAMETER_2  30
+#define ADJUST_B_RESTORE_EC_1              31
+#define ADJUST_B_RESTORE_EC_2              32
+#define ADJUST_B_ASSIGN_L23_1              33
+#define ADJUST_B_ASSIGN_L23_2              34
+#define ADJUST_B_CONNECT_1                 35
+#define ADJUST_B_CONNECT_2                 36
+#define ADJUST_B_CONNECT_3                 37
+#define ADJUST_B_CONNECT_4                 38
+#define ADJUST_B_CONNECT_5                 39
+#define ADJUST_B_RESTORE_DTMF_1            40
+#define ADJUST_B_RESTORE_DTMF_2            41
+#define ADJUST_B_RESTORE_MIXER_1           42
+#define ADJUST_B_RESTORE_MIXER_2           43
+#define ADJUST_B_RESTORE_MIXER_3           44
+#define ADJUST_B_RESTORE_MIXER_4           45
+#define ADJUST_B_RESTORE_MIXER_5           46
+#define ADJUST_B_RESTORE_MIXER_6           47
+#define ADJUST_B_RESTORE_MIXER_7           48
+#define ADJUST_B_RESTORE_MEASURE_1         49
+#define ADJUST_B_RESTORE_MEASURE_2         50
+#define ADJUST_B_END                       51
 
 /*------------------------------------------------------------------*/
 /* XON Protocol def's                                               */

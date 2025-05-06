@@ -1,0 +1,206 @@
+#! /bin/bash
+# ----------------------------------------------------------------------
+#  CONFIGURATION SCRIPT FOR DIALOGIC DIVA ISDN ADAPTERS
+#
+#  Copyright 1993-2011 by Dialogic(R) Corporation
+# ----------------------------------------------------------------------
+
+#
+# Always use own dialog utility
+#
+dialog="/usr/lib/divas/dialog"
+help=""
+hlp_base="/usr/lib/divas/help.txt"
+if [ ! -f ${hlp_base} ]
+then
+	echo > ${hlp_base}
+fi
+
+fold="fold -s -w 67"
+echo "Test" | ${fold} >/dev/null 2>&1
+if [ $(($?)) -ne 0 ]
+then
+  fold="sed -nl 67 l - "
+  echo "Test" | ${fold} >/dev/null 2>&1
+  if [ $(($?)) -ne 0 ]
+  then
+    fold='echo Help does not work, please install fold!'
+  fi
+fi
+
+set_help_id()
+{
+	ident="$1"
+	help=""
+
+	sed -ne "/<$ident>/,/<$ident\/>/p" ${hlp_base} | \
+    sed -e "/<$ident>/d" -e "/<$ident\/>/d" - | \
+	  sed -e "s/<pre>//g;s/<\/pre>//g" - | \
+	  sed -e "s/&lt;/</g;s/&gt;/>/g" - | \
+	  sed -e "s/<b>//g;s/<\/b>//g" - | \
+	  sed -e "s/&reg;/(R)/g" - | \
+	  sed -e "s/&trade;/(TM)/g" - | \
+	  sed -e "s/<[a-zA-Z\/][^>]*>//g" - | ${fold} > ${hlp}
+	if [ $(($?)) -eq 0 ]
+	then
+		if [ -s ${hlp} ]
+		then
+			help="--helptag ${hlp}"
+		fi
+	fi
+}
+
+# ----------------------------------------------------------------------
+common_helpers_diva_base="/usr/lib/opendiva"
+common_helpers_divas_dir="${common_helpers_diva_base}/divas"
+common_helpers_tmp_dir="/tmp/diva"
+
+
+common_helpers_check_tmp_dir()
+{
+  if [ ! -d "${common_helpers_tmp_dir}" ]
+  then
+    mkdir "${common_helpers_tmp_dir}"
+  fi
+}
+
+
+diva_helper_irqbalance()
+{
+	local i=0
+	local tmp=0
+
+	if [ -f "/etc/sysconfig/irqbalance" ]
+	then
+		if [ ! -f "/etc/sysconfig/irqbalance.saved.by.diva" ]
+		then
+			mv /etc/sysconfig/irqbalance /etc/sysconfig/irqbalance.saved.by.diva > /dev/null 2>&1
+		fi
+		echo 'ONESHOT=yes' > /etc/sysconfig/irqbalance 2>&1
+	fi
+	tmp=$(pidof irqbalance)
+	for i in $tmp
+	do
+		kill $((i))
+	done
+}
+
+common_helpers_wait_process_end()
+{
+  stop_cnt=20
+  stop_delay=1
+  while [ $(($stop_cnt)) -gt 0 ]
+  do
+    pid_list=$(pidof -x $1 2>/dev/null)
+    for pid in $pid_list
+    do
+      if [ $((pid)) -ne $((0)) ]
+      then
+        kill $((pid)) > /dev/null 2>&1
+      fi
+    done
+    if [ -z "$(pidof -x $1 2>/dev/null)" ]
+    then
+      return 0
+    fi
+    sleep $stop_delay
+    stop_cnt=$(($stop_cnt-1))
+  done
+  pid_list=$(pidof -x $1 2>/dev/null)
+  for pid in $pid_list
+  do
+    if [ $((pid)) -ne $((0)) ]
+    then
+      kill -s SIGKILL $((pid)) > /dev/null 2>&1
+    fi
+  done
+  if [ -z "$(pidof -x $1 2>/dev/null)" ]
+  then
+    return 0
+  fi
+  return 1
+}  
+
+#
+# Unload Diva drivers if wrong version is in use
+#
+common_helpers_unload_if_wrong_version()
+{
+	cat /proc/devices 2>/dev/null | grep DivasDIDD > /dev/null 2>&1
+	if [ $(($?)) -eq 0 ]
+	then
+		return 0
+	fi
+	if [ -f "/proc/net/isdn/eicon/divadidd" ]
+	then
+		if [ ! -z "$(cat /proc/net/isdn/eicon/divadidd 2>/dev/null | grep cfglib 2>/dev/null | sed -e 's/^.* : //' - 2>/dev/null)" ]
+		then
+			return 0
+		fi
+	fi
+	lsmod 2>/dev/null | grep divadidd > /dev/null 2>&1
+	if [ $(($?)) -ne 0 ]
+	then
+		return 0
+	fi
+	rmmod divacapi > /dev/null 2>&1
+	rmmod diva_mnt > /dev/null 2>&1
+	rmmod diva_idi > /dev/null 2>&1
+	rmmod divas > /dev/null 2>&1
+	rmmod divadidd > /dev/null 2>&1
+	lsmod 2>/dev/null | grep divadidd > /dev/null 2>&1
+	if [ $(($?)) -ne 0 ]
+	then
+		return 0
+	fi
+
+	return 1
+}
+
+#
+# 1 - file
+# 2 - key
+# 3 - new value
+#
+common_helpers_replace_key_value()
+{
+	local file="$1"
+	local key="$2"
+	local value="$3"
+
+	sed -e "/^ *${key}=/d;" "$file" > /tmp/helper.txt.$$
+	echo "${key}=\"$value\"" >> /tmp/helper.txt.$$
+	cp -f /tmp/helper.txt.$$ "$file"
+	rm -f /tmp/helper.txt.$$
+}
+
+#
+# 1 - shell
+# 2 - script
+#
+common_helpers_check_script_active()
+{
+	local i=""
+
+	for i in $(pidof $1)
+	do
+		grep "$2" /proc/$i/cmdline > /dev/null 2>&1
+		if [ $(($?)) -eq 0 ]
+		then
+			return 0
+		fi
+	done
+
+	return 1
+}
+
+#
+# 1 - name
+#
+common_helpers_check_process_active()
+{
+	[ ! -z "$(pidof $1)" ] && return 0
+
+	return 1
+}
+

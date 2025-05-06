@@ -1,16 +1,32 @@
-/* $Id: platform.h,v 1.35 2003/12/05 18:45:05 armin Exp $
- *
- * platform.h
- * 
- *
- * Copyright 2000-2009  by Armin Schindler (armin@melware.de)
- * Copyright 2000-2009  Cytronics & Melware (info@melware.de)
- * Copyright 2000-2007  Dialogic
- *
- * This software may be used and distributed according to the terms
- * of the GNU General Public License, incorporated herein by reference.
- */
 
+/*
+ *
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
+ *
+  This source file is supplied for the use with
+  Sangoma (formerly Dialogic) range of Adapters.
+ *
+  File Revision :    2.1
+ *
+  This program is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; either version 2, or (at your option)
+  any later version.
+ *
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY OF ANY KIND WHATSOEVER INCLUDING ANY
+  implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+  See the GNU General Public License for more details.
+ *
+  You should have received a copy of the GNU General Public License
+  along with this program; if not, write to the Free Software
+  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *
+ */
 
 #ifndef	__PLATFORM_H__
 #define	__PLATFORM_H__
@@ -28,8 +44,8 @@
 #define DIVA_BUILD "local"
 #endif
 
-#include <linux/module.h>
 #include <linux/version.h>
+#include <linux/module.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -133,8 +149,10 @@ typedef const byte* pcbyte;
 
 #define DIVAS_CONTAINING_RECORD(address, type, field) \
         ((type *)((char*)(address) - (char*)(&((type *)0)->field)))
-#define DIVAS_OFFSET_OF(type, field) (offsetof(type, field))
+#define DIVAS_OFFSET_OF(type, field) ((long)&(((type*)0)->field))
 #define DIVAS_SIZE_OF(type, field) (sizeof(((type*)0)->field))
+#define DIVAS_CONTAINING_RECORD_SAFE(address, type, field) \
+	(((address) != NULL) ? DIVAS_CONTAINING_RECORD(address,type,field) : NULL)
 
 extern int sprintf(char *, const char*, ...);
 
@@ -168,6 +186,9 @@ void diva_log_info(unsigned char *, ...);
 */
 void diva_xdi_didd_register_adapter (int card);
 void diva_xdi_didd_remove_adapter (int card);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,16,0)
+void diva_xdi_didd_unmap_clock_data_addr (int card, dword clock_data_bus_addr, void *pci_dev);
+#endif
 
 /*
 ** memory allocation
@@ -365,6 +386,8 @@ diva_os_atomic_decrement(diva_os_atomic_t* pv)
 
 #define DIVA_IDI_RX_DMA 1
 
+#define DIVA_STREAMING_USER_MODE_IFC 1
+
 #if !defined(__i386__)
 #define READ_WORD(w) ( ((byte *)(w))[0] + \
                       (((byte *)(w))[1]<<8) )
@@ -465,5 +488,25 @@ static __inline__ void diva_os_diva_um_proxy_user_request (void (*fn)(struct _di
 static __inline__ int diva_os_save_file (dword location, const char* name, const void* data, dword data_length) {
   return (-1);
 }
+
+int diva_os_get_nr_li_exports (void* device);
+const unsigned int* diva_os_get_hotplug_map (int* nr, int* ignoreSn);
+
+void diva_os_write_system_log_message (int type, const char* message);
+
+#if defined(LINUX_VERSION_CODE) /* Included in OS abstraction layer { */
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,37)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6,4,0) || \
+	(defined(__RHEL_9_5_EXTRAVERSION__) && LINUX_VERSION_CODE >= KERNEL_VERSION(5,14,0) && \
+	__RHEL_9_5_EXTRAVERSION__ >= 503)
+#define DECLARE_MUTEX(__x__) DEFINE_SEMAPHORE((__x__),1)
+#else
+#define DECLARE_MUTEX(__x__) DEFINE_SEMAPHORE((__x__))
+#endif
+#define init_MUTEX(__x__)    sema_init((__x__),1)
+#endif
+
+#endif /* } */
 
 #endif	/* __PLATFORM_H__ */

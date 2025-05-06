@@ -1,29 +1,33 @@
-/*------------------------------------------------------------------------------
+
+/*
  *
- * (c) COPYRIGHT 1999-2007       Dialogic Corporation
+  Copyright (c) Sangoma Technologies, 2018-2022
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
  *
- * ALL RIGHTS RESERVED
+  This source file is supplied for the use with
+  Sangoma (formerly Dialogic) range of Adapters.
  *
- * This software is the property of Dialogic Corporation and/or its
- * subsidiaries ("Dialogic"). This copyright notice may not be removed,
- * modified or obliterated without the prior written permission of
- * Dialogic.
+  File Revision :    2.1
  *
- * This software is a Trade Secret of Dialogic and may not be
- * copied, transmitted, provided to or otherwise made available to any company,
- * corporation or other person or entity without written permission of
- * Dialogic.
+  This program is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; either version 2, or (at your option)
+  any later version.
  *
- * No right, title, ownership or other interest in the software is hereby
- * granted or transferred. The information contained herein is subject
- * to change without notice and should not be construed as a commitment of
- * Dialogic.
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY OF ANY KIND WHATSOEVER INCLUDING ANY
+  implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+  See the GNU General Public License for more details.
  *
- *------------------------------------------------------------------------------*/
-/* --------------------------------------------------------------------------
-		This file wraps arpoud classic kernel mode procedure to be able
-		to call same code in user mode
-	 -------------------------------------------------------------------------- */
+  You should have received a copy of the GNU General Public License
+  along with this program; if not, write to the Free Software
+  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *
+ */
+
 #include "platform.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -37,7 +41,10 @@
 #include <cardtype.h>
 #include <dlist.h>
 
+#include <xdi_msg.h>
+
 #include <s_analog.c>
+PISDN_ADAPTER IoAdapters[MAX_ADAPTER];
 extern int card_ordinal;
 extern int card_number;
 
@@ -70,10 +77,24 @@ divas_analog_create_image (int instances,
 	PISDN_ADAPTER IoAdapter = malloc (sizeof(*IoAdapter));
 	dword card_bar = cfg_get_card_bar (2), code, FileLength;
 	byte *File;
+	int vidi_init_ok = 0;
+	dword vidi_mode;
 
 	if (!IoAdapter) {
 		return (-1);
 	}
+
+	vidi_mode = diva_cfg_get_vidi_mode ();
+
+	DBG_LOG(("vidi mode: %u", vidi_mode))
+
+	if (diva_cfg_get_set_vidi_state (vidi_mode) != 0) {
+		vidi_mode = 0;
+		DBG_ERR(("failed to update vidi mode state"))
+	}
+
+	DBG_LOG(("vidi state: '%s'", vidi_mode != 0 ? "on" : "off"))
+
 	memset (IoAdapter, 0x00, sizeof(*IoAdapter));
 
 	diva_set_named_value ("p0", (dword)protocol_fd);
@@ -82,6 +103,7 @@ divas_analog_create_image (int instances,
 	diva_set_named_value ("fpga_code",	(dword)fpga_fd);
 
 	IoAdapter->Properties = CardProperties[card_ordinal];
+	IoAdapter->host_vidi.vidi_active = vidi_mode != 0;
 	IoAdapter->Channels   = IoAdapter->Properties.Channels;
 	IoAdapter->protocol_id = 34;
 	IoAdapter->cardType = (word)card_ordinal;
@@ -100,6 +122,17 @@ divas_analog_create_image (int instances,
 	}
 	if (File) {
 		xdiFreeFile (File) ;
+	}
+
+	if (vidi_mode != 0) {
+		diva_xdi_um_cfg_cmd_data_init_vidi_t host_vidi;
+
+		memset (&host_vidi, 0x00, sizeof(host_vidi));
+		if (diva_cfg_get_vidi_info_struct (0, &host_vidi) != 0) {
+			DBG_ERR(("A(%d) failed to initialize vidi", card_number))
+			vidi_init_ok = -1;
+		}
+		diva_set_vidi_values (IoAdapter, &host_vidi);
 	}
 
 	diva_configure_analog_protocol (IoAdapter);

@@ -1,11 +1,16 @@
+
 /*
  *
-  Copyright (c) Dialogic, 2008.
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
  *
   This source file is supplied for the use with
-  Dialogic range of DIVA Server Adapters.
+  Sangoma (formerly Dialogic) range of Adapters.
  *
-  Dialogic Revision :    2.1
+  File Revision :    2.1
  *
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -22,6 +27,7 @@
   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  */
+
 #ifndef __DIVA_XDI_DSRV_ANALOG_INC__
 #define __DIVA_XDI_DSRV_ANALOG_INC__
 /*
@@ -40,7 +46,10 @@ int analog_FPGA_download (PISDN_ADAPTER IoAdapter);
  || ((__x__)->cardType == CARDTYPE_DIVASRV_ANALOG_4P_PCIE) \
  || ((__x__)->cardType == CARDTYPE_DIVASRV_V_ANALOG_4P_PCIE) \
  || ((__x__)->cardType == CARDTYPE_DIVASRV_ANALOG_8P_PCIE) \
- || ((__x__)->cardType == CARDTYPE_DIVASRV_V_ANALOG_8P_PCIE))
+ || ((__x__)->cardType == CARDTYPE_DIVASRV_V_ANALOG_8P_PCIE) \
+ || ((__x__)->cardType == CARDTYPE_DIVASRV_V_ANALOG_2P_PCIE_HYPERCOM) \
+ || ((__x__)->cardType == CARDTYPE_DIVASRV_V_ANALOG_4P_PCIE_HYPERCOM) \
+ || ((__x__)->cardType == CARDTYPE_DIVASRV_V_ANALOG_8P_PCIE_HYPERCOM))
 
 #define DIVA_ANALOG_PCIE_REAL_SDRAM_SIZE (64*1024*1024)
 

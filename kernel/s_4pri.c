@@ -1,11 +1,16 @@
+
 /*
  *
-  Copyright (c) Dialogic, 2007.
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
  *
   This source file is supplied for the use with
-  Dialogic range of DIVA Server Adapters.
+  Sangoma (formerly Dialogic) range of Adapters.
  *
-  Dialogic File Revision :    2.1
+  File Revision :    2.1
  *
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -22,6 +27,7 @@
   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  */
+
 #include "platform.h"
 #include "di_defs.h"
 #include "pc.h"
@@ -43,6 +49,8 @@
 
 #define DIVA_MEMORY_TEST_PATTERN "Hallo World!\0"
 #define MAX_XLOG_SIZE  (64 * 1024)
+
+extern int diva_xdi_disable_plx_reset;
 
 static dword diva_4pri_detect_dsps (PISDN_ADAPTER IoAdapter);
 static int load_4pri_hardware (PISDN_ADAPTER IoAdapter);
@@ -85,11 +93,10 @@ int pri_4pri_FPGA_download (PISDN_ADAPTER IoAdapter) {
 	dword          code = 0, FileLength;
 	volatile word *addr = (volatile word*)IoAdapter->prom ;
 	word           val, baseval = FPGA_CS | FPGA_PROG ;
-	char* name   = "ds4pri_10.bit";
 	volatile dword* led_ctrl = (dword*)&IoAdapter->ctlReg[DIVA_4PRI_LED_CTRL_REG_OFFSET];
 	volatile dword* cpu_reset_ctrl = (dword*)&IoAdapter->ctlReg[DIVA_4PRI_RESET_REG_OFFSET];
 
-	if (!(File = (byte *)xdiLoadFile(name, &FileLength, 0))) {
+	if (!(File = (byte *)xdiLoadFile("ds4pri_10.bit", &FileLength, 0))) {
 		return (0);
 	}
 
@@ -149,35 +156,41 @@ int pri_4pri_FPGA_download (PISDN_ADAPTER IoAdapter) {
 	}
 
 	if ((IDI_PROP_SAFE(IoAdapter->cardType,HardwareFeatures) & DIVA_CARDTYPE_HARDWARE_PROPERTY_SEAVILLE) != 0) {
-    byte Bus   = (byte)IoAdapter->BusNumber;
-    byte Slot  = (byte)IoAdapter->slotNumber;
-    void* hdev = IoAdapter->hdev;
-    dword pedevcr = 0;
-    byte  MaxReadReq;
+		byte Bus   = (byte)IoAdapter->BusNumber;
+		byte Slot  = (byte)IoAdapter->slotNumber;
+		void* hdev = IoAdapter->hdev;
+		dword pedevcr = 0;
+		byte  MaxReadReq;
+		byte revID = 0;
 
-    PCIread (Bus, Slot, 0x54 /* PEDEVCR */, &pedevcr, sizeof(pedevcr), hdev);
+		PCIread (Bus, Slot, 0x54 /* PEDEVCR */, &pedevcr, sizeof(pedevcr), hdev);
 		MaxReadReq = (byte)((pedevcr >> 12) & 0x07);
 
 		if (MaxReadReq != 0x02) {
-      /*
-        A.4.15. DMA Read access on PCIe side can fail when Max
-                read request size is set to 128 or 256 bytes(J mode only)
-                Applies to:
-                  Silicon revision A0 (Intel part number D39505-001 or D44469-001)
-                  Silicon revision A1 (Intel part number D66398-001 or D66396-001)
-                  Device initializes max_read_request_size in PEDEVCR register (see A.3.1.28).
-                  PCI Express Device Control register (PEDEVCR; PCI: 0x54; Local: 0x1054 )
-                  to 512bytes after reset. On certain systems during enumeration, BIOS was writing zero
-                  to this register setting max_read_request_size to 128bytes. Device currently supports
-                  max_read_request size of 512bytes. Setting this register to 128/256 bytes can cause
-                  DMA read access to fail on the PCIe side.
-                  Driver should set max_read_request_size to 512bytes while initializing the boards.
+		  /*
+			A.4.15. DMA Read access on PCIe side can fail when Max
+					read request size is set to 128 or 256 bytes(J mode only)
+					Applies to:
+					  Silicon revision A0 (Intel part number D39505-001 or D44469-001)
+					  Silicon revision A1 (Intel part number D66398-001 or D66396-001)
+					  Device initializes max_read_request_size in PEDEVCR register (see A.3.1.28).
+					  PCI Express Device Control register (PEDEVCR; PCI: 0x54; Local: 0x1054 )
+					  to 512bytes after reset. On certain systems during enumeration, BIOS was writing zero
+					  to this register setting max_read_request_size to 128bytes. Device currently supports
+					  max_read_request size of 512bytes. Setting this register to 128/256 bytes can cause
+					  DMA read access to fail on the PCIe side.
+					  Driver should set max_read_request_size to 512bytes while initializing the boards.
 
-        */
-      DBG_LOG(("PEDEVCR:%08x, MaxReadReq:%02x", pedevcr, MaxReadReq))
-      pedevcr &= ~(0x07U << 12);
-      pedevcr |=  (0x02U << 12);
-      PCIwrite (Bus, Slot, 0x54 /* PEDEVCR */, &pedevcr, sizeof(pedevcr), hdev);
+			*/
+			DBG_LOG(("PEDEVCR:%08x, MaxReadReq:%02x", pedevcr, MaxReadReq))
+			pedevcr &= ~(0x07U << 12);
+			pedevcr |=  (0x02U << 12);
+			// Retrieve RevisionID from PCI Config Space (HERA/FPGA-Seaville Replacement is >=3 limited to 0x10)
+			PCIread(Bus, Slot, 0x08, &revID, sizeof(revID), hdev);
+			if (!((revID >=0x3) && (revID <= 0x10)))
+			{
+				PCIwrite (Bus, Slot, 0x54 /* PEDEVCR */, &pedevcr, sizeof(pedevcr), hdev);
+			}
 		}
 
 		*(volatile dword*)&IoAdapter->reset[PLX9054_MABR0] &= ~(0xffffU | (1<<16) | (1<<17) | (1<<28));
@@ -228,7 +241,8 @@ int pri_4pri_FPGA_download (PISDN_ADAPTER IoAdapter) {
 }
 
 static void reset_4pri_hardware (PISDN_ADAPTER IoAdapter) {
-	if ((IDI_PROP_SAFE(IoAdapter->cardType,HardwareFeatures) & DIVA_CARDTYPE_HARDWARE_PROPERTY_SEAVILLE) == 0) {
+	if (diva_xdi_disable_plx_reset == 0 &&
+			(IDI_PROP_SAFE(IoAdapter->cardType,HardwareFeatures) & DIVA_CARDTYPE_HARDWARE_PROPERTY_SEAVILLE) == 0) {
 		volatile word  *Reset = (word volatile *)IoAdapter->prom ;
 
 		*Reset |= PLX9054_SOFT_RESET ;
@@ -315,7 +329,7 @@ static void stop_4pri_hardware (PISDN_ADAPTER IoAdapter) {
 
 		do {
 			diva_os_sleep(10);
-		} while (i++ < 10 && 
+		} while (i++ < 10 &&
 					 (IoAdapter->host_vidi.request_flags & DIVA_VIDI_REQUEST_FLAG_STOP_AND_INTERRUPT) != 0);
     if ((IoAdapter->host_vidi.request_flags & DIVA_VIDI_REQUEST_FLAG_STOP_AND_INTERRUPT) == 0) {
 			i = 0;

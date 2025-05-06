@@ -1,12 +1,16 @@
 
 /*
  *
-  Copyright (c) Dialogic, 2007.
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
  *
   This source file is supplied for the use with
-  Dialogic range of DIVA Server Adapters.
+  Sangoma (formerly Dialogic) range of Adapters.
  *
-  Dialogic File Revision :    2.1
+  File Revision :    2.1
  *
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -23,6 +27,7 @@
   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  */
+
 #ifndef PC_H_INCLUDED  /* { */
 #define PC_H_INCLUDED
 /*------------------------------------------------------------------*/
@@ -318,6 +323,7 @@ struct dual
 #define CIF 0x02                /* charging information             */
 #define DATE 0x03               /* date                             */
 #define CPS 0x07                /* called party status              */
+#define OLINE 0x01              /* codeset 6, ANI II used in US networks - e.g. verizon - feature group D */
 /*------------------------------------------------------------------*/
 /* ESC information elements                                         */
 /*------------------------------------------------------------------*/
@@ -686,6 +692,8 @@ Byte | 8 7 6 5 4 3 2 1
 #define MANUFACTURER_FEATURE2_MODEM_V34_V90       0x00080000L
 #define MANUFACTURER_FEATURE2_PLUGIN_MODULATION   0x00100000L
 #define MANUFACTURER_FEATURE2_FAX_V34             0x00200000L
+#define MANUFACTURER_FEATURE2_MODEM_V34_LOW       0x00400000L
+#define MANUFACTURER_FEATURE2_STREAMING_IDI       0x00800000L
 #define RTP_PRIM_PAYLOAD_PCMU_8000     0
 #define RTP_PRIM_PAYLOAD_1016_8000     1
 #define RTP_PRIM_PAYLOAD_LINEAR16_8000 1
@@ -700,6 +708,9 @@ Byte | 8 7 6 5 4 3 2 1
 #define RTP_PRIM_PAYLOAD_QCELP_8000    12
 #define RTP_PRIM_PAYLOAD_G728_8000     14
 #define RTP_PRIM_PAYLOAD_G729_8000     18
+#define RTP_PRIM_PAYLOAD_CLEARMODE     23
+#define RTP_PRIM_PAYLOAD_SIREN         24
+#define RTP_PRIM_PAYLOAD_AMR_WB        25
 #define RTP_PRIM_PAYLOAD_RTAUDIO_8000  26
 #define RTP_PRIM_PAYLOAD_ILBC_8000     27
 #define RTP_PRIM_PAYLOAD_AMR_NB_8000   28
@@ -725,6 +736,9 @@ Byte | 8 7 6 5 4 3 2 1
 #define RTP_PRIM_PAYLOAD_QCELP_8000_SUPPORTED    (1L << RTP_PRIM_PAYLOAD_QCELP_8000)
 #define RTP_PRIM_PAYLOAD_G728_8000_SUPPORTED     (1L << RTP_PRIM_PAYLOAD_G728_8000)
 #define RTP_PRIM_PAYLOAD_G729_8000_SUPPORTED     (1L << RTP_PRIM_PAYLOAD_G729_8000)
+#define RTP_PRIM_PAYLOAD_CLEARMODE_SUPPORTED     (1L << RTP_PRIM_PAYLOAD_CLEARMODE)
+#define RTP_PRIM_PAYLOAD_SIREN_SUPPORTED         (1L << RTP_PRIM_PAYLOAD_SIREN)
+#define RTP_PRIM_PAYLOAD_AMR_WB_SUPPORTED        (1L << RTP_PRIM_PAYLOAD_AMR_WB)
 #define RTP_PRIM_PAYLOAD_RTAUDIO_8000_SUPPORTED  (1L << RTP_PRIM_PAYLOAD_RTAUDIO_8000)
 #define RTP_PRIM_PAYLOAD_ILBC_8000_SUPPORTED     (1L << RTP_PRIM_PAYLOAD_ILBC_8000)
 #define RTP_PRIM_PAYLOAD_AMR_NB_8000_SUPPORTED   (1L << RTP_PRIM_PAYLOAD_AMR_NB_8000)
@@ -735,6 +749,121 @@ Byte | 8 7 6 5 4 3 2 1
 #define RTP_ADD_PAYLOAD_CN_8000_SUPPORTED        (1L << (RTP_ADD_PAYLOAD_CN_8000 - RTP_ADD_PAYLOAD_BASE))
 #define RTP_ADD_PAYLOAD_DTMF_SUPPORTED           (1L << (RTP_ADD_PAYLOAD_DTMF - RTP_ADD_PAYLOAD_BASE))
 #define RTP_ADD_PAYLOAD_FEC_SUPPORTED            (1L << (RTP_ADD_PAYLOAD_FEC - RTP_ADD_PAYLOAD_BASE))
+/*------------------------------------------------------------------*/
+/* Definitions to indicate Layer 1/2/3 status on STATUS_REQ         */
+/*------------------------------------------------------------------*/
+#define CST_STATE_LAYER_MASK                    0xe000
+#define CST_STATE_UP_BIT                        0x1000
+#define CST_STATE_UP_INSTANCES_MASK             0x0fff
+#define CST_STATE_PROTOCOL_MASK                 0xe03f
+#define CST_STATE_LEVEL_MASK                    0x0fc0
+#define CST_STATE_LAYER_D_L1                    0x0000
+#define CST_STATE_LAYER_D_L2                    0x2000
+#define CST_STATE_LAYER_D_L3                    0x4000
+#define CST_STATE_LAYER_B_L1                    0x8000
+#define CST_STATE_LAYER_B_L2                    0xa000
+#define CST_STATE_LAYER_B_L3                    0xc000
+#define CST_STATE_I430(level)                   (CST_STATE_LAYER_D_L1 | 0x00 | ((level) << 6))
+#define CST_STATE_I431(level)                   (CST_STATE_LAYER_D_L1 | 0x01 | ((level) << 6))
+#define CST_STATE_Q921(level)                   (CST_STATE_LAYER_D_L2 | 0x00 | ((level) << 6))
+#define CST_STATE_Q931(level)                   (CST_STATE_LAYER_D_L3 | 0x00 | ((level) << 6))
+#define CST_STATE_CAS(level)                    (CST_STATE_LAYER_D_L3 | 0x01 | ((level) << 6))
+#define CST_STATE_HDLC(level)                   (CST_STATE_LAYER_B_L1 | 0x00 | ((level) << 6))
+#define CST_STATE_V110(level)                   (CST_STATE_LAYER_B_L1 | 0x01 | ((level) << 6))
+#define CST_STATE_X75(level)                    (CST_STATE_LAYER_B_L2 | 0x00 | ((level) << 6))
+#define CST_STATE_X25(level)                    (CST_STATE_LAYER_B_L3 | 0x00 | ((level) << 6))
+#define CST_STATE_I430_INACTIVE                 (CST_STATE_I430(0x00))  /* ITU-T I.430: F1 */
+#define CST_STATE_I430_TE_SENSING               (CST_STATE_I430(0x04))  /* ITU-T I.430: F2 */
+#define CST_STATE_I430_TE_SENSING_LOW_POWER     (CST_STATE_I430(0x05))  /* ITU-T I.430: F2, low power mode */
+#define CST_STATE_I430_DEACTIVATED              (CST_STATE_I430(0x08))  /* ITU-T I.430: F3/G1 */
+#define CST_STATE_I430_DEACTIVATED_LOW_POWER    (CST_STATE_I430(0x09))  /* ITU-T I.430: F3/G1, low power mode */
+#define CST_STATE_I430_TE_AWAITING_SIGNAL       (CST_STATE_I430(0x10))  /* ITU-T I.430: F4 */
+#define CST_STATE_I430_NT_PENDING_ACTIVATION    (CST_STATE_I430(0x11))  /* ITU-T I.430: G2 */
+#define CST_STATE_I430_TE_IDENTIFYING_INPUT     (CST_STATE_I430(0x20))  /* ITU-T I.430: F5 */
+#define CST_STATE_I430_TE_SYNCHRONIZED          (CST_STATE_I430(0x22))  /* ITU-T I.430: F6 */
+#define CST_STATE_I430_ACTIVATED                (CST_STATE_LAYER_D_L1 | CST_STATE_UP_BIT)  /* ITU-T I.430: F7/G3 */
+#define CST_STATE_I430_NT_PENDING_DEACTIVATION  (CST_STATE_I430(0x1f))  /* ITU-T I.430: G4 */
+#define CST_STATE_I430_TE_LOSS_OF_FRAMING       (CST_STATE_I430(0x21))  /* ITU-T I.430: F8 */
+#define CST_STATE_I431_INACTIVE                 (CST_STATE_I431(0x00))  /* ITU-T I.431: F0/G0 */
+#define CST_STATE_I431_OPERATIONAL              (CST_STATE_LAYER_D_L1 | CST_STATE_UP_BIT)  /* ITU-T I.431: F1/G1 */
+#define CST_STATE_I431_REMOTE_ALARM             (CST_STATE_I431(0x26))  /* ITU-T I.431: F2/G2, FC1, yellow alarm */
+#define CST_STATE_I431_LOSS_OF_SIGNAL           (CST_STATE_I431(0x14))  /* ITU-T I.431: F3/G3, FC2, red alarm */
+#define CST_STATE_I431_LOSS_OF_FRAMING          (CST_STATE_I431(0x24))  /* ITU-T I.431: F4/G4, FC3, blue alarm */
+#define CST_STATE_I431_REMOTE_ALARM_CRC_ERR     (CST_STATE_I431(0x25))  /* ITU-T I.431: F5/G5, FC4, yellow alarm, CRC errors */
+#define CST_STATE_I431_POWER_ON                 (CST_STATE_I431(0x01))  /* ITU-T I.431: F6/G6 */
+#define CST_STATE_I431_LOSS_OF_DOUBLEFRAMING    (CST_STATE_I431(0x27))  /*  */
+#define CST_STATE_I431_LOSS_OF_MULTIFRAMING     (CST_STATE_I431(0x28))  /*  */
+#define CST_STATE_I431_TS16_LOSS_OF_SIGNAL      (CST_STATE_I431(0x2e))  /* All zeroes in timeslot 16 */
+#define CST_STATE_I431_TS16_REMOTE_ALARM        (CST_STATE_I431(0x36))  /* Remote alarm bit RS1.2 set in timeslot 16 */
+#define CST_STATE_I431_TS16_ALARM_INDICATION    (CST_STATE_I431(0x30))  /* Less than 4 zeroes in 2 consecutive multiframes */
+#define CST_STATE_I431_TS16_LOSS_OF_MULTIFRAMING (CST_STATE_I431(0x38)) /* CAS framing pattern lost */
+#define CST_STATE_I431_EXCESSIVE_ZEROES_DETECTED (CST_STATE_I431(0x1e)) /* More than 3 (HDB3) or 15 (AMI) consecutive zeroes */
+#define CST_STATE_I431_TRANSMIT_LINE_SHORT      (CST_STATE_I431(0x0d))  /*  */
+#define CST_STATE_I431_TRANSMIT_LINE_OPEN       (CST_STATE_I431(0x0e))  /*  */
+#define CST_STATE_Q921_TEI_UNASSIGNED           (CST_STATE_Q921(0x00))  /* ITU-T Q.921: 4.3 State 1/B.2 State 1 */
+#define CST_STATE_Q921_ASSIGN_AWAITING_TEI      (CST_STATE_Q921(0x08))  /* ITU-T Q.921: B.2 State 2 */
+#define CST_STATE_Q921_ESTABLISH_AWAITING_TEI   (CST_STATE_Q921(0x09))  /* ITU-T Q.921: B.2 State 3 */
+#define CST_STATE_Q921_TEI_ASSIGNED             (CST_STATE_Q921(0x10))  /* ITU-T Q.921: B.2 State 4 */
+#define CST_STATE_Q921_AWAITING_ESTABLISHMENT   (CST_STATE_Q921(0x20))  /* ITU-T Q.921: 4.3 State 2/B.2 State 5 */
+#define CST_STATE_Q921_AWAITING_RELEASE         (CST_STATE_Q921(0x3f))  /* ITU-T Q.921: 4.3 State 3/B.2 State 6 */
+#define CST_STATE_Q921_MULTIPLE_FRAME_ESTABLISHED (CST_STATE_LAYER_D_L2 | CST_STATE_UP_BIT) /* ITU-T Q.921: 4.3 State 4/B.2 State 7 */
+#define CST_STATE_Q921_TIMER_RECOVERY           (CST_STATE_Q921(0x21))  /* ITU-T Q.921: B.2 State 8 */
+#define CST_STATE_Q931_NULL                     (CST_STATE_Q931(0x00))  /* ITU-T Q.931: U0/N0 */
+#define CST_STATE_Q931_CALL_INITIATED           (CST_STATE_Q931(0x01))  /* ITU-T Q.931: U1/N1 */
+#define CST_STATE_Q931_OVERLAP_SENDING          (CST_STATE_Q931(0x02))  /* ITU-T Q.931: U2/N2 */
+#define CST_STATE_Q931_OUTGOING_CALL_PROCEEDING (CST_STATE_Q931(0x03))  /* ITU-T Q.931: U3/N3 */
+#define CST_STATE_Q931_CALL_DELIVERED           (CST_STATE_Q931(0x04))  /* ITU-T Q.931: U4/N4 */
+#define CST_STATE_Q931_CALL_PRESENT             (CST_STATE_Q931(0x06))  /* ITU-T Q.931: U6/N6 */
+#define CST_STATE_Q931_CALL_RECEIVED            (CST_STATE_Q931(0x07))  /* ITU-T Q.931: U7/N7 */
+#define CST_STATE_Q931_CONNECT_REQUEST          (CST_STATE_Q931(0x08))  /* ITU-T Q.931: U8/N8 */
+#define CST_STATE_Q931_INCOMING_CALL_PROCEEDING (CST_STATE_Q931(0x09))  /* ITU-T Q.931: U9/N9 */
+#define CST_STATE_Q931_ACTIVE                   (CST_STATE_LAYER_D_L3 | CST_STATE_UP_BIT)  /* ITU-T Q.931: U10/N10 */
+#define CST_STATE_Q931_DISCONNECT_REQUEST       (CST_STATE_Q931(0x0b))  /* ITU-T Q.931: U11/N11 */
+#define CST_STATE_Q931_DISCONNECT_INDICATION    (CST_STATE_Q931(0x0c))  /* ITU-T Q.931: U12/N12 */
+#define CST_STATE_Q931_SUSPEND_REQUEST          (CST_STATE_Q931(0x0f))  /* ITU-T Q.931: U15/N15 */
+#define CST_STATE_Q931_RESUME_REQUEST           (CST_STATE_Q931(0x11))  /* ITU-T Q.931: U17/N17 */
+#define CST_STATE_Q931_RELEASE_REQUEST          (CST_STATE_Q931(0x13))  /* ITU-T Q.931: U19/N19 */
+#define CST_STATE_Q931_CALL_ABORT               (CST_STATE_Q931(0x16))  /* ITU-T Q.931: N22 */
+#define CST_STATE_Q931_OVERLAP_RECEIVING        (CST_STATE_Q931(0x19))  /* ITU-T Q.931: U25/N25 */
+#define CST_STATE_CAS_NULL                      (CST_STATE_CAS(0x00))  /* like ITU-T Q.931: U0/N0 */
+#define CST_STATE_CAS_CALL_INITIATED            (CST_STATE_CAS(0x01))  /* like ITU-T Q.931: U1/N1 */
+#define CST_STATE_CAS_OVERLAP_SENDING           (CST_STATE_CAS(0x02))  /* like ITU-T Q.931: U2/N2 */
+#define CST_STATE_CAS_OUTGOING_CALL_PROCEEDING  (CST_STATE_CAS(0x03))  /* like ITU-T Q.931: U3/N3 */
+#define CST_STATE_CAS_CALL_DELIVERED            (CST_STATE_CAS(0x04))  /* like ITU-T Q.931: U4/N4 */
+#define CST_STATE_CAS_CALL_PRESENT              (CST_STATE_CAS(0x06))  /* like ITU-T Q.931: U6/N6 */
+#define CST_STATE_CAS_CALL_RECEIVED             (CST_STATE_CAS(0x07))  /* like ITU-T Q.931: U7/N7 */
+#define CST_STATE_CAS_CONNECT_REQUEST           (CST_STATE_CAS(0x08))  /* like ITU-T Q.931: U8/N8 */
+#define CST_STATE_CAS_INCOMING_CALL_PROCEEDING  (CST_STATE_CAS(0x09))  /* like ITU-T Q.931: U9/N9 */
+#define CST_STATE_CAS_ACTIVE                    (CST_STATE_LAYER_D_L3 | CST_STATE_UP_BIT)  /* like ITU-T Q.931: U10/N10 */
+#define CST_STATE_CAS_DISCONNECT_REQUEST        (CST_STATE_CAS(0x0b))  /* like ITU-T Q.931: U11/N11 */
+#define CST_STATE_CAS_DISCONNECT_INDICATION     (CST_STATE_CAS(0x0c))  /* like ITU-T Q.931: U12/N12 */
+#define CST_STATE_CAS_SUSPEND_REQUEST           (CST_STATE_CAS(0x0f))  /* like ITU-T Q.931: U15/N15 */
+#define CST_STATE_CAS_RESUME_REQUEST            (CST_STATE_CAS(0x11))  /* like ITU-T Q.931: U17/N17 */
+#define CST_STATE_CAS_RELEASE_REQUEST           (CST_STATE_CAS(0x13))  /* like ITU-T Q.931: U19/N19 */
+#define CST_STATE_CAS_CALL_ABORT                (CST_STATE_CAS(0x16))  /* like ITU-T Q.931: N22 */
+#define CST_STATE_CAS_OVERLAP_RECEIVING         (CST_STATE_CAS(0x19))  /* like ITU-T Q.931: U25/N25 */
+#define CST_STATE_CAS_LINE_IN_USE               (CST_STATE_CAS(0x3b))  /*  */
+#define CST_STATE_CAS_LOCAL_REMOTE_BLOCKING     (CST_STATE_CAS(0x3c))  /*  */
+#define CST_STATE_CAS_LOCAL_BLOCKING            (CST_STATE_CAS(0x3d))  /*  */
+#define CST_STATE_CAS_REMOTE_BLOCKING           (CST_STATE_CAS(0x3e))  /*  */
+#define CST_STATE_X75_IDLE                      (CST_STATE_X75(0x00))  /*  */
+#define CST_STATE_X75_AWAITING_ESTABLISHMENT    (CST_STATE_X75(0x20))  /*  */
+#define CST_STATE_X75_AWAITING_RELEASE          (CST_STATE_X75(0x3f))  /*  */
+#define CST_STATE_X75_ESTABLISHED               (CST_STATE_LAYER_B_L2 | CST_STATE_UP_BIT)  /*  */
+#define CST_STATE_X25_PACKET_LAYER_READY        (CST_STATE_X25(0x01))  /* ITU-T X.25: r1 */
+#define CST_STATE_X25_DTE_RESTART_REQUEST       (CST_STATE_X25(0x02))  /* ITU-T X.25: r2 */
+#define CST_STATE_X25_DCE_RESTART_INDICATION    (CST_STATE_X25(0x03))  /* ITU-T X.25: r3 */
+#define CST_STATE_X25_READY                     (CST_STATE_X25(0x04))  /* ITU-T X.25: p1 */
+#define CST_STATE_X25_DTE_WAITING               (CST_STATE_X25(0x05))  /* ITU-T X.25: p2 */
+#define CST_STATE_X25_DCE_WAITING               (CST_STATE_X25(0x06))  /* ITU-T X.25: p3 */
+#define CST_STATE_X25_DATA_TRANSFER             (CST_STATE_LAYER_B_L3 | CST_STATE_UP_BIT)  /* ITU-T X.25: p4 */
+#define CST_STATE_X25_CALL_COLLISION            (CST_STATE_X25(0x08))  /* ITU-T X.25: p5 */
+#define CST_STATE_X25_DTE_CLEAR_REQUEST         (CST_STATE_X25(0x09))  /* ITU-T X.25: p6 */
+#define CST_STATE_X25_DCE_CLEAR_INDICATION      (CST_STATE_X25(0x0a))  /* ITU-T X.25: p7 */
+#define CST_STATE_X25_FLOW_CONTROL_READY        (CST_STATE_X25(0x0b))  /* ITU-T X.25: d1 */
+#define CST_STATE_X25_DTE_RESET_REQUEST         (CST_STATE_X25(0x0c))  /* ITU-T X.25: d2 */
+#define CST_STATE_X25_DCE_RESET_REQUEST         (CST_STATE_X25(0x0d))  /* ITU-T X.25: d3 */
+/*------------------------------------------------------------------*/
 /* virtual switching definitions */
 #define VSJOIN         1
 #define VSTRANSPORT    2

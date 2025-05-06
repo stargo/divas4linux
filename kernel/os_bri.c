@@ -1,11 +1,16 @@
+
 /*
  *
-  Copyright (c) Dialogic, 2007.
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
  *
   This source file is supplied for the use with
-  Dialogic Networks range of DIVA Server Adapters.
+  Sangoma (formerly Dialogic) range of Adapters.
  *
-  Dialogic File Revision :    2.1
+  File Revision :    2.1
  *
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -22,7 +27,6 @@
   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  */
-/* $Id: os_bri.c,v 1.1.2.2 2001/02/12 20:23:46 armin Exp $ */
 
 #include "platform.h"
 #include <linux/stdarg.h>
@@ -327,7 +331,7 @@ diva_bri_cleanup_adapter (diva_os_xdi_adapter_t* a)
   if (a->xdi_adapter.e_tbl) {
     diva_os_free (0, a->xdi_adapter.e_tbl);
     a->xdi_adapter.e_tbl = 0;
-  }  
+  }
 
   return (0);
 }
@@ -731,6 +735,9 @@ diva_bri_stop_adapter (diva_os_xdi_adapter_t* a)
 {
   PISDN_ADAPTER IoAdapter = &a->xdi_adapter;
   int i = 100;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,16,0)
+  divas_pci_card_resources_t *p_pci = &(a->resources.pci);
+#endif
 
   if (!IoAdapter->port) {
     return (-1);
@@ -741,6 +748,7 @@ diva_bri_stop_adapter (diva_os_xdi_adapter_t* a)
     return (-1); /* nothing to stop */
   }
   IoAdapter->Initialized = 0;
+  DBG_LOG(("%s Adapter: %d", __FUNCTION__, IoAdapter->ANum));
 
   /*
     Disconnect Adapter from DIDD
@@ -772,6 +780,15 @@ diva_bri_stop_adapter (diva_os_xdi_adapter_t* a)
     Stop and reset adapter
   */
   IoAdapter->stop (IoAdapter) ;
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,16,0)
+  /*
+    Unmap Clock Data DMA from DIDD
+  */
+  diva_xdi_didd_unmap_clock_data_addr(IoAdapter->ANum,
+                                      p_pci->clock_data_bus_addr,
+                                      p_pci->hdev);
+#endif
 
   return (0);
 }

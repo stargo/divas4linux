@@ -1,12 +1,13 @@
 
 /*
  *
-  Copyright (c) Dialogic(R), 2009.
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2009-2014.
  *
   This source file is supplied for the use with
-  Dialogic range of DIVA Server Adapters.
+  Sangoma (formerly Dialogic) range of DIVA Server Adapters.
  *
-  Dialogic(R) File Revision :    2.1
+  File Revision :    2.1
  *
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -848,7 +849,7 @@ static void fax1Deconfig (ISDN_PORT *P)
 static int fax1SendReconfig (ISDN_PORT *P)
 {
 	RECONFIG	Reconfig ;
-	dword		Delay ;
+	dword		Delay, CompensatedDelay ;
 	dword		Now ;
 	int         written ;
 
@@ -863,8 +864,18 @@ static int fax1SendReconfig (ISDN_PORT *P)
 		if ( P->port_u.Fax1.SyncTime )
 		{
 			Now = sysTimerTicks () ;
-			Delay = (((long)(P->port_u.Fax1.SyncTime + Delay - Now)) > 0) ?
-					(P->port_u.Fax1.SyncTime + Delay - Now) : 0 ;
+			CompensatedDelay = (((int32)(P->port_u.Fax1.SyncTime + Delay - Now)) > 0) ?
+				(P->port_u.Fax1.SyncTime + Delay - Now) : 0 ;
+			DBG_FTL(("[%p:%s] fax1 delay: %ld %ld %ld %ld",
+				P->Channel, P->Name,
+				(long) Delay,
+				(long) CompensatedDelay,
+				(long)(P->port_u.Fax1.SyncTime),
+				(long) Now))
+			if (CompensatedDelay < Delay)
+			{
+				Delay = CompensatedDelay ;
+			}
 		}
 	}
 
@@ -2885,6 +2896,8 @@ static void fax1Kick (ISDN_PORT *P, byte *pData, word sizeData)
 				P->port_u.Fax1.SyncTime = sysTimerTicks () ;
 				if ( P->port_u.Fax1.SyncTime == 0 )
 					P->port_u.Fax1.SyncTime = 1 ;
+				DBG_FTL(("[%p:%s] fax1 sync: %ld",
+					P->Channel, P->Name, (long)(P->port_u.Fax1.SyncTime)))
 				if ( P->port_u.Fax1.ReconfigRequest )
 					fax1SendReconfig (P) ;
 #ifdef FAX1_V34FAX

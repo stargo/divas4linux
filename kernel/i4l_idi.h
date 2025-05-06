@@ -1,17 +1,37 @@
-/* $Id: i4l_idi.h,v 1.1.2.2 2002/10/02 14:38:37 armin Exp $
+
+/*
  *
- * ISDN interface module for Dialogic active cards.
- * I4L - IDI Interface
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
  *
- * Copyright 1998-2009  by Armin Schindler (mac@melware.de)
- * Copyright 1999-2009  Cytronics & Melware (info@melware.de)
+  This source file is supplied for the use with
+  Sangoma (formerly Dialogic) range of Adapters.
  *
- * This software may be used and distributed according to the terms
- * of the GNU General Public License, incorporated herein by reference.
+  File Revision :    2.1
+ *
+  This program is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; either version 2, or (at your option)
+  any later version.
+ *
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY OF ANY KIND WHATSOEVER INCLUDING ANY
+  implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+  See the GNU General Public License for more details.
+ *
+  You should have received a copy of the GNU General Public License
+  along with this program; if not, write to the Free Software
+  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *
  */
 
 #ifndef E_IDI_H
 #define E_IDI_H
+
+#include <linux/config.h>
 
 #undef N_DATA
 
@@ -50,39 +70,39 @@ typedef struct {
 } idi_ind_message;
 
 typedef struct { 
-  __u16 next;
-  __u8  Req;
-  __u8  ReqId;
-  __u8  ReqCh;
-  __u8  Reserved1;
-  __u16 Reference;
-  __u8  Reserved[8];
+  __u16 next            __attribute__ ((packed));
+  __u8  Req             __attribute__ ((packed));
+  __u8  ReqId           __attribute__ ((packed));
+  __u8  ReqCh           __attribute__ ((packed));
+  __u8  Reserved1       __attribute__ ((packed));
+  __u16 Reference       __attribute__ ((packed));
+  __u8  Reserved[8]     __attribute__ ((packed));
   eicon_PBUFFER XBuffer; 
-} __attribute__ ((packed)) eicon_REQ;
+} eicon_REQ;
 
 typedef struct {
-  __u16 next;
-  __u8  Rc;
-  __u8  RcId;
-  __u8  RcCh;
-  __u8  Reserved1;
-  __u16 Reference;
-  __u8  Reserved2[8];
-} __attribute__ ((packed)) eicon_RC;
+  __u16 next            __attribute__ ((packed));
+  __u8  Rc              __attribute__ ((packed));
+  __u8  RcId            __attribute__ ((packed));
+  __u8  RcCh            __attribute__ ((packed));
+  __u8  Reserved1       __attribute__ ((packed));
+  __u16 Reference       __attribute__ ((packed));
+  __u8  Reserved2[8]    __attribute__ ((packed));
+} eicon_RC;
 
 typedef struct {
-  __u16 next;
-  __u8  Ind;
-  __u8  IndId;
-  __u8  IndCh;
-  __u8  MInd;
-  __u16 MLength;
-  __u16 Reference;
-  __u8  RNR;
-  __u8  Reserved;
-  __u32 Ack;
+  __u16 next            __attribute__ ((packed));
+  __u8  Ind             __attribute__ ((packed));
+  __u8  IndId           __attribute__ ((packed));
+  __u8  IndCh           __attribute__ ((packed));
+  __u8  MInd            __attribute__ ((packed));
+  __u16 MLength         __attribute__ ((packed));
+  __u16 Reference       __attribute__ ((packed));
+  __u8  RNR             __attribute__ ((packed));
+  __u8  Reserved        __attribute__ ((packed));
+  __u32 Ack             __attribute__ ((packed));
   eicon_PBUFFER RBuffer;
-} __attribute__ ((packed)) eicon_IND;
+} eicon_IND;
 
 typedef struct {
 	__u8		*Data;
@@ -144,14 +164,14 @@ parameters:
 */
 
 typedef struct eicon_dsp_ind {
-	__u16	time;
-	__u8	norm;
-	__u16	options;
-	__u32	speed;
-	__u16	delay;
-	__u32	txspeed;
-	__u32	rxspeed;
-} __attribute__ ((packed)) eicon_dsp_ind;
+	__u16	time		__attribute__ ((packed));
+	__u8	norm		__attribute__ ((packed));
+	__u16	options		__attribute__ ((packed));
+	__u32	speed		__attribute__ ((packed));
+	__u16	delay		__attribute__ ((packed));
+	__u32	txspeed		__attribute__ ((packed));
+	__u32	rxspeed		__attribute__ ((packed));
+} eicon_dsp_ind;
 
 #define DSP_CONNECTED_OPTION_V42_TRANS           0x0002
 #define DSP_CONNECTED_OPTION_V42_LAPM            0x0004
@@ -352,27 +372,27 @@ typedef struct eicon_t30_s {
 #define _ETX_	0x03
 
 typedef struct eicon_sff_dochead {
-	__u32	id;
-	__u8	version;
-	__u8	reserved1;
-	__u16	userinfo;
-	__u16	pagecount;
-	__u16	off1pagehead;
-	__u32	offnpagehead;
-	__u32	offdocend;
-} __attribute__ ((packed)) eicon_sff_dochead;
+	__u32	id		__attribute__ ((packed));
+	__u8	version		__attribute__ ((packed));
+	__u8	reserved1	__attribute__ ((packed));
+	__u16	userinfo	__attribute__ ((packed));
+	__u16	pagecount	__attribute__ ((packed));
+	__u16	off1pagehead	__attribute__ ((packed));
+	__u32	offnpagehead	__attribute__ ((packed));
+	__u32	offdocend	__attribute__ ((packed));
+} eicon_sff_dochead;
 
 typedef struct eicon_sff_pagehead {
-	__u8	pageheadid;
-	__u8	pageheadlen;
-	__u8	resvert;
-	__u8	reshoriz;
-	__u8	coding;
-	__u8	reserved2;
-	__u16	linelength;
-	__u16	pagelength;
-	__u32	offprevpage;
-	__u32	offnextpage;
-} __attribute__ ((packed)) eicon_sff_pagehead;
+	__u8	pageheadid	__attribute__ ((packed));
+	__u8	pageheadlen	__attribute__ ((packed));
+	__u8	resvert		__attribute__ ((packed));
+	__u8	reshoriz	__attribute__ ((packed));
+	__u8	coding		__attribute__ ((packed));
+	__u8	reserved2	__attribute__ ((packed));
+	__u16	linelength	__attribute__ ((packed));
+	__u16	pagelength	__attribute__ ((packed));
+	__u32	offprevpage	__attribute__ ((packed));
+	__u32	offnextpage	__attribute__ ((packed));
+} eicon_sff_pagehead;
 
 #endif	/* E_IDI_H */

@@ -2,20 +2,25 @@
 
 # --------------------------------------------------------------------------
 #  DIVA SUPPORT WIZARD
-#  Copyright by Dialogic Corporation 1993-2007
+#  Copyright Dialogic Corporation 1993-2007
+#  Copyright Sangoma Technologies 2020
 # --------------------------------------------------------------------------
 
-backtitle="Diva Support Assistant Copyright (c) by Dialogic Corp. 1993 - 2007"
+unset MALLOC_CHECK_
+backtitle="Diva Support Assistant Copyright (c) Sangoma 2020"
 diva_dir="/usr/lib/divas"
 diva_proc="/proc/net/isdn/eicon"
 report="${diva_dir}/report.txt"
 divactrl="${diva_dir}/divactrl"
-dialog="${diva_dir}/dialog"
-setterm="setterm"
+settermdef="setterm -default"
+settermclr="setterm -clear"
 tmp=${diva_dir}/support.tmp
 object_suffix="o"
 check_device_nodes=0
 ksymoops="ksymoops -o ${diva_dir} < "
+
+hlp="${diva_dir}/support.hlp"
+source ${diva_dir}/diva.helper.rc
 
 if [ -f ${diva_dir}/divadidd.ko ]
 then
@@ -134,22 +139,26 @@ need_final_reboot=0
 
 diva_get_device_major()
 {
-  if [ -c "$1" ]
+	local devmajor="0"
+
+	if [ -c "$1" ]
 	then
-		return $((0x$(stat --format "%t" "$1")))
+		devmajor=$((0x$(stat --format "%t" "$1")))
 	fi
 
-	return 0
+	echo "$devmajor"
 }
 
 diva_get_driver_major()
 {
+	local drvmajor="0"
+
 	if [ -f "/proc/devices" ]
 	then
-		return $(($(cat /proc/devices | grep " *$1 *$" | sed -e "s/^ //g;" -e "s/ .*$//" -)))
+		drvmajor=$(($(cat /proc/devices | grep " *$1 *$" | sed -e "s/^ //g;" -e "s/ .*$//" -)))
 	fi
 
-	return 0
+	echo "$drvmajor"
 }
 
 # ------------------------------------------------------------------------------
@@ -199,11 +208,9 @@ check_diva_device_node_file()
 		return 0
 	fi
 
-	diva_get_driver_major "$1"
-	drv_major=$(($?))
+	drv_major=$(diva_get_driver_major "$1")
 
-	diva_get_device_major "$2"
-	dev_major=$(($?))
+	dev_major=$(diva_get_device_major "$2")
 
 	if [ $((drv_major)) -le $((0)) ]
 	then
@@ -383,14 +390,14 @@ debug_procedure_error_exit()
 {
 	echo "SUPPORT PROCEDURE ABORTED" > $tmp
 	echo ""   >> $tmp
-	echo -e $1 >> $tmp
+	printf $1 >> $tmp
 	echo ""   >> $tmp
 
 	title="Diva Support Assistant"
 	$dialog --title "$title" --backtitle "$backtitle" --clear --textbox $tmp 18 70
 	rm -f ${tmp} ${diva_dir}/support.dlg ${report}
-	$setterm -default > /dev/null 2>&1
-	$setterm -clear > /dev/null 2>&1
+	$settermdef > /dev/null 2>&1
+	$settermclr > /dev/null 2>&1
 
 	exit 1
 }
@@ -406,7 +413,7 @@ debug_procedure()
 	echo "This support procedure will stop Diva Server adapter" >> $tmp
 	echo "number $adapter and turn system in debug mode." >> $tmp
 	echo "" >> $tmp
-	echo "Please follow with procedure only if requested by Dialogic" >> $tmp
+	echo "Please follow with procedure only if requested by Sangoma" >> $tmp
 	echo "support." >> $tmp
 	echo "" >> $tmp
 	echo "Please ensure that Diva drivers are loaded and running" >> $tmp
@@ -439,8 +446,8 @@ debug_procedure()
   if [ $(($?)) -ne 0 ]
   then
     rm -f ${tmp} ${diva_dir}/support.dlg ${report}
-    $setterm -default > /dev/null 2>&1
-    $setterm -clear > /dev/null 2>&1
+    $settermdef > /dev/null 2>&1
+    $settermclr > /dev/null 2>&1
     exit 1
   fi
 
@@ -507,7 +514,7 @@ debug_procedure()
 	# ------------------------------------------------
 	for procpath in panic panic_on_oops
 	do
-		if [ -a /proc/sys/kernel/$procpath ]
+		if [ -e /proc/sys/kernel/$procpath ]
 		then
 			echo "1" > /proc/sys/kernel/$procpath 2>/dev/null
 		fi
@@ -674,7 +681,7 @@ debug_procedure()
 	echo "captured trace information from the memory of Diva adapter" >> $tmp
   echo "and store this information to the file" >> $tmp
 	echo "'/var/log/trace.bin'." >> $tmp
-	echo "Please provide this file to Dialogic support." >> $tmp
+	echo "Please provide this file to Sangoma support." >> $tmp
 	echo "" >> $tmp
 	echo "You can adjust trace levels and activate/deacticate" >> $tmp
 	echo "additional drivers by command 'divactrl ditrace'."   >> $tmp
@@ -692,8 +699,8 @@ debug_procedure()
 	$dialog --title "$title" --backtitle "$backtitle" --clear --textbox $tmp 18 70
 
 	rm -f ${tmp} ${diva_dir}/support.dlg ${report}
-	$setterm -default > /dev/null 2>&1
-	$setterm -clear > /dev/null 2>&1
+	$settermdef > /dev/null 2>&1
+	$settermclr > /dev/null 2>&1
 
 	sync
 	sync
@@ -838,14 +845,14 @@ capture_config_hwonly()
 capture_binary_information()
 {
 	report_string "----------------------------------------------------------"
-  report_string "CAPTURE SYSTEM INFORMATION"
+	report_string "CAPTURE SYSTEM INFORMATION"
 	report_string "----------------------------------------------------------"
 
 	rm -f ${diva_dir}/report.tgz > /dev/null 2>&1
 
-  capture_config
+	capture_config
 
-  $dialog --backtitle "$backtitle" \
+	$dialog --backtitle "$backtitle" \
 						--infobox "Create file list ..." 3 70
 
 	file_list="${diva_dir}/report.txt /dev"
@@ -899,25 +906,25 @@ capture_binary_information()
 	report_string "# REPORT FILE END"
 	report_string "# --------------------------------------------------"
 
-  $dialog --backtitle "$backtitle" \
-						--infobox "Create report.tgz. Please be patient ..." 3 70
+	$dialog --backtitle "$backtitle" \
+						--infobox "Creating report.tgz. Please be patient ..." 3 70
 
 	tar -zcf ${diva_dir}/report.tgz ${file_list} > /dev/null 2>&1
-  if [ $(($?)) -ne 0 ]
-  then
-    $dialog --title "Operation Failed" --backtitle "$backtitle" \
-      --clear --msgbox "Failed to create file '${diva_dir}/report.tgz'" 7 70
-    $setterm -default > /dev/null 2>&1
-    $setterm -clear > /dev/null 2>&1
-    exit 1
-  fi
-  check_point
+	if [ $(($?)) -ne 0 ]
+	then
+		$dialog --title "Operation Failed" --backtitle "$backtitle" \
+		--clear --msgbox "Failed to create file '${diva_dir}/report.tgz'" 7 70
+		$settermdef > /dev/null 2>&1
+		$settermclr > /dev/null 2>&1
+		exit 1
+	fi
+	check_point
 
-  $dialog --title "Report complete" --backtitle "$backtitle" \
-      --clear --msgbox "Please add file '${diva_dir}/report.tgz' to your support request." 7 70
+	$dialog --title "Report complete" --backtitle "$backtitle" \
+		--clear --msgbox "Please add file '${diva_dir}/report.tgz' to your support request." 7 70
 
-  $setterm -default > /dev/null 2>&1
-  $setterm -clear > /dev/null 2>&1
+	$settermdef > /dev/null 2>&1
+	$settermclr > /dev/null 2>&1
 
 	rm -f ${report} > /dev/null 2>&1
 
@@ -945,18 +952,18 @@ then
 
 	case "${support_profile}" in
 	'1') rm -f ${bin} ${txt} > /dev/null 2>&1
-			 setterm="true"
-			 dialog="true"
+			setterm="true"
+			dialog="true"
 			capture_config
 			tar -zcf ${bin} ${txt} > /dev/null 2>&1
 			exit 0
 		;;
 
 	'2') rm -f ${bin} ${txt} > /dev/null 2>&1
-			 setterm="true"
-			 dialog="true"
-			 capture_binary_information
-			 exit 0
+			setterm="true"
+			dialog="true"
+			capture_binary_information
+			exit 0
 		;;
 
 		*) exit 2
@@ -978,52 +985,27 @@ Problem[$i]="Driver start failed"
 i=$(($i+1))
 Problem[$i]="Kernel crash (Oops, lockup) after driver start"
 i=$(($i+1))
-Problem[$i]="No Dialogic Diva adapter detected"
+Problem[$i]="No Sangoma Diva adapter detected"
 i=$(($i+1))
-Problem[$i]="Dialogic Diva adapter start failed"
+Problem[$i]="Sangoma Diva adapter start failed"
 i=$(($i+1))
-Problem[$i]="Dialogic Diva driver load failed (space consuming)"
+Problem[$i]="Sangoma Diva driver load failed (space consuming)"
 i=$(($i+1))
-Problem[$i]="Dialogic Diva adapter fast memory test"
+Problem[$i]="Sangoma Diva adapter fast memory test"
 i=$(($i+1))
-Problem[$i]="Dialogic Diva adapter cpu test"
+Problem[$i]="Sangoma Diva adapter cpu test"
 i=$(($i+1))
-Problem[$i]="Dialogic Diva adapter memory test"
+Problem[$i]="Sangoma Diva adapter memory test"
 i=$(($i+1))
-Problem[$i]="Dialogic Diva adapter full test (time consuming)"
+Problem[$i]="Sangoma Diva adapter full test (time consuming)"
 i=$(($i+1))
-Problem[$i]="Fast Dialogic Diva adapter crash dump"
+Problem[$i]="Fast Sangoma Diva adapter crash dump"
 i=$(($i+1))
-Problem[$i]="Full Dialogic Diva adapter crash dump"
+Problem[$i]="Full Sangoma Diva adapter crash dump"
 i=$(($i+1))
 Problem[$i]=none
 
 maint_pid=0
-
-#------------------------------------------------------------
-help=""
-hlp_base="${diva_dir}/help.txt"
-hlp="${diva_dir}/support.hlp"
-if [ ! -f ${hlp_base} ]
-then
-	echo > ${hlp_base}
-fi
-
-set_help_id()
-{
-	ident="$1"
-	help=""
-
-	sed -ne "/<$ident>/,/<$ident\/>/p" ${hlp_base} | sed -e "/<$ident>/d" -e "/<$ident\/>/d" - > ${hlp}
-	if [ $(($?)) -eq 0 ]
-	then
-		if [ -s ${hlp} ]
-		then
-			help="--helptag ${hlp}"
-		fi
-	fi
-
-}
 
 #------------------------------------------------------------
 # Execution abort
@@ -1033,8 +1015,8 @@ exit_aborted()
   $dialog --title "Operation aborted" --backtitle "$backtitle" \
       --clear --msgbox "Operation aborted by user." 5 70
 
-  $setterm -default > /dev/null 2>&1
-  $setterm -clear > /dev/null 2>&1
+  $settermdef > /dev/null 2>&1
+  $settermclr > /dev/null 2>&1
 
   rm -f ${diva_dir}/support.dlg ${tmp} ${report}
 
@@ -1063,8 +1045,8 @@ show_complete()
 			--clear --msgbox "Please reboot your system." 7 70
 	fi
 
-  $setterm -default > /dev/null 2>&1
-  $setterm -clear > /dev/null 2>&1
+  $settermdef > /dev/null 2>&1
+  $settermclr > /dev/null 2>&1
 
   rm -f ${diva_dir}/support.dlg ${tmp} maint.bin
 
@@ -1076,15 +1058,38 @@ show_complete()
 #------------------------------------------------------------
 display_purpose()
 {
-  msg="You can use the Dialogic Diva Support Assistant to generate problem reports for Dialogic Diva adapters."
+  # detect kernel version
+  kernel_sver=$(uname -r 2>/dev/null)
+  kernel_main=$(echo  $kernel_sver | sed -e "s/\..*\$//" - 2>/dev/null)
+  if [ $kernel_main -gt 3 ]
+  then
+    # workaround "xterm" terminal issues
+    tty_type=$(env | grep TERM | awk 'BEGIN { FS = "=" } ; { print $2 }')
+    if [ ${tty_type} = "xterm" ]
+    then
+      # this works around ncurses xterm uggliness
+      TERM=xterm-color
+    elif [ ${tty_type} = "xterm-256color" ]
+    then
+      # old static lib ncurses lacks support for xterm-256color; check first
+      ${diva_dir}/dialog --clear > /dev/null 2>&1
+      if [ $(($?)) -ne 0 ]
+      then
+        TERM=xterm-color
+      fi
+    fi
+	settermdef="setterm --default"
+	settermclr="setterm --clear all"
+  fi
+  msg="You can use the Diva Support Assistant to generate problem reports for Sangoma Diva adapters."
   title="Activate Diva Support Assistant ?"
   $dialog --clear --title "$title" --backtitle "$backtitle" \
     --yesno "$msg" 7 70 3>$tmp
   if [ $(($?)) -ne 0 ]
   then
     rm -f ${tmp} ${diva_dir}/support.dlg ${report}
-    $setterm -default > /dev/null 2>&1
-    $setterm -clear > /dev/null 2>&1
+    $settermdef > /dev/null 2>&1
+    $settermclr > /dev/null 2>&1
     exit 1
   fi
 }
@@ -1121,7 +1126,7 @@ select_cause()
     i=$(($i+1))
   done
 
-	set_help_id support_cause
+	set_help_id dhlp_base_support_cause
   msg="$dialog ${help} --title \"Please select problem profile\" \
        --backtitle \"$backtitle\" \
 			 --clear --radiolist \"Possible profiles\" $((7+$i-1)) 70 $(($i-1)) $msg"
@@ -1354,15 +1359,15 @@ failed_to_load()
 			if [ "${adapter_state}" = "ready" ]
 			then
 				$dialog --backtitle "$backtitle" \
-					 --infobox "Test Dialogic Diva adapter Nr:$((i)). Please be patient ..." 3 70
+					 --infobox "Test Sangoma Diva adapter Nr:$((i)). Please be patient ..." 3 70
 				report_command "${diva_dir}/divactrl load -c $((i)) -CardTest ${test_cmd}"
 				if [ $(($?)) -eq 0 ]
 				then
 					$dialog --backtitle "$backtitle" \
-					 	--infobox "SUCCESS: Test of Dialogic Diva adapter Nr:$((i))" 3 70
+					 	--infobox "SUCCESS: Test of Sangoma Diva adapter Nr:$((i))" 3 70
 				else
 					$dialog --title "Operation failed" --backtitle "$backtitle" \
-								--clear --msgbox "ERROR: Test of Dialogic Diva adapter Nr:$((i))" 5 70
+								--clear --msgbox "ERROR: Test of Sangoma Diva adapter Nr:$((i))" 5 70
 				fi
 				report_command "${diva_dir}/divactrl load -c $((i)) -ResetCard"
 			fi
@@ -1662,7 +1667,7 @@ adapter_crash_dump()
 				i=9
 			fi
 			high=$(($i+7))
-			set_help_id select_diva_adapter
+			set_help_id dhlp_base_select_diva_adapter
 			msg="$dialog --clear \
 				--title \"Diva Server adapter selection\" --backtitle \"$backtitle\" \
 				--radiolist \"Please select available Diva adapter or exit\" $high 70 $(($i)) $msg"
@@ -1727,7 +1732,7 @@ case $((problem_profile)) in
    failed_to_load 0
     ;;
   3)
-#  No Dialogic Diva adapter was detected
+#  No Sangoma Diva adapter was detected
    failed_to_load 0
     ;;
   4)

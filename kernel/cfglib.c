@@ -1,11 +1,16 @@
+
 /*
  *
-  Copyright (c) Dialogic, 2007.
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
  *
   This source file is supplied for the use with
-  Dialogic range of DIVA Server Adapters.
+  Sangoma (formerly Dialogic) range of Adapters.
  *
-  Dialogic File Revision :    2.1
+  File Revision :    2.1
  *
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -22,6 +27,7 @@
   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  */
+
 #include "platform.h"
 #include "dlist.h"
 #include "cfg_types.h"
@@ -2168,11 +2174,13 @@ static void diva_cfg_lib_apply_named_variables (diva_cfg_lib_management_ifc_stat
 		xdi_adapter_name = (char*)&sync_req->GetName.name[0];
 
 		if ((state->instance = diva_cfg_lib_get_instance (0,
-								(cardtype != CARDTYPE_DIVASRV_SOFTIP_V20) ? TargetXdiAdapter : TargetSoftIPAdapter,
+								((cardtype != CARDTYPE_DIVASRV_SOFTIP_V20) && (cardtype != CARDTYPE_DIVASRV_HOST_MEDIA_BOARD)) ?
+								TargetXdiAdapter : TargetSoftIPAdapter,
 																											1, xdi_adapter_name,
 																											strlen(xdi_adapter_name), 0)) == 0) {
 			state->instance = diva_cfg_lib_get_instance (0,
-								(cardtype != CARDTYPE_DIVASRV_SOFTIP_V20) ? TargetXdiAdapter : TargetSoftIPAdapter,
+								((cardtype != CARDTYPE_DIVASRV_SOFTIP_V20) && (cardtype != CARDTYPE_DIVASRV_HOST_MEDIA_BOARD)) ?
+								TargetXdiAdapter : TargetSoftIPAdapter,
 																									 0, 0, 0, logical_adapter_nr);
 		}
 
@@ -2613,33 +2621,19 @@ diva_hot_update_operation_result_t diva_update_hotplug_variable (const byte* own
 static int diva_cfg_lib_check_user_mode_adapter (IDI_CALL request /**< adapter request function */) {
 	IDI_SYNC_REQ sync_req;
 
-	/*
-		Retrieve adapter type
-		*/
-	sync_req.GetName.Req          = 0;
-	sync_req.GetName.Rc           = IDI_SYNC_REQ_GET_CARDTYPE;
-	sync_req.GetCardType.cardtype = 0;
-	(*request)((ENTITY *)&sync_req);
-	if (sync_req.GetCardType.cardtype  == CARDTYPE_DIVASRV_SOFTIP_V20) {
-		/**
-			\todo better to use card properties CardProperties[pXdi->cardtype].Card == CARD_SOFTIP
-			*/
-
-		return (1);
-
-#if 0
-		/**
-			\todo For unknown reason update of named variables on adapter start does not works for
-						user mode and kernel mode softIP adapter
-			*/
+	sync_req.xdi_sdram_bar.Req      = 0;
+	sync_req.xdi_sdram_bar.Rc       = IDI_SYNC_REQ_XDI_GET_ADAPTER_SDRAM_BAR;
+	sync_req.xdi_sdram_bar.info.bar = 0x00000001;
+	(*request)((ENTITY*)&sync_req);
+	if (sync_req.xdi_sdram_bar.info.bar == 0x00000001) {
 		sync_req.xdi_sdram_bar.Req      = 0;
 		sync_req.xdi_sdram_bar.Rc       = IDI_SYNC_REQ_XDI_GET_ADAPTER_SDRAM_BAR;
-		sync_req.xdi_sdram_bar.info.bar = 0x00000001;
+		sync_req.xdi_sdram_bar.info.bar = 0xabcd1234;
 		(*request)((ENTITY*)&sync_req);
-		if (sync_req.xdi_sdram_bar.info.bar == 0x00000001) {
+		if (sync_req.xdi_sdram_bar.info.bar == 0xabcd1234) {
+			DBG_REG(("detected user mode adapter"))
 			return (1);
 		}
-#endif
 	}
 
 	return (0);

@@ -1,21 +1,34 @@
-/* $Id: i4l_idi.c,v 1.1.2.2 2002/10/02 14:38:37 armin Exp $
+
+/*
  *
- * ISDN interface module for Dialogic active cards.
- * I4L - IDI Interface
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
  *
- * Copyright 1998-2009  by Armin Schindler (mac@melware.de)
- * Copyright 1999-2009  Cytronics & Melware (info@melware.de)
+  This source file is supplied for the use with
+  Sangoma (formerly Dialogic) range of Adapters.
  *
- * Thanks to	Deutsche Mailbox Saar-Lor-Lux GmbH
- *		for sponsoring and testing fax
- *		capabilities with Diva Server cards.
- *		(dor@deutschemailbox.de)
+  File Revision :    2.1
  *
- * This software may be used and distributed according to the terms
- * of the GNU General Public License, incorporated herein by reference.
+  This program is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; either version 2, or (at your option)
+  any later version.
+ *
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY OF ANY KIND WHATSOEVER INCLUDING ANY
+  implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+  See the GNU General Public License for more details.
+ *
+  You should have received a copy of the GNU General Public License
+  along with this program; if not, write to the Free Software
+  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *
  */
 
-#include <linux/module.h>
+#include <linux/config.h>
 #include "i4lididrv.h"
 
 #undef EICON_FULL_SERVICE_OKTETT
@@ -25,9 +38,7 @@ char *eicon_idi_revision = "$Revision: 1.1.2.2 $";
 eicon_manifbuf *manbuf;
 
 static int eicon_idi_manage_assign(eicon_card *card);
-#ifdef CONFIG_ISDN_TTY_FAX
 static int idi_fill_in_T30(eicon_chan *chan, unsigned char *buffer);
-#endif
 
 static int
 idi_assign_req(eicon_REQ *reqbuf, int signet, eicon_chan *chan)
@@ -1129,8 +1140,7 @@ idi_fill_in_T30(eicon_chan *chan, unsigned char *buffer)
 		//eicon_log(NULL, 128, "sT30:universal_7 = %x\n", t30->universal_7);
 		eicon_log(NULL, 128, "sT30:station_id_len = %x\n", t30->station_id_len);
 		eicon_log(NULL, 128, "sT30:head_line_len = %x\n", t30->head_line_len);
-		strncpy(st, t30->station_id, t30->station_id_len);
-		st[t30->station_id_len] = 0;
+		strscpy(st, t30->station_id, t30->station_id_len + 1);
 		eicon_log(NULL, 128, "sT30:station_id = <%s>\n", st);
 	}
 	return(sizeof(eicon_t30_s));
@@ -1206,8 +1216,7 @@ idi_parse_edata(eicon_card *ccard, eicon_chan *chan, unsigned char *buffer, int 
 		//eicon_log(ccard, 128, "rT30:universal_7 = %x\n", p->universal_7);
 		eicon_log(ccard, 128, "rT30:station_id_len = %x\n", p->station_id_len);
 		eicon_log(ccard, 128, "rT30:head_line_len = %x\n", p->head_line_len);
-		strncpy(st, p->station_id, p->station_id_len);
-		st[p->station_id_len] = 0;
+		strscpy(st, p->station_id, p->station_id_len + 1);
 		eicon_log(ccard, 128, "rT30:station_id = <%s>\n", st);
 	}
 	if (!chan->fax) {
@@ -2064,8 +2073,7 @@ idi_faxdata_send(eicon_card *ccard, eicon_chan *chan, struct sk_buff *skb)
 				OutBuf.Len++;
 			} else {
 				*OutBuf.Next++ = 0;
-				*(__u16 *) OutBuf.Next = (__u16) LineBuf.Len;
-				OutBuf.Next += sizeof(__u16);
+				*((__u16 *) OutBuf.Next)++ = (__u16) LineBuf.Len;
 				OutBuf.Len += 3;
 			}
 			memcpy(OutBuf.Next, LineBuf.Data, LineBuf.Len);
@@ -2720,7 +2728,7 @@ idi_handle_ack_ok(eicon_card *ccard, eicon_chan *chan, eicon_RC *ack)
   int twaitpq = 0;
 
 	if (ack->RcId != ((chan->e.ReqCh) ? chan->e.B2Id : chan->e.D3Id)) {
-		/* I dont know why this happens, should not ! */
+		/* I don't know why this happens, should not ! */
 		/* just ignoring this RC */
 		eicon_log(ccard, 16, "idi_ack: Ch%d: RcId %d not equal to last %d\n", chan->No, 
 			ack->RcId, (chan->e.ReqCh) ? chan->e.B2Id : chan->e.D3Id);
@@ -3039,7 +3047,7 @@ eicon_idi_manage(eicon_card *card, eicon_manifbuf *mb)
 {
 	int l = 0;
 	int ret = 0;
-	unsigned long timeout;
+	int timeout;
 	int i;
         struct sk_buff *skb;
         struct sk_buff *skb2;

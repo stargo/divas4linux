@@ -1,11 +1,16 @@
+
 /*
  *
-  Copyright (c) Dialogic, 2007.
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
  *
   This source file is supplied for the use with
-  Dialogic range of DIVA Server Adapters.
+  Sangoma (formerly Dialogic) range of Adapters.
  *
-  Dialogic File Revision :    2.1
+  File Revision :    2.1
  *
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -125,32 +130,26 @@ static short capidtmf_expand_table_ulaw[0x0100] =
 
 static short capidtmf_recv_window_function[CAPIDTMF_RECV_ACCUMULATE_CYCLES] =
 {
-    -500L,   -999L,  -1499L,  -1998L,  -2496L,  -2994L,  -3491L,  -3988L,
-   -4483L,  -4978L,  -5471L,  -5963L,  -6454L,  -6943L,  -7431L,  -7917L,
-   -8401L,  -8883L,  -9363L,  -9840L, -10316L, -10789L, -11259L, -11727L,
-  -12193L, -12655L, -13115L, -13571L, -14024L, -14474L, -14921L, -15364L,
-  -15804L, -16240L, -16672L, -17100L, -17524L, -17944L, -18360L, -18772L,
-  -19180L, -19583L, -19981L, -20375L, -20764L, -21148L, -21527L, -21901L,
-  -22270L, -22634L, -22993L, -23346L, -23694L, -24037L, -24374L, -24705L,
-  -25030L, -25350L, -25664L, -25971L, -26273L, -26568L, -26858L, -27141L,
-  -27418L, -27688L, -27952L, -28210L, -28461L, -28705L, -28943L, -29174L,
-  -29398L, -29615L, -29826L, -30029L, -30226L, -30415L, -30598L, -30773L,
-  -30941L, -31102L, -31256L, -31402L, -31541L, -31673L, -31797L, -31914L,
-  -32024L, -32126L, -32221L, -32308L, -32388L, -32460L, -32524L, -32581L,
-  -32631L, -32673L, -32707L, -32734L, -32753L, -32764L, -32768L, -32764L,
-  -32753L, -32734L, -32707L, -32673L, -32631L, -32581L, -32524L, -32460L,
-  -32388L, -32308L, -32221L, -32126L, -32024L, -31914L, -31797L, -31673L,
-  -31541L, -31402L, -31256L, -31102L, -30941L, -30773L, -30598L, -30415L,
-  -30226L, -30029L, -29826L, -29615L, -29398L, -29174L, -28943L, -28705L,
-  -28461L, -28210L, -27952L, -27688L, -27418L, -27141L, -26858L, -26568L,
-  -26273L, -25971L, -25664L, -25350L, -25030L, -24705L, -24374L, -24037L,
-  -23694L, -23346L, -22993L, -22634L, -22270L, -21901L, -21527L, -21148L,
-  -20764L, -20375L, -19981L, -19583L, -19180L, -18772L, -18360L, -17944L,
-  -17524L, -17100L, -16672L, -16240L, -15804L, -15364L, -14921L, -14474L,
-  -14024L, -13571L, -13115L, -12655L, -12193L, -11727L, -11259L, -10789L,
-  -10316L,  -9840L,  -9363L,  -8883L,  -8401L,  -7917L,  -7431L,  -6943L,
-   -6454L,  -5963L,  -5471L,  -4978L,  -4483L,  -3988L,  -3491L,  -2994L,
-   -2496L,  -1998L,  -1499L,   -999L,   -500L, 
+    -639,  -1278,  -1917,  -2555,  -3192,  -3828,  -4462,  -5094,
+   -5725,  -6354,  -6980,  -7603,  -8223,  -8841,  -9455, -10065,
+  -10672, -11274, -11872, -12466, -13055, -13639, -14218, -14791,
+  -15359, -15920, -16476, -17026, -17569, -18105, -18635, -19157,
+  -19672, -20180, -20679, -21172, -21655, -22131, -22598, -23057,
+  -23507, -23948, -24380, -24802, -25216, -25619, -26013, -26397,
+  -26770, -27134, -27487, -27830, -28162, -28484, -28795, -29094,
+  -29383, -29660, -29926, -30181, -30424, -30656, -30876, -31084,
+  -31281, -31465, -31638, -31798, -31946, -32083, -32207, -32318,
+  -32418, -32505, -32579, -32642, -32692, -32729, -32754, -32766,
+  -32766, -32754, -32729, -32692, -32642, -32579, -32505, -32418,
+  -32318, -32207, -32083, -31946, -31798, -31638, -31465, -31281,
+  -31084, -30876, -30656, -30424, -30181, -29926, -29660, -29383,
+  -29094, -28795, -28484, -28162, -27830, -27487, -27134, -26770,
+  -26397, -26013, -25619, -25216, -24802, -24380, -23948, -23507,
+  -23057, -22598, -22131, -21655, -21172, -20679, -20180, -19672,
+  -19157, -18635, -18105, -17569, -17026, -16476, -15920, -15359,
+  -14791, -14218, -13639, -13055, -12466, -11872, -11274, -10672,
+  -10065,  -9455,  -8841,  -8223,  -7603,  -6980,  -6354,  -5725,
+   -5094,  -4462,  -3828,  -3192,  -2555,  -1917,  -1278,   -639
 };
 
 static byte capidtmf_leading_zeroes_table[0x100] =
@@ -329,14 +328,14 @@ static void capidtmf_goertzel_result (int32 *buffer, int32 *coeffs)
 #define CAPIDTMF_RECV_GUARD_SNR_INDEX_1336    5
 #define CAPIDTMF_RECV_GUARD_SNR_INDEX_1477    6
 #define CAPIDTMF_RECV_GUARD_SNR_INDEX_1633    7
-#define CAPIDTMF_RECV_GUARD_SNR_INDEX_635     8
-#define CAPIDTMF_RECV_GUARD_SNR_INDEX_1010    9
-#define CAPIDTMF_RECV_GUARD_SNR_INDEX_1140    10
-#define CAPIDTMF_RECV_GUARD_SNR_INDEX_1272    11
-#define CAPIDTMF_RECV_GUARD_SNR_INDEX_1405    12
-#define CAPIDTMF_RECV_GUARD_SNR_INDEX_1555    13
-#define CAPIDTMF_RECV_GUARD_SNR_INDEX_1715    14
-#define CAPIDTMF_RECV_GUARD_SNR_INDEX_1875    15
+#define CAPIDTMF_RECV_GUARD_SNR_INDEX_625     8
+#define CAPIDTMF_RECV_GUARD_SNR_INDEX_1020    9
+#define CAPIDTMF_RECV_GUARD_SNR_INDEX_1125    10
+#define CAPIDTMF_RECV_GUARD_SNR_INDEX_896     11
+#define CAPIDTMF_RECV_GUARD_SNR_INDEX_1272    12
+#define CAPIDTMF_RECV_GUARD_SNR_INDEX_1405    13
+#define CAPIDTMF_RECV_GUARD_SNR_INDEX_1555    14
+#define CAPIDTMF_RECV_GUARD_SNR_INDEX_FUND    15
 
 #define CAPIDTMF_RECV_GUARD_SNR_DONTCARE      0xc000
 #define CAPIDTMF_RECV_NO_DIGIT                0xff
@@ -348,45 +347,81 @@ static void capidtmf_goertzel_result (int32 *buffer, int32 *coeffs)
 
 #define CAPIDTMF_RECV_INDICATION_DIGIT        0x0001
 
+#define CAPIDTMF_RECV_679_IS_IN_VICINITY      0x80
+#define CAPIDTMF_RECV_770_IS_IN_VICINITY      0x40
+#define CAPIDTMF_RECV_852_IS_IN_VICINITY      0x20
+#define CAPIDTMF_RECV_941_IS_IN_VICINITY      0x10
+#define CAPIDTMF_RECV_1209_IS_IN_VICINITY     0x08
+#define CAPIDTMF_RECV_1336_IS_IN_VICINITY     0x04
+#define CAPIDTMF_RECV_1477_IS_IN_VICINITY     0x02
+#define CAPIDTMF_RECV_1633_IS_IN_VICINITY     0x01
+
+static OSCONST byte capidtmf_recv_digit_tone_mask_table[CAPIDTMF_LOW_GROUP_FREQUENCIES * CAPIDTMF_HIGH_GROUP_FREQUENCIES] =
+{
+  0x88, 0x48, 0x28, 0x18, 0x84, 0x44, 0x24, 0x14,
+  0x82, 0x42, 0x22, 0x12, 0x81, 0x41, 0x21, 0x11,
+};
+
+static OSCONST byte capidtmf_recv_vicinity_mask_table[CAPIDTMF_RECV_TOTAL_FREQUENCY_COUNT] =
+{
+  0x82,  /* 694 Hz (Low group 697 Hz) */
+  0x42,  /* 773 Hz (Low group 770 Hz) */
+  0x20,  /* 846 Hz (Low group 852 Hz) */
+  0x10,  /* 941 Hz (Low group 941 Hz) */
+  0x08,  /* 1209 Hz (High group 1209 Hz) */
+  0x04,  /* 1336 Hz (High group 1336 Hz) */
+  0x02,  /* 1477 Hz (High group 1477 Hz) */
+  0x01,  /* 1633 Hz (High group 1633 Hz) */
+  0x80,  /* 625 Hz (Lower guard of low group 631 Hz) */
+  0x10,  /* 1020 Hz (Upper guard of low group 1039 Hz) */
+  0x08,  /* 1125 Hz (Lower guard of high group 1140 Hz) */
+  0x30,  /* 896 Hz (Guard between 852 Hz and 941 Hz: 896 Hz) */
+  0x0c,  /* 1272 Hz (3rd harmonics of 852/2 Hz and guard between 1209 Hz and 1336 Hz: 1271 Hz) */
+  0x06,  /* 1406 Hz (3rd harmonics of 941/2 Hz 2nd harmonics of 697 Hz and guard between 1336 Hz and 1477 Hz: 1405 Hz) */
+  0x03,  /* 1555 Hz (2nd harmonics of 770 Hz and guard between 1477 Hz and 1633 Hz: 1553 Hz) */
+  0xff,  /* 396-600 Hz (fundamentals) */
+};
+
+
 static int32 capidtmf_recv_goertzel_coef_table[CAPIDTMF_RECV_TOTAL_FREQUENCY_COUNT] =
 {
-  0xda97L * 2,  /* 697 Hz (Low group 697 Hz) */
-  0xd299L * 2,  /* 770 Hz (Low group 770 Hz) */
-  0xc8cbL * 2,  /* 852 Hz (Low group 852 Hz) */
+  0xdae7L * 2,  /* 694 Hz (Low group 697 Hz) */
+  0xd241L * 2,  /* 773 Hz (Low group 770 Hz) */
+  0xc98aL * 2,  /* 846 Hz (Low group 852 Hz) */
   0xbd36L * 2,  /* 941 Hz (Low group 941 Hz) */
   0x9501L * 2,  /* 1209 Hz (High group 1209 Hz) */
   0x7f89L * 2,  /* 1336 Hz (High group 1336 Hz) */
   0x6639L * 2,  /* 1477 Hz (High group 1477 Hz) */
   0x48c6L * 2,  /* 1633 Hz (High group 1633 Hz) */
-  0xe14cL * 2,  /* 630 Hz (Lower guard of low group 631 Hz) */
-  0xb2e0L * 2,  /* 1015 Hz (Upper guard of low group 1039 Hz) */
-  0xa1a0L * 2,  /* 1130 Hz (Lower guard of high group 1140 Hz) */
-  0x8a87L * 2,  /* 1272 Hz (Guard between 1209 Hz and 1336 Hz: 1271 Hz) */
-  0x7353L * 2,  /* 1405 Hz (2nd harmonics of 697 Hz and guard between 1336 Hz and 1477 Hz: 1405 Hz) */
-  0x583bL * 2,  /* 1552 Hz (2nd harmonics of 770 Hz and guard between 1477 Hz and 1633 Hz: 1553 Hz) */
-  0x37d8L * 2,  /* 1720 Hz (2nd harmonics of 852 Hz and upper guard of high group: 1715 Hz) */
-  0x0000L * 2   /* 100-630 Hz (fundamentals) */
+  0xe1c6L * 2,  /* 625 Hz (Lower guard of low group 631 Hz) */
+  0xb227L * 2,  /* 1020 Hz (Upper guard of low group 1039 Hz) */
+  0xa268L * 2,  /* 1125 Hz (Lower guard of high group 1140 Hz) */
+  0xc32fL * 2,  /* 896 Hz (Guard between 852 Hz and 941 Hz: 896 Hz) */
+  0x8a87L * 2,  /* 1272 Hz (3rd harmonics of 852/2 Hz and guard between 1209 Hz and 1336 Hz: 1271 Hz) */
+  0x7325L * 2,  /* 1406 Hz (3rd harmonics of 941/2 Hz 2nd harmonics of 697 Hz and guard between 1336 Hz and 1477 Hz: 1405 Hz) */
+  0x57aaL * 2,  /* 1555 Hz (2nd harmonics of 770 Hz and guard between 1477 Hz and 1633 Hz: 1553 Hz) */
+  0x0000L * 2   /* 396-600 Hz (fundamentals) */
 };
 
 
 static word capidtmf_recv_guard_snr_low_table[CAPIDTMF_RECV_TOTAL_FREQUENCY_COUNT] =
 {
-  14,                                    /* Low group peak versus 697 Hz */
-  14,                                    /* Low group peak versus 770 Hz */
-  14,                                    /* Low group peak versus 852 Hz */
-  14,                                    /* Low group peak versus 941 Hz */
+  DSPDTMF_RX_HARMONICS_SEL_DEFAULT - 1,  /* Low group peak versus 697 Hz */
+  DSPDTMF_RX_HARMONICS_SEL_DEFAULT - 1,  /* Low group peak versus 770 Hz */
+  16,                                    /* Low group peak versus 852 Hz */
+  16,                                    /* Low group peak versus 941 Hz */
   CAPIDTMF_RECV_GUARD_SNR_DONTCARE,      /* Low group peak versus 1209 Hz */
   CAPIDTMF_RECV_GUARD_SNR_DONTCARE,      /* Low group peak versus 1336 Hz */
   CAPIDTMF_RECV_GUARD_SNR_DONTCARE,      /* Low group peak versus 1477 Hz */
   CAPIDTMF_RECV_GUARD_SNR_DONTCARE,      /* Low group peak versus 1633 Hz */
-  14,                                    /* Low group peak versus 635 Hz */
-  16,                                    /* Low group peak versus 1010 Hz */
-  CAPIDTMF_RECV_GUARD_SNR_DONTCARE,      /* Low group peak versus 1140 Hz */
-  CAPIDTMF_RECV_GUARD_SNR_DONTCARE,      /* Low group peak versus 1272 Hz */
+  14,                                    /* Low group peak versus 625 Hz */
+  16,                                    /* Low group peak versus 1020 Hz */
+  CAPIDTMF_RECV_GUARD_SNR_DONTCARE,      /* Low group peak versus 1125 Hz */
+  1,                                     /* Low group peak versus 896 Hz */
+  DSPDTMF_RX_HARMONICS_SEL_DEFAULT - 10, /* Low group peak versus 1272 Hz */
   DSPDTMF_RX_HARMONICS_SEL_DEFAULT - 8,  /* Low group peak versus 1405 Hz */
-  DSPDTMF_RX_HARMONICS_SEL_DEFAULT - 4,  /* Low group peak versus 1555 Hz */
-  DSPDTMF_RX_HARMONICS_SEL_DEFAULT - 4,  /* Low group peak versus 1715 Hz */
-  12                                     /* Low group peak versus 100-630 Hz */
+  DSPDTMF_RX_HARMONICS_SEL_DEFAULT - 6,  /* Low group peak versus 1555 Hz */
+  10                                     /* Low group peak versus 396-600 Hz */
 };
 
 
@@ -396,18 +431,18 @@ static word capidtmf_recv_guard_snr_high_table[CAPIDTMF_RECV_TOTAL_FREQUENCY_COU
   CAPIDTMF_RECV_GUARD_SNR_DONTCARE,      /* High group peak versus 770 Hz */
   CAPIDTMF_RECV_GUARD_SNR_DONTCARE,      /* High group peak versus 852 Hz */
   CAPIDTMF_RECV_GUARD_SNR_DONTCARE,      /* High group peak versus 941 Hz */
-  18,                                    /* High group peak versus 1209 Hz */
-  18,                                    /* High group peak versus 1336 Hz */
-  18,                                    /* High group peak versus 1477 Hz */
-  18,                                    /* High group peak versus 1633 Hz */
-  CAPIDTMF_RECV_GUARD_SNR_DONTCARE,      /* High group peak versus 635 Hz */
-  CAPIDTMF_RECV_GUARD_SNR_DONTCARE,      /* High group peak versus 1010 Hz */
-  16,                                    /* High group peak versus 1140 Hz */
+  16,                                    /* High group peak versus 1209 Hz */
+  16,                                    /* High group peak versus 1336 Hz */
+  16,                                    /* High group peak versus 1477 Hz */
+  16,                                    /* High group peak versus 1633 Hz */
+  CAPIDTMF_RECV_GUARD_SNR_DONTCARE,      /* High group peak versus 625 Hz */
+  CAPIDTMF_RECV_GUARD_SNR_DONTCARE,      /* High group peak versus 1020 Hz */
+  16,                                    /* High group peak versus 1125 Hz */
+  CAPIDTMF_RECV_GUARD_SNR_DONTCARE,      /* High group peak versus 896 Hz */
   4,                                     /* High group peak versus 1272 Hz */
   6,                                     /* High group peak versus 1405 Hz */
   8,                                     /* High group peak versus 1555 Hz */
-  16,                                    /* High group peak versus 1715 Hz */
-  12                                     /* High group peak versus 100-630 Hz */
+  10                                     /* High group peak versus 396-600 Hz */
 };
 
 
@@ -546,16 +581,13 @@ static void capidtmf_recv_indicate_digit (t_capidtmf_state *p_state, byte digit)
 void capidtmf_recv_block (t_capidtmf_state   *p_state, byte   *buffer, word length)
 {
   byte result_digit, likely_digit;
-  word sample_number, cycle_counter, n, i;
+  word sample_number, cycle_counter, n, i, j, k;
   word low_peak, high_peak;
   dword lo, hi;
   byte   *p;
   short *q;
   byte goertzel_result_buffer[CAPIDTMF_RECV_TOTAL_FREQUENCY_COUNT];
     short windowed_sample_buffer[CAPIDTMF_RECV_WINDOWED_SAMPLES];
-
-  word j;
-
 
 
   if (p_state->recv.state & CAPIDTMF_RECV_STATE_DTMF_ACTIVE)
@@ -701,11 +733,16 @@ void capidtmf_recv_block (t_capidtmf_state   *p_state, byte   *buffer, word leng
         if (high_peak + DSPDTMF_RX_LOW_EXCEEDING_HIGH_DEFAULT < low_peak)
           result_digit = CAPIDTMF_RECV_NO_DIGIT;
         likely_digit = result_digit;
+        j = low_peak - DSPDTMF_RX_FAR_SELECTIVITY_DEFAULT;
+        k = capidtmf_recv_digit_tone_mask_table[result_digit &
+          (CAPIDTMF_LOW_GROUP_FREQUENCIES * CAPIDTMF_HIGH_GROUP_FREQUENCIES - 1)];
         n = 0;
         for (i = 0; i < CAPIDTMF_RECV_TOTAL_FREQUENCY_COUNT; i++)
         {
           if ((((short)(low_peak - goertzel_result_buffer[i] - capidtmf_recv_guard_snr_low_table[i])) < 0)
-           || (((short)(high_peak - goertzel_result_buffer[i] - capidtmf_recv_guard_snr_high_table[i])) < 0))
+           || (((short)(high_peak - goertzel_result_buffer[i] - capidtmf_recv_guard_snr_high_table[i])) < 0)
+           || (((k & capidtmf_recv_vicinity_mask_table[i]) == 0)
+            && (((short)(j - goertzel_result_buffer[i])) < 0)))
 	  {
 	    n++;
 	  }

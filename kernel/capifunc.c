@@ -1,22 +1,40 @@
-/* $Id: capifunc.c,v 1.48 2004/01/11 19:20:54 armin Exp $
+
+/*
  *
- * ISDN interface module for Dialogic active cards DIVA.
- * CAPI Interface common functions
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
  *
- * Copyright 2000-2009 by Armin Schindler (mac@melware.de)
- * Copyright 2000-2009 Cytronics & Melware (info@melware.de)
- * Copyright 2000-2007 Dialogic
+  This source file is supplied for the use with
+  Sangoma (formerly Dialogic) range of Adapters.
  *
- * This software may be used and distributed according to the terms
- * of the GNU General Public License, incorporated herein by reference.
+  File Revision :    2.1
+ *
+  This program is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; either version 2, or (at your option)
+  any later version.
+ *
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY OF ANY KIND WHATSOEVER INCLUDING ANY
+  implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+  See the GNU General Public License for more details.
+ *
+  You should have received a copy of the GNU General Public License
+  along with this program; if not, write to the Free Software
+  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  */
+
 #define CARDTYPE_H_WANT_DATA       1
 #define CARDTYPE_EXCLUDE_CARD_NAME 1
 #include "platform.h"
 #include "os_capi.h"
 #include "di_defs.h"
 #include "capi20.h"
+#include "dlist.h"
 #include "divacapi.h"
 #include "divasync.h"
 #include "capifunc.h"
@@ -514,7 +532,7 @@ static void clean_adapter(int id, diva_entity_queue_t* free_mem_q)
 
 /*
  * remove a card
- * Ensures consisten state of LI tables in the time adapter
+ * Ensures consistent state of LI tables in the time adapter
  * is removed
  */
 static void divacapi_remove_card(DESCRIPTOR * d)
@@ -583,6 +601,7 @@ static void divacapi_remove_card(DESCRIPTOR * d)
     }
 
     if (card) {
+      diva_os_free (0, card->adapter->mtpx_cfg.cfg);
       diva_os_free (0, card);
     }
   }
@@ -591,7 +610,7 @@ static void divacapi_remove_card(DESCRIPTOR * d)
 /*
  * remove cards
  */
-static void DIVA_EXIT_FUNCTION divacapi_remove_cards(void)
+static void divacapi_remove_cards(void)
 {
   DESCRIPTOR d;
 
@@ -697,6 +716,35 @@ void *ReceiveBufferGet(APPL *appl, int Num)
   return &appl->ReceiveBuffer[Num * appl->MaxDataLength];
 }
 
+static void diva_capi_write_serial_number (struct capi_ctr *ctrl, diva_card *card, dword serial_nr, dword cardtype)
+{
+	char serial[16];
+
+  /* Serial number is too long and SN-PORT exceeds CAPI_SERIAL_LEN,
+     clients should use new interface instead */
+  if (IDI_PROP_SAFE(cardtype,Adapters) > 1) {
+		int offset, i;
+
+		i = (serial_nr & 0xff000000U) >> 24;
+		sprintf(serial, "%d-%d",
+						serial_nr & 0x00ffffffU,
+						(i == 0) ? (IDI_PROP(cardtype,Adapters)-1) : i);
+		offset = (strlen(serial) >= CAPI_SERIAL_LEN) ? (strlen(serial) - CAPI_SERIAL_LEN + 1) : 0;
+		if (i == 0) {
+			serial[strlen(serial)-2] = 0; /* remove -0 */
+		}
+		serial[offset + CAPI_SERIAL_LEN - 1] = 0;
+		strscpy(ctrl->serial, &serial[offset], sizeof(ctrl->serial));
+	} else {
+		sprintf(serial, "%d", serial_nr & 0x00ffffffU);
+		serial[CAPI_SERIAL_LEN - 1] = 0;
+		strscpy(ctrl->serial, serial, sizeof(ctrl->serial));
+	}
+#if defined(DIVA_EICON_CAPI)
+	memcpy (card->serial, ctrl->serial, MIN(sizeof(card->serial),sizeof(ctrl->serial)));
+#endif
+}
+
 /*
  * add a new card
  */
@@ -708,16 +756,15 @@ static int diva_add_card(DESCRIPTOR * d)
 	struct capi_ctr *ctrl = NULL;
 	DIVA_CAPI_ADAPTER *a = NULL;
 	IDI_SYNC_REQ* info_sync_req;
-	char serial[16];
 	LI_CONFIG *new_li_config_table;
 	int j;
-  void* mem_to_free = 0;
-  dword serial_nr = 0;
-  dword cardtype = 0;
+	void* mem_to_free = 0;
+	dword serial_nr = 0;
+	dword cardtype = 0;
 	byte xdi_logical_adapter_number = 0;
 	byte vscapi_mode = 0;
-  const struct _diva_mtpx_adapter_xdi_config_entry* mtpx_cfg = 0;
-  dword mtpx_cfg_number_of_configuration_entries = 0;
+	const struct _diva_mtpx_adapter_xdi_config_entry* mtpx_cfg = 0;
+	dword mtpx_cfg_number_of_configuration_entries = 0;
 
 	if ((info_sync_req = (IDI_SYNC_REQ*)diva_os_malloc(0, sizeof(*info_sync_req))) == 0) {
 		DBG_ERR(("diva_add_card: failed to allocate info_sync_req struct."))
@@ -727,30 +774,30 @@ static int diva_add_card(DESCRIPTOR * d)
 	if (!(card = (diva_card *) diva_os_malloc(0, sizeof(diva_card)))) {
 		DBG_ERR(("diva_add_card: failed to allocate card struct."))
 		diva_os_free (0, info_sync_req);
-		    return (0);
+		return (0);
 	}
 	memset((char *) card, 0x00, sizeof(diva_card));
 	memcpy(&card->d, d, sizeof(DESCRIPTOR));
-  if (diva_capi_uses_madapter) {
-    card->d.type = IDI_ADAPTER_MAESTRA;
-  }
+	if (diva_capi_uses_madapter) {
+		card->d.type = IDI_ADAPTER_MAESTRA;
+	}
 
-  /*
-    Retrieve channel count from management interface of XDI adapter
-    */
-  {
-    diva_mgnt_adapter_info_t diva_adapter_info;
-    int channels = diva_capi_read_channel_count (d, &diva_adapter_info);
-    if (channels > 0) {
-      card->d.channels = (byte)channels;
-      cardtype = diva_adapter_info.cardtype;
-      serial_nr = diva_adapter_info.serial_number;
+	/*
+		Retrieve channel count from management interface of XDI adapter
+		*/
+	{
+		diva_mgnt_adapter_info_t diva_adapter_info;
+		int channels = diva_capi_read_channel_count (d, &diva_adapter_info);
+		mtpx_cfg = diva_adapter_info.mtpx_cfg;
+		if (channels > 0) {
+			card->d.channels = (byte)channels;
+			cardtype = diva_adapter_info.cardtype;
+			serial_nr = diva_adapter_info.serial_number;
 			vscapi_mode = (diva_adapter_info.vscapi_mode != 0);
-      xdi_logical_adapter_number = (byte)diva_adapter_info.logical_adapter_number;
-      mtpx_cfg_number_of_configuration_entries = diva_adapter_info.mtpx_cfg_number_of_configuration_entries;
-      mtpx_cfg = diva_adapter_info.mtpx_cfg;
-    }
-  }
+			xdi_logical_adapter_number = (byte)diva_adapter_info.logical_adapter_number;
+			mtpx_cfg_number_of_configuration_entries = diva_adapter_info.mtpx_cfg_number_of_configuration_entries;
+		}
+	}
 
 	info_sync_req->GetName.Req = 0;
 	info_sync_req->GetName.Rc = IDI_SYNC_REQ_GET_NAME;
@@ -775,7 +822,7 @@ static int diva_add_card(DESCRIPTOR * d)
 		mapping
 		*/
 	diva_os_enter_spin_lock(&api_lock, &old_irql, "find id");
-	card->Id  = find_free_id();
+	card->Id	= find_free_id();
 	diva_os_leave_spin_lock(&api_lock, &old_irql, "find id");
 	ctrl->cnr = (int)card->Id;
 #endif
@@ -783,26 +830,27 @@ static int diva_add_card(DESCRIPTOR * d)
 	if (attach_capi_ctr(ctrl)) {
 		DBG_ERR(("diva_add_card: failed to attach controller."))
 		diva_os_free (0, info_sync_req);
+		diva_os_free (0, mtpx_cfg);
 		diva_os_free(0, card);
 		return (0);
 	}
 
-  card->PRI = (card->d.channels > 2);
-  if (cardtype == 0)
-  {
-    info_sync_req->GetCardType.Req = 0;
-    info_sync_req->GetCardType.Rc  = IDI_SYNC_REQ_GET_CARDTYPE;
-    info_sync_req->GetCardType.cardtype = 0;
-    card->d.request((ENTITY *)info_sync_req);
-    cardtype = info_sync_req->GetCardType.cardtype;
-  }
+	card->PRI = (card->d.channels > 2);
+	if (cardtype == 0)
+	{
+		info_sync_req->GetCardType.Req = 0;
+		info_sync_req->GetCardType.Rc	= IDI_SYNC_REQ_GET_CARDTYPE;
+		info_sync_req->GetCardType.cardtype = 0;
+		card->d.request((ENTITY *)info_sync_req);
+		cardtype = info_sync_req->GetCardType.cardtype;
+	}
 
-  switch (IDI_PROP_SAFE(cardtype,Card)) {
-    case CARD_POTS:
-    case CARD_POTSV:
-      card->PRI = TRUE;
-      break;
-  }
+	switch (IDI_PROP_SAFE(cardtype,Card)) {
+		case CARD_POTS:
+		case CARD_POTSV:
+			card->PRI = TRUE;
+			break;
+	}
 
 #if !defined(DIVA_EICON_CAPI)
 	diva_os_enter_spin_lock(&api_lock, &old_irql, "find id");
@@ -815,66 +863,58 @@ static int diva_add_card(DESCRIPTOR * d)
 	ctrl->version.minorversion = 0;
 	ctrl->version.majormanuversion = DRRELMAJOR;
 	ctrl->version.minormanuversion = DRRELMINOR;
-  if (serial_nr != 0) {
-	  info_sync_req->GetSerial.serial = serial_nr;
-  } else {
-	  info_sync_req->GetSerial.Req = 0;
-	  info_sync_req->GetSerial.Rc = IDI_SYNC_REQ_GET_SERIAL;
-	  info_sync_req->GetSerial.serial = 0;
-	  card->d.request((ENTITY*)info_sync_req);
-  }
-	if ((i = ((info_sync_req->GetSerial.serial & 0xff000000) >> 24))) {
-		sprintf(serial, "%ld-%d",
-			info_sync_req->GetSerial.serial & 0x00ffffff, i + 1);
+	if (serial_nr != 0) {
+		info_sync_req->GetSerial.serial = serial_nr;
 	} else {
-		sprintf(serial, "%ld", info_sync_req->GetSerial.serial);
+		info_sync_req->GetSerial.Req = 0;
+		info_sync_req->GetSerial.Rc = IDI_SYNC_REQ_GET_SERIAL;
+		info_sync_req->GetSerial.serial = 0;
+		card->d.request((ENTITY*)info_sync_req);
 	}
-	serial[CAPI_SERIAL_LEN - 1] = 0;
-	strscpy(ctrl->serial, serial, sizeof(ctrl->serial));
-#if defined(DIVA_EICON_CAPI)
-	memcpy (card->serial, ctrl->serial, MIN(sizeof(card->serial),sizeof(ctrl->serial)));
-#endif
+
+	diva_capi_write_serial_number (ctrl, card, info_sync_req->GetSerial.serial, cardtype);
 
 	a = &adapter[card->Id - 1];
-  a->mtpx_cfg.cfg = mtpx_cfg;
-  a->mtpx_cfg.number_of_configuration_entries = mtpx_cfg_number_of_configuration_entries;
+	a->mtpx_cfg.cfg = mtpx_cfg;
+	a->mtpx_cfg.number_of_configuration_entries = mtpx_cfg_number_of_configuration_entries;
 	card->adapter = a;
 	a->os_card = card;
 	ControllerMap[card->Id] = (byte) (ctrl->cnr);
 
 	DBG_TRC(("AddAdapterMap (%d) -> (%d)", ctrl->cnr, card->Id))
 
-  info_sync_req->xdi_capi_prms.Req = 0;
+	info_sync_req->xdi_capi_prms.Req = 0;
 	info_sync_req->xdi_capi_prms.Rc = IDI_SYNC_REQ_XDI_GET_CAPI_PARAMS;
 	info_sync_req->xdi_capi_prms.info.structure_length =
-	    sizeof(diva_xdi_get_capi_parameters_t);
+			sizeof(diva_xdi_get_capi_parameters_t);
 	card->d.request((ENTITY*)info_sync_req);
 	a->flag_dynamic_l1_down =
-	    info_sync_req->xdi_capi_prms.info.flag_dynamic_l1_down;
+			info_sync_req->xdi_capi_prms.info.flag_dynamic_l1_down;
 	a->group_optimization_enabled =
-	    info_sync_req->xdi_capi_prms.info.group_optimization_enabled;
+			info_sync_req->xdi_capi_prms.info.group_optimization_enabled;
 
-  a->xdi_logical_adapter_number = xdi_logical_adapter_number;
-  a->vscapi_mode                = vscapi_mode;
+	a->xdi_logical_adapter_number = xdi_logical_adapter_number;
+	a->vscapi_mode								= vscapi_mode;
 
 
-  diva_capi_read_cfg_value (info_sync_req,
-                            card->Id,
-                            "XDI\\AN\\GroupOpt",
-                            DivaCfgLibValueTypeUnsigned,
-                            &a->group_optimization_enabled,
-                            sizeof(a->group_optimization_enabled));
-  diva_capi_read_cfg_value (info_sync_req,
-                            card->Id,
-                            "XDI\\AN\\DynL1",
-                            DivaCfgLibValueTypeBool,
-                            &a->flag_dynamic_l1_down,
-                            sizeof(a->flag_dynamic_l1_down));
+	diva_capi_read_cfg_value (info_sync_req,
+														card->Id,
+														"XDI\\AN\\GroupOpt",
+														DivaCfgLibValueTypeUnsigned,
+														&a->group_optimization_enabled,
+														sizeof(a->group_optimization_enabled));
+	diva_capi_read_cfg_value (info_sync_req,
+														card->Id,
+														"XDI\\AN\\DynL1",
+														DivaCfgLibValueTypeBool,
+														&a->flag_dynamic_l1_down,
+														sizeof(a->flag_dynamic_l1_down));
 
 
 	a->request = DIRequest;	/* card->d.request; */
-	a->max_listen = (a->vscapi_mode == 0) ? (card->PRI ? 8 : 2) : 2;
+	a->max_listen = (a->vscapi_mode == 0) ? (card->PRI ? (card->d.channels > 110 ? 4 : 8) : 2) : 2;
 	k = card->d.channels + ((a->vscapi_mode == 0) ? 32 : 4) + a->max_listen;
+	k += card->d.channels*2;	
 #if IMPLEMENT_NULL_PLCI
 	if (a->vscapi_mode == 0) {
 		k += 2 + card->d.channels;
@@ -885,14 +925,15 @@ static int diva_add_card(DESCRIPTOR * d)
 	}
 	a->max_plci = (byte)((k > 255) ? 255 : k);
 	if (!
-	    (a->plci =
-	     (PLCI *) diva_os_malloc(0, sizeof(PLCI) * a->max_plci))) {
+			(a->plci =
+			 (PLCI *) diva_os_malloc(0, sizeof(PLCI) * a->max_plci))) {
 		DBG_ERR(("diva_add_card: failed alloc plci struct."))
 		if (a->mtpx_cfg.cfg != 0) {
-			diva_os_free (0, (void*)a->mtpx_cfg.cfg);
+			diva_os_free (0, a->mtpx_cfg.cfg);
 		}
 		memset(a, 0, sizeof(DIVA_CAPI_ADAPTER));
 		diva_os_free (0, info_sync_req);
+		diva_os_free(0, card);
 		return (0);
 	}
 	memset(a->plci, 0, sizeof(PLCI) * a->max_plci);
@@ -951,7 +992,7 @@ static int diva_add_card(DESCRIPTOR * d)
 		MIXER_CHANNELS_PRI : MIXER_CHANNELS_BRI;
 #endif /* IMPLEMENT_NULL_PLCI */
 	a->li_base = 0;
-	for (i = 0; &adapter[i] != a; i++) {
+	for (i = 0; i < MAX_ADAPTER && &adapter[i] != a; i++) {
 		if (adapter[i].request)
 			a->li_base = adapter[i].li_base + adapter[i].li_channels;
 	}
@@ -959,20 +1000,20 @@ static int diva_add_card(DESCRIPTOR * d)
 	new_li_config_table =
 		(LI_CONFIG *) diva_os_malloc(0, ((k * sizeof(LI_CONFIG) + 3) & ~3) + (2 * k) * ((k + 3) & ~3));
 	if (new_li_config_table == NULL) {
-		DBG_ERR(("diva_add_card: failed alloc li_config table."))
-		if (a->mtpx_cfg.cfg != 0) {
-			diva_os_free (0, (void*)a->mtpx_cfg.cfg);
-		}
+		DBG_ERR(("diva_add_card: failed alloc li_config table (%d).", k))
+		diva_os_free (0, a->plci);
+		diva_os_free (0, a->mtpx_cfg.cfg);
 		memset(a, 0, sizeof(DIVA_CAPI_ADAPTER));
 		diva_os_free (0, info_sync_req);
+		diva_os_free(0, card);
 		return (0);
 	}
 
-  /*
-    Prevent accesses to line interconnect table in the
-    process of update
-    */
-  diva_os_enter_spin_lock(&api_lock, &old_irql, "add card");
+	/*
+	 Prevent accesses to line interconnect table in the
+	 process of update
+	*/
+	diva_os_enter_spin_lock(&api_lock, &old_irql, "add card");
 
 	j = 0;
 	for (i = 0; i < k; i++) {
@@ -991,47 +1032,47 @@ static int diva_add_card(DESCRIPTOR * d)
 		} else {
 			if (a->li_base != 0) {
 				memcpy(&new_li_config_table[i].flag_table[0],
-				       &li_config_table[j].flag_table[0],
-				       a->li_base);
+							 &li_config_table[j].flag_table[0],
+							 a->li_base);
 				memcpy(&new_li_config_table[i].coef_table[0],
-				       &li_config_table[j].coef_table[0],
-				       a->li_base);
+							 &li_config_table[j].coef_table[0],
+							 a->li_base);
 			}
 			memset(&new_li_config_table[i].flag_table[a->li_base], 0, a->li_channels);
 			memset(&new_li_config_table[i].coef_table[a->li_base], 0, a->li_channels);
 			if (a->li_base + a->li_channels < k) {
 				memcpy(&new_li_config_table[i].flag_table[a->li_base +
-				       a->li_channels],
-				       &li_config_table[j].flag_table[a->li_base],
-				       k - (a->li_base + a->li_channels));
+							 a->li_channels],
+							 &li_config_table[j].flag_table[a->li_base],
+							 k - (a->li_base + a->li_channels));
 				memcpy(&new_li_config_table[i].coef_table[a->li_base +
-				       a->li_channels],
-				       &li_config_table[j].coef_table[a->li_base],
-				       k - (a->li_base + a->li_channels));
+							 a->li_channels],
+							 &li_config_table[j].coef_table[a->li_base],
+							 k - (a->li_base + a->li_channels));
 			}
 			j++;
 		}
 	}
 
-  li_total_channels = k;
-  mem_to_free = li_config_table;
+	li_total_channels = k;
+	mem_to_free = li_config_table;
 
-  li_config_table = new_li_config_table;
-  for (i = card->Id; i < max_adapter; i++) {
-    if (adapter[i].request)
-      adapter[i].li_base += a->li_channels;
-  }
+	li_config_table = new_li_config_table;
+	for (i = card->Id; i < max_adapter; i++) {
+		if (adapter[i].request)
+			adapter[i].li_base += a->li_channels;
+	}
 #if IMPLEMENT_NULL_PLCI
-  if (card->PRI)
-  {
-    a->null_plci_base = 32;
-    a->null_plci_channels = 32;
-  }
-  else
-  {
-    a->null_plci_base = 5;
-    a->null_plci_channels = 4;
-  }
+	if (card->PRI)
+	{
+		a->null_plci_base = 32;
+		a->null_plci_channels = 32;
+	}
+	else
+	{
+		a->null_plci_base = 5;
+		a->null_plci_channels = 4;
+	}
 #endif /* IMPLEMENT_NULL_PLCI */
 
 	} else {
@@ -1046,18 +1087,18 @@ static int diva_add_card(DESCRIPTOR * d)
 	if (a == &adapter[max_adapter])
 		max_adapter++;
 
-  diva_capi_adapter_count += (a->vscapi_mode == 0);
+	diva_capi_adapter_count += (a->vscapi_mode == 0);
 
 	card->next = cards;
 	cards = card;
 
-  AutomaticLaw(a);
+	AutomaticLaw(a);
 
 	diva_os_leave_spin_lock(&api_lock, &old_irql, "add card");
 
-  if (mem_to_free != 0) {
-    diva_os_free (0, mem_to_free);
-  }
+	if (mem_to_free != 0) {
+		diva_os_free (0, mem_to_free);
+	}
 
 	i = 0;
 	while (i++ < 30) {
@@ -1369,6 +1410,49 @@ static u16 diva_send_message(struct capi_ctr *ctrl, diva_os_message_buffer_s * d
 
 	diva_os_enter_spin_lock(&api_lock, &old_irql, "send message");
 
+	if (command == _MANUFACTURER_R && card->adapter != NULL &&
+			(card->adapter->mtpx_adapter & 0x02) != 0) {
+		/*
+			MTPX requested refresh of HW config. Safe to release spin lock
+			and proceed with read. MTPX can not remove while CAPI is active
+			*/
+		DIVA_CAPI_ADAPTER* a = card->adapter;
+		DESCRIPTOR d = card->d;
+		void* mtpx_cfg;
+		diva_mgnt_adapter_info_t diva_adapter_info;
+		int channels;
+
+		card->adapter->mtpx_adapter &= ~0x02U;
+
+		/* Release existing configuration */
+		mtpx_cfg = (void*)a->mtpx_cfg.cfg;
+		a->mtpx_cfg.cfg = 0;
+		a->mtpx_cfg.number_of_configuration_entries = 0;
+
+		diva_os_leave_spin_lock(&api_lock, &old_irql, "send message");
+
+		if (mtpx_cfg != 0) {
+			diva_os_free (0, mtpx_cfg);
+			mtpx_cfg = 0;
+		}
+		d.type = IDI_MADAPTER;
+		channels = diva_capi_read_channel_count (&d, &diva_adapter_info);
+
+		diva_os_enter_spin_lock(&api_lock, &old_irql, "send message");
+
+		if (channels > 0) {
+			card->d.channels = (byte)channels;
+			a->mtpx_cfg.cfg = diva_adapter_info.mtpx_cfg;
+			a->mtpx_cfg.number_of_configuration_entries = diva_adapter_info.mtpx_cfg_number_of_configuration_entries;
+
+			a->xdi_logical_adapter_number = (byte)diva_adapter_info.logical_adapter_number;
+			a->vscapi_mode                = (diva_adapter_info.vscapi_mode != 0);
+			a->max_listen = (a->vscapi_mode == 0) ? (card->PRI ? (card->d.channels > 110 ? 4 : 8) : 2) : 2;
+
+			diva_capi_write_serial_number (&card->capi_ctrl, card, diva_adapter_info.serial_number, diva_adapter_info.cardtype);
+		}
+	}
+
   if (card->remove_in_progress) {
 	  diva_os_leave_spin_lock(&api_lock, &old_irql, "send message");
     DBG_ERR(("CAPI_SEND_MSG - remove in progress!"))
@@ -1546,7 +1630,7 @@ static int divacapi_connect_didd(void)
 {
 	int x = 0;
 	IDI_SYNC_REQ req;
-	static DESCRIPTOR DIDD_Table[MAX_DESCRIPTORS];
+	DESCRIPTOR DIDD_Table[MAX_DESCRIPTORS];
 
 	memset (DIDD_Table, 0x00, sizeof(DIDD_Table));
 	DIVA_DIDD_Read(DIDD_Table, sizeof(DIDD_Table));
@@ -1585,7 +1669,7 @@ static int divacapi_connect_didd(void)
   for (x = 0; x < MAX_DESCRIPTORS; x++) {
     if (DIDD_Table[x].type == IDI_MADAPTER) {
       diva_capi_uses_madapter = 1;
-      DBG_LOG(("Add MADAPTER"))
+      DBG_LOG(("Add MADAPTER %d", x))
       diva_add_card(&DIDD_Table[x]);
     }
   }

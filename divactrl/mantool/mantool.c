@@ -1,31 +1,33 @@
-/*------------------------------------------------------------------------------
- *
- * (c) COPYRIGHT 1999-2007       Dialogic Corporation
- *
- * ALL RIGHTS RESERVED
- *
- * This software is the property of Dialogic Corporation and/or its
- * subsidiaries ("Dialogic"). This copyright notice may not be removed,
- * modified or obliterated without the prior written permission of
- * Dialogic.
- *
- * This software is a Trade Secret of Dialogic and may not be
- * copied, transmitted, provided to or otherwise made available to any company,
- * corporation or other person or entity without written permission of
- * Dialogic.
- *
- * No right, title, ownership or other interest in the software is hereby
- * granted or transferred. The information contained herein is subject
- * to change without notice and should not be construed as a commitment of
- * Dialogic.
- *
- *------------------------------------------------------------------------------*/
-/* --------------------------------------------------------------------------
-     MODULE:     MANTOOL.C
 
-     LANGUAGE:   ANSI C
+/*
+ *
+  Copyright (c) Sangoma Technologies, 2018-2022
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
 
-   -------------------------------------------------------------------------- */
+ *
+  This source file is supplied for the use with
+  Sangoma (formerly Dialogic) range of Adapters.
+ *
+  File Revision :    2.1
+ *
+  This program is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; either version 2, or (at your option)
+  any later version.
+ *
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY OF ANY KIND WHATSOEVER INCLUDING ANY
+  implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+  See the GNU General Public License for more details.
+ *
+  You should have received a copy of the GNU General Public License
+  along with this program; if not, write to the Free Software
+  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *
+ */
+
 #include "platform.h"
 #include "pc.h"
 #include <stdio.h>
@@ -302,7 +304,7 @@ int mantool_main (int argc, char** argv) {
 	if (!binary) {
  printf ("Management Interface B-Channel State Trace utility for Diva cards\n");
  printf ("BUILD (%s-%s-%s)\n", DIVA_BUILD, __DATE__, __TIME__);
- printf ("Copyright (c) 1991-2007 Dialogic, 2001-2009 Cytronics & Melware\n");
+ printf ("Copyright (c) 1991-2007 Dialogic\n");
 		if (exclusive_access) {
  printf ("Exclusive interface access\n");
 		} else {
@@ -428,14 +430,14 @@ static void diva_waitkey (void) {
 static void print_usage (void) {
  printf ("Management Interface B-Channel State Trace utility for Diva cards\n");
  printf ("BUILD (%s-%s-%s)\n", DIVA_BUILD, __DATE__, __TIME__);
- printf ("Copyright (c) 1991-2007 Dialogic, 2001-2009 Cytronics & Melware\n\n");
+ printf ("Copyright (c) 1991-2007 Dialogic\n\n");
 
 	printf (" -c XXX        - to select controller XXX\n");
 	printf (" -b            - do not print error and info messages,\n");
 	printf ("                 do not wait for user input\n");
 	printf (" -r\"XXX\"       - to read variable XXX or directory XXX\n");
 	printf (" -e\"XXX\"       - to execute variable\n");
-	printf (" -w\"XXX=YYY\"   - to write value YYY to variable XXX\n");
+	printf (" -w\"XXX=YYY[,MMM]\" - to write YYY to variable XXX with mask MMM\n");
 	printf (" -Recursive    - to read context of current directory and all they\n");
 	printf ("                 subdirectories\n");
 	printf (" -l            - to display legend\n");
@@ -842,9 +844,7 @@ static byte* diva_man_decode_variable (byte* msg, int length, char* tmp,
 		tmp+= path_length;
 		tmp = diva_man_decorate_name (tmp, path_length);
 
-		if (!var_length) {
-			var_length = strlen ((char*)msg);
-		}
+		var_length = strlen ((char*)msg);
 		memcpy (tmp, msg, var_length);
 		tmp += var_length;
 
@@ -919,13 +919,13 @@ static byte* diva_man_decode_variable (byte* msg, int length, char* tmp,
 
 		switch (var_length) {
 			case 1:
-				tmp += sprintf (tmp, "%d", *(char*)msg);
+				tmp += sprintf (tmp, "%d", *(signed char*)msg);
 				break;
 			case 2:
-				tmp += sprintf (tmp, "%d", (short int)READ_WORD(msg));
+				tmp += sprintf (tmp, "%d", (short)READ_WORD(msg));
 				break;
 			default:
-				tmp += sprintf (tmp, "%ld", (long)READ_DWORD(msg));
+				tmp += sprintf (tmp, "%ld", (long)(int32)READ_DWORD(msg));
 		}
 
 	} else if (type == 0x82 /* MI_UINT */) {
@@ -946,7 +946,7 @@ static byte* diva_man_decode_variable (byte* msg, int length, char* tmp,
 				tmp += sprintf (tmp, "%u", READ_WORD(msg));
 				break;
 			default:
-				tmp += sprintf (tmp, "%u", READ_DWORD(msg));
+				tmp += sprintf (tmp, "%lu", (unsigned long)READ_DWORD(msg));
 		}
 	} else if (type == 0x83 /* MI_HINT */) {
 		strcpy (tmp, "hit-");
@@ -960,13 +960,16 @@ static byte* diva_man_decode_variable (byte* msg, int length, char* tmp,
 
 		switch (var_length) {
 			case 1:
-				tmp += sprintf (tmp, "0x%x", *(byte*)msg);
+				tmp += sprintf (tmp, "0x%02x", *(byte*)msg);
 				break;
 			case 2:
-				tmp += sprintf (tmp, "0x%x", READ_WORD(msg));
+				tmp += sprintf (tmp, "0x%04x", READ_WORD(msg));
+				break;
+			case 4:
+				tmp += sprintf (tmp, "0x%08lx", (unsigned long)READ_DWORD(msg));
 				break;
 			default:
-				tmp += sprintf (tmp, "0x%x", READ_DWORD(msg));
+				tmp += sprintf (tmp, "0x%lx", (unsigned long)READ_DWORD(msg));
 		}
 
 	} else if (type == 0x84 /* MI_HSTR */) {
@@ -1041,7 +1044,6 @@ static byte* diva_man_decode_variable (byte* msg, int length, char* tmp,
 	} else if (type == 0x87 /* MI_BITFLD */) {
 		dword val;
 		int i;
-		const char* fmt;
 		strcpy (tmp, "bit-");
 		tmp+= 4;
 		*tmp++= '[';
@@ -1054,15 +1056,12 @@ static byte* diva_man_decode_variable (byte* msg, int length, char* tmp,
 		switch (var_length) {
 			case 1:
 				val = (*(byte*)msg) << 24;
-				fmt = "(%02x)";
 				break;
 			case 2:
 				val = (READ_WORD(msg)) << 16;
-				fmt = "(%04x)";
 				break;
 			default:
 				val = READ_DWORD(msg);
-				fmt = "(%08x)";
 		}
 
 		for (i=0; i < (8*var_length); i++) {
@@ -1181,8 +1180,9 @@ static int matool_write (const char* prms, const char* value) {
 	word length = 0;
 	int _signed = 0;
 	dword out_val;
+	dword out_mask = 0xffffffff;
 	byte* data_ptr;
-	const char* fmt = "%d";
+	const char* fmt = "%d,%d";
 	int str_type = 0;
 
 	diva_man_path[0] = 0;
@@ -1198,7 +1198,7 @@ static int matool_write (const char* prms, const char* value) {
 						break;
 					case 0x83: /* MI_HINT */
 					case 0x87: /* MI_BITFLD */
-						fmt = "%x";
+						fmt = "%x,%x";
 						break;
 					case 0x84: /* MI_HSTR */
 						str_type = 0x84;
@@ -1220,7 +1220,7 @@ static int matool_write (const char* prms, const char* value) {
 						return (1);
 				}
 				if (!str_type) {
-					sscanf (value, fmt, &out_val);
+					sscanf (value, fmt, &out_val, &out_mask);
 					data_ptr = ((byte*)var_info) + var_info->length + 2\
 					           - var_info->value_length;
 				} else if (str_type == 0x84) {
@@ -1302,29 +1302,13 @@ static int matool_write (const char* prms, const char* value) {
 				} else {
 					switch (var_info->value_length) {
 						case 1:
-							if (_signed) {
-								*data_ptr = (char)out_val;
-							} else {
-								*data_ptr = (byte)out_val;
-							}
+							*data_ptr = (byte)((*data_ptr & ~out_mask) | out_val);
 							break;
 						case 2:
-							if (_signed) {
-								short data = (short)out_val;
-								memcpy (data_ptr, &data, 2);
-							} else {
-								word data = (word)out_val;
-								memcpy (data_ptr, &data, 2);
-							}
+							WRITE_WORD(data_ptr, (word)((READ_WORD(data_ptr) & ~out_mask) | out_val));
 							break;
 						case 4:
-							if (_signed) {
-								int data = (int)out_val;
-								memcpy (data_ptr, &data, 4);
-							} else {
-								dword data = (dword)out_val;
-								memcpy (data_ptr, &data, 4);
-							}
+							WRITE_DWORD(data_ptr, (dword)((READ_DWORD(data_ptr) & ~out_mask) | out_val));
 							break;
 
 						default:
@@ -1890,6 +1874,7 @@ static int display_adapter_info (int adapter) {
 	diva_um_idi_req_hdr_t* pReq = (diva_um_idi_req_hdr_t*)&_data[0];
 	diva_um_idi_ind_hdr_t* pInd = (diva_um_idi_ind_hdr_t*)&_data[0];
 	int len;
+	int cardType = 0;
 
 	if ((entity = diva_open_adapter (adapter)) < 0) {
 		return (1);
@@ -1916,12 +1901,36 @@ static int display_adapter_info (int adapter) {
 	diva_close_adapter (entity);
 	entity = -1;
 
-	printf ("name:'%s', type:%02x, features:%04x, channels:%d, nr:%d\n",
-					pInd->hdr.features.name,
-					pInd->hdr.features.type,
-					pInd->hdr.features.features,
-					pInd->hdr.features.channels,
-					adapter);
+	{
+		int nameLength = strlen(pInd->hdr.features.name)+1;
+		if (nameLength+24 < sizeof(pInd->hdr.features.name)) {
+			const char* p = &pInd->hdr.features.name[nameLength];
+
+			if (p[0] == 'T' && p[1] == ':') {
+				cardType = atoi(&p[2]);
+				if (cardType >= CARDTYPE_MAX)
+					cardType = 0;
+			}
+		}
+	}
+
+	if (cardType != 0) {
+		printf ("name:'%s', type:%02x, features:%04x, channels:%d, nr:%d card type: %d card name: '%s'\n",
+						pInd->hdr.features.name,
+						pInd->hdr.features.type,
+						pInd->hdr.features.features,
+						pInd->hdr.features.channels,
+						adapter,
+						cardType,
+						CardProperties[cardType].Name);
+	} else {
+		printf ("name:'%s', type:%02x, features:%04x, channels:%d, nr:%d\n",
+						pInd->hdr.features.name,
+						pInd->hdr.features.type,
+						pInd->hdr.features.features,
+						pInd->hdr.features.channels,
+						adapter);
+	}
 
 	return (0);
 }

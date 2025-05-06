@@ -2,9 +2,10 @@
 
 # --------------------------------------------------------------------------
 #  DIVA CONFIGURATION WIZARD
-#  Copyright by Dialogic 1993-2008
+#  Copyright Sangoma 2020	
 # --------------------------------------------------------------------------
 
+unset MALLOC_CHECK_
 while true; do
 
 	config_dlg_only=1
@@ -28,7 +29,7 @@ while true; do
 				then
 					if [ $(($1)) -eq $((1)) ]
 					then
-						echo -e "Build can't run without interaction, please start Config without '1'."
+						echo "Build can't run without interaction, please start Config without '1'."
 						exit -1
 					fi
 				fi
@@ -36,7 +37,7 @@ echo ' -------------------------------------------------------------------------
 echo ""
 echo '                         DIVA CONFIGURATION WIZARD'
 echo '                                     ---'
-echo '                       Copyright Dialogic 1991-2008'
+echo '                    Copyright Sangoma Technologies 2020'
 echo '                                     ---'
 echo '               No compiled module found, start build process ?'
 echo ""
@@ -44,7 +45,7 @@ echo '                  (This will require gcc and the kernel '
 echo '                   development packages to be installed!)'
 echo "" 
 echo ' -------------------------------------------------------------------------------'
-      			echo -e "Your selection (Y/N)[Y]: \c"
+      			printf "Your selection (Y/N)[Y]: "
 
                 read tmp
                 if [ -z $tmp ]
@@ -60,7 +61,7 @@ echo ' -------------------------------------------------------------------------
 						cd ${current_dir}
 						if [ $((build_ret)) -ne $((0)) ]
 						then
-							echo -e "Build failed, exiting ..."
+							echo "Build failed, exiting ..."
 							exit $((build_ret))
 						fi
 						;;
@@ -72,7 +73,7 @@ echo ' -------------------------------------------------------------------------
 						cd ${current_dir}
 						if [ $((build_ret)) -ne $((0)) ]
 						then
-							echo -e "Build failed, exiting ..."
+							echo "Build failed, exiting ..."
 							exit $((build_ret))
 						fi
 						;;
@@ -139,7 +140,7 @@ echo "fi" >> ${diva_dir}/test.sh
 
 if [ -e ${diva_dir}/Config.dlg ]
 then
-  ${diva_dir}/dialog --infobox test 4 10 > /dev/null 2>&1
+	${diva_dir}/dialog --infobox test 4 10 > /dev/null 2>&1
 	if [ $(($?)) -eq $((0)) ]
 	then
 		sh ${diva_dir}/test.sh ${diva_dir}/OK > /dev/null 2>&1
@@ -157,12 +158,12 @@ echo ' -------------------------------------------------------------------------
 echo ""
 echo '                         DIVA CONFIGURATION WIZARD'
 echo '                                     ---'
-echo '                       Copyright Dialogic 1991-2008'
+echo '                    Copyright Sangoma Technologies 2020'
 echo '                                     ---'
 echo "               Use 'dialog' based Configuration Wizard Version ?"
 echo "" 
 echo ' -------------------------------------------------------------------------------'
-      	echo -e "Your selection (Y/N)[Y]: \c"
+      	printf "Your selection (Y/N)[Y]: "
       	read tmp
      	 if [ -z $tmp ]
 				then

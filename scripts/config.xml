@@ -31,22 +31,6 @@
     <Name>CDebugTraceSIP</Name>
     <Value>0x83</Value>
    </Mask>
-   <Mask>
-    <Name>CDebugTraceSS7_MTP3</Name>
-    <Value>0x7</Value>
-   </Mask>
-   <Mask>
-    <Name>CDebugTraceSS7_ISUP</Name>
-    <Value>0x7</Value>
-   </Mask>
-   <Mask>
-    <Name>CDebugTraceSSDD</Name>
-    <Value>0x7</Value>
-   </Mask>
-    <Mask>
-    <Name>CDebugTraceDVSCC</Name>
-    <Value>0x7</Value>
-   </Mask>
   </Profile>
   <Profile>
    <Name>Standard trace level + B-channel</Name>
@@ -78,22 +62,6 @@
    <Mask>
     <Name>CDebugTraceSIP</Name>
     <Value>0x83</Value>
-   </Mask>
-   <Mask>
-    <Name>CDebugTraceSS7_MTP3</Name>
-    <Value>0x7</Value>
-   </Mask>
-   <Mask>
-    <Name>CDebugTraceSS7_ISUP</Name>
-    <Value>0x7</Value>
-   </Mask>
-   <Mask>
-    <Name>CDebugTraceSSDD</Name>
-    <Value>0x7</Value>
-   </Mask>
-   <Mask>
-    <Name>CDebugTraceDVSCC</Name>
-    <Value>0x7</Value>
    </Mask>
   </Profile>
   <Profile>
@@ -128,22 +96,6 @@
     <Name>CDebugTraceSIP</Name>
     <Value>0x83</Value>
    </Mask>
-   <Mask>
-    <Name>CDebugTraceSS7_MTP3</Name>
-    <Value>0x7</Value>
-   </Mask>
-   <Mask>
-    <Name>CDebugTraceSS7_ISUP</Name>
-    <Value>0x7</Value>
-   </Mask>
-   <Mask>
-    <Name>CDebugTraceSSDD</Name>
-    <Value>0x7</Value>
-   </Mask>
-   <Mask>
-    <Name>CDebugTraceDVSCC</Name>
-    <Value>0x7</Value>
-   </Mask>
   </Profile>
   <Profile>
    <Name>Diva TTY interface + B-channel</Name>
@@ -176,22 +128,6 @@
    <Mask>
     <Name>CDebugTraceSIP</Name>
     <Value>0x83</Value>
-   </Mask>
-   <Mask>
-    <Name>CDebugTraceSS7_MTP3</Name>
-    <Value>0x7</Value>
-   </Mask>
-   <Mask>
-    <Name>CDebugTraceSS7_ISUP</Name>
-    <Value>0x7</Value>
-   </Mask>
-    <Mask>
-    <Name>CDebugTraceSSDD</Name>
-    <Value>0x7</Value>
-   </Mask>
-   <Mask>
-    <Name>CDebugTraceDVSCC</Name>
-    <Value>0x7</Value>
    </Mask>
   </Profile>
   <Profile>
@@ -226,23 +162,7 @@
     <Name>CDebugTraceSIP</Name>
     <Value>0x83</Value>
    </Mask>
-   <Mask>
-    <Name>CDebugTraceSS7_MTP3</Name>
-    <Value>0x7</Value>
-   </Mask>
-   <Mask>
-    <Name>CDebugTraceSS7_ISUP</Name>
-    <Value>0x7</Value>
-   </Mask>
-   <Mask>
-    <Name>CDebugTraceSSDD</Name>
-    <Value>0x7</Value>
-   </Mask>
-   <Mask>
-    <Name>CDebugTraceDVSCC</Name>
-    <Value>0x7</Value>
-   </Mask>
-  </Profile>
+   </Profile>
   <Profile>
    <Name>CAPI2.0 interface</Name>
    <Shortcut>c</Shortcut>
@@ -274,22 +194,6 @@
    <Mask>
     <Name>CDebugTraceSIP</Name>
     <Value>0x83</Value>
-   </Mask>
-   <Mask>
-    <Name>CDebugTraceSS7_MTP3</Name>
-    <Value>0x7</Value>
-   </Mask>
-   <Mask>
-    <Name>CDebugTraceSS7_ISUP</Name>
-    <Value>0x7</Value>
-   </Mask>
-   <Mask>
-    <Name>CDebugTraceSSDD</Name>
-    <Value>0x7</Value>
-   </Mask>
-   <Mask>
-    <Name>CDebugTraceDVSCC</Name>
-    <Value>0x7</Value>
    </Mask>
   </Profile>
   <Profile>
@@ -324,22 +228,6 @@
     <Name>CDebugTraceSIP</Name>
     <Value>0x83</Value>
    </Mask>
-   <Mask>
-    <Name>CDebugTraceSS7_MTP3</Name>
-    <Value>0x7</Value>
-   </Mask>
-   <Mask>
-    <Name>CDebugTraceSS7_ISUP</Name>
-    <Value>0x7</Value>
-   </Mask>
-    <Mask>
-    <Name>CDebugTraceSSDD</Name>
-    <Value>0x7</Value>
-   </Mask>
-   <Mask>
-    <Name>CDebugTraceDVSCC</Name>
-    <Value>0x7</Value>
-   </Mask>
   </Profile>
   <Profile>
    <Name>CAPI2.0 interface + data</Name>
@@ -351,7 +239,7 @@
    </Mask>
    <Mask>
     <Name>CDebugTraceCAPI</Name>
-    <Value>0x7fffffff</Value>
+    <Value>0x2197</Value>
    </Mask>
    <Mask>
     <Name>CDebugTraceXDI</Name>
@@ -372,22 +260,6 @@
    <Mask>
     <Name>CDebugTraceSIP</Name>
     <Value>0x83</Value>
-   </Mask>
-   <Mask>
-    <Name>CDebugTraceSS7_MTP3</Name>
-    <Value>0x7</Value>
-   </Mask>
-   <Mask>
-    <Name>CDebugTraceSS7_ISUP</Name>
-    <Value>0x7</Value>
-   </Mask>
-    <Mask>
-    <Name>CDebugTraceSSDD</Name>
-    <Value>0x7</Value>
-   </Mask>
-   <Mask>
-    <Name>CDebugTraceDVSCC</Name>
-    <Value>0x7</Value>
    </Mask>
   </Profile>
   <Profile>
@@ -422,22 +294,6 @@
     <Name>CDebugTraceSIP</Name>
     <Value>0x83</Value>
    </Mask>
-   <Mask>
-    <Name>CDebugTraceSS7_MTP3</Name>
-    <Value>0x7</Value>
-   </Mask>
-   <Mask>
-    <Name>CDebugTraceSS7_ISUP</Name>
-    <Value>0x7</Value>
-   </Mask>
-   <Mask>
-    <Name>CDebugTraceSSDD</Name>
-    <Value>0x7</Value>
-   </Mask>
-   <Mask>
-    <Name>CDebugTraceDVSCC</Name>
-    <Value>0x7</Value>
-   </Mask>
   </Profile>
   <Profile>
    <Name>Audio Tap (Fax, Modem)</Name>
@@ -469,22 +325,6 @@
    <Mask>
     <Name>CDebugTraceSIP</Name>
     <Value>0x83</Value>
-   </Mask>
-   <Mask>
-    <Name>CDebugTraceSS7_MTP3</Name>
-    <Value>0x7</Value>
-   </Mask>
-   <Mask>
-    <Name>CDebugTraceSS7_ISUP</Name>
-    <Value>0x7</Value>
-   </Mask>
-    <Mask>
-    <Name>CDebugTraceSSDD</Name>
-    <Value>0x7</Value>
-   </Mask>
-   <Mask>
-    <Name>CDebugTraceDVSCC</Name>
-    <Value>0x7</Value>
    </Mask>
   </Profile>
   <Profile>
@@ -518,20 +358,36 @@
     <Name>CDebugTraceSIP</Name>
     <Value>0x0</Value>
    </Mask>
+  </Profile>
+  <Profile>
+   <Name>CHAN CAPI Trace</Name>
+   <Shortcut>3</Shortcut>
    <Mask>
-    <Name>CDebugTraceSS7_MTP3</Name>
+    <Name>CDebugTraceTTY</Name>
     <Value>0x0</Value>
    </Mask>
    <Mask>
-    <Name>CDebugTraceSS7_ISUP</Name>
+    <Name>CDebugTraceCAPI</Name>
+    <Value>0x197</Value>
+   </Mask>
+   <Mask>
+    <Name>CDebugTraceXDI</Name>
+    <Value>0x197</Value>
+   </Mask>
+   <Mask>
+    <Name>CDebugTraceADAPTER</Name>
+    <Value>0x1ff</Value>
+   </Mask>
+   <Mask>
+    <Name>CDebugTraceMTPX</Name>
+    <Value>0x197</Value>
+   </Mask>
+   <Mask>
+    <Name>CDebugTraceSoftIP</Name>
     <Value>0x0</Value>
    </Mask>
    <Mask>
-    <Name>CDebugTraceSSDD</Name>
-    <Value>0x0</Value>
-   </Mask>
-    <Mask>
-    <Name>CDebugTraceDVSCC</Name>
+    <Name>CDebugTraceSIP</Name>
     <Value>0x0</Value>
    </Mask>
   </Profile>
@@ -540,7 +396,7 @@
    <Required>ADAPTER</Required>
    <DriverName>CDebugTraceADAPTER</DriverName>
    <Entry>
-    <Name>Signalling messages</Name>
+    <Name>Signaling messages</Name>
     <Value>0x02</Value>
     <Shortcut>D</Shortcut>
    </Entry>
@@ -648,6 +504,21 @@
    </Entry>
   </CustomMask>
   <CustomMask>
+   <DriverDesc>TTY driver</DriverDesc>
+   <Required>TTY</Required>
+   <DriverName>CDebugTraceTTY</DriverName>
+   <Entry>
+    <Name>Basic</Name>
+    <Value>0x197</Value>
+    <Shortcut>B</Shortcut>
+   </Entry>
+   <Entry>
+    <Name>Detailed</Name>
+    <Value>0x7fffffff</Value>
+    <Shortcut>V</Shortcut>
+   </Entry>
+  </CustomMask>
+  <CustomMask>
    <DriverDesc>softIP media processing</DriverDesc>
    <Required>softIP</Required>
    <DriverName>CDebugTraceSoftIP</DriverName>
@@ -657,12 +528,12 @@
     <Shortcut>D</Shortcut>
    </Entry>
    <Entry>
-    <Name>Signalling</Name>
+    <Name>Signaling</Name>
     <Value>0x40000</Value>
     <Shortcut>S</Shortcut>
    </Entry>
    <Entry>
-    <Name>Signalling events</Name>
+    <Name>Signaling events</Name>
     <Value>0x2000</Value>
     <Shortcut>E</Shortcut>
    </Entry>
@@ -706,56 +577,6 @@
     <Name>Debug</Name>
     <Value>0x803fffef</Value>
     <Shortcut>D</Shortcut>
-   </Entry>
-  </CustomMask>
-  <CustomMask>
-   <DriverDesc>SS7 for Diva SSDD</DriverDesc>
-   <Required>SSDD</Required>
-   <DriverName>CDebugTraceSSDD</DriverName>
-   <Entry>
-    <Name>Default</Name>
-    <Value>0x7</Value>
-    <Shortcut>D</Shortcut>
-   </Entry>
-   <Entry>
-    <Name>Verbose</Name>
-    <Value>0xf</Value>
-    <Shortcut>s</Shortcut>
-   </Entry>
-   <Entry>
-    <Name>Very verbose</Name>
-    <Value>0x3f</Value>
-    <Shortcut>S</Shortcut>
-   </Entry>
-   <Entry>
-    <Name>Message data</Name>
-    <Value>0x40</Value>
-    <Shortcut>M</Shortcut>
-   </Entry>
-  </CustomMask>
-  <CustomMask>
-   <DriverDesc>SS7 for Diva DVSCC</DriverDesc>
-   <Required>DVSCC</Required>
-   <DriverName>CDebugTraceDVSCC</DriverName>
-   <Entry>
-    <Name>Default</Name>
-    <Value>0x7</Value>
-    <Shortcut>D</Shortcut>
-   </Entry>
-   <Entry>
-    <Name>Signalling</Name>
-    <Value>0xf</Value>
-    <Shortcut>s</Shortcut>
-   </Entry>
-   <Entry>
-    <Name>Very verbose</Name>
-    <Value>0x3f</Value>
-    <Shortcut>S</Shortcut>
-   </Entry>
-   <Entry>
-    <Name>Message data</Name>
-    <Value>0x40</Value>
-    <Shortcut>M</Shortcut>
    </Entry>
   </CustomMask>
  </Trace>

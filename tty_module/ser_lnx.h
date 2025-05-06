@@ -1,12 +1,13 @@
 
 /*
  *
-  Copyright (c) Dialogic(R), 2009.
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2009-2014.
  *
   This source file is supplied for the use with
-  Dialogic range of DIVA Server Adapters.
+  Sangoma (formerly Dialogic) range of DIVA Server Adapters.
  *
-  Dialogic(R) File Revision :    2.1
+  File Revision :    2.1
  *
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -135,7 +136,6 @@ typedef struct ser_dev_s {
 	atomic_t						tx_q_sz;
 	int									tx_flow;
 	int									tx_complete;
-	struct tty_port tport;
 } ser_dev_t;
 
 #define DIVA_TTY_TX_Q_FC_LEVEL 1024

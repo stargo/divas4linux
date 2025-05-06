@@ -2,22 +2,23 @@
 
 # --------------------------------------------------------------------------
 #  DIVA TRACE WIZARD
-#  Copyright by Dialogic 1993-2008
+#  Copyright (c) by Dialogic (R) 1993-2011
+#  Copyright Sangoma Technologies 2021
 # --------------------------------------------------------------------------
 
-kernel_name=$(uname -r)
-kernel_major=$(echo $kernel_name | sed -e "s/\..*$//" -)
-kernel_minor=$(echo $kernel_name | sed -e "s/${kernel_major}\.//" -e "s/\..*$//" -)
-
+unset MALLOC_CHECK_
+kernel_sver=$(uname -r 2>/dev/null)
+kernel_main=$(echo  $kernel_sver | sed -e "s/\..*\$//" - 2>/dev/null)
+kernel_major=$(echo $kernel_sver | sed -e "s/^$kernel_main\.//" -e "s/\..*$//" - 2>/dev/null)
+kernel_minor=$(echo $kernel_sver | sed -e "s/^$kernel_main\.$kernel_major\.//" -e "s/[-\.a-zA-Z].*$//" - 2>/dev/null)
 
 opendiva=0
 diva_dir="/usr/lib/divas"
-dialog="${diva_dir}/dialog"
 check_diva_device_nodes=0
 monitor_fax_dir=0
 fax_trace_pid=0
 
-if [ $((kernel_minor)) -le $((4)) ]
+if [ $((kernel_main)) -le $((2)) -a $((kernel_major)) -le $((4)) ]
 then
 diva_proc="/proc/net/isdn/eicon"
 drv_suffix="o"
@@ -27,7 +28,7 @@ drv_suffix="ko"
 check_diva_device_nodes=1
 fi
 
-load_maint_drv="insmod -f ${diva_dir}/diva_mnt.${drv_suffix}"
+load_maint_drv="insmod ${diva_dir}/diva_mnt.${drv_suffix}"
 
 modinfo ${diva_dir}/diva_mnt.${drv_suffix} 2>/dev/null | grep diva_register_notifier > /dev/null 2>&1
 if [ $(($?)) -eq $((0)) ]
@@ -35,19 +36,21 @@ then
 	load_maint_drv="$load_maint_drv diva_register_notifier=1"
 fi
 
-load_didd_drv="insmod -f ${diva_dir}/divadidd.${drv_suffix}"
+load_didd_drv="insmod ${diva_dir}/divadidd.${drv_suffix}"
 unload_maint_drv="rmmod diva_mnt"
 log_dir="/var/log"
 ditrace="${diva_dir}/divactrl ditrace"
 mlog="${diva_dir}/divactrl mlog"
 tmp="${diva_dir}/trace.tmp"
 dlg="${diva_dir}/trace.dlg"
-hlp="${diva_dir}/trace.hlp"
 trace_bin_file="ditrace"
 strc="${log_dir}/${trace_bin_file}"
 trc="${strc}.bin"
-help=""
-hlp_base="${diva_dir}/help.txt"
+hlp="${diva_dir}/trace.hlp"
+$settermdef > /dev/null 2>&1
+$settermclr > /dev/null 2>&1
+
+source ${diva_dir}/diva.helper.rc
 
 extern_execution=0
 extern_profile="s"
@@ -65,37 +68,29 @@ fi
 
 exit_message="none"
 unload_maint=0
-backtitle="Diva Trace Assistant Copyright (c) by Dialogic 1993 - 2008"
-trace_length=32
+backtitle="Diva Trace Assistant Copyright (c) Sangoma(R) 2021"
+trace_length=128
 trace_pid=0
 
-set_help_id()
-{
-	ident="$1"
-	help=""
+asterisk="/usr/sbin/asterisk"
+if [ ! -x "$asterisk" ]
+then
+  asterisk="asterisk"
+fi
+asterisk_verbose=7
 
-	sed -ne "/<$ident>/,/<$ident\/>/p" ${hlp_base} | sed -e "/<$ident>/d" -e "/<$ident\/>/d" - > ${hlp}
-	if [ $(($?)) -eq 0 ]
-	then
-		if [ -s ${hlp} ]
-		then
-			help="--helptag ${hlp}"
-		fi
-	fi
-
-}
 set_ss7_debug_trace_mask()
 {
 
 if [ $((sourced)) -eq 0 ]
 then
 sed -ne "/SHELL_CFG_START/,/SHELL_CFG_END/p;" ${diva_dir}/divas_cfg.rc 2>/dev/null | grep CDebugTrace \
-  > Trace.cfg.tmp.$$ 2>/dev/null
-source Trace.cfg.tmp.$$
-rm -f Trace.cfg.tmp.$$
-cat ${diva_dir}/config.xml | awk -f ${diva_dir}/diva.trace.awk > Trace.cfg.tmp.$$
-source Trace.cfg.tmp.$$
-rm -f Trace.cfg.tmp.$$
+  > /usr/lib/divas/Trace.cfg.tmp.$$ 2>/dev/null
+source /usr/lib/divas/Trace.cfg.tmp.$$
+rm -f /usr/lib/divas/Trace.cfg.tmp.$$
+cat ${diva_dir}/config.xml | awk -f ${diva_dir}/diva.trace.awk > /usr/lib/divas/Trace.cfg.tmp.$$
+source /usr/lib/divas/Trace.cfg.tmp.$$
+rm -f /usr/lib/divas/Trace.cfg.tmp.$$
 sourced=1
 fi
 
@@ -116,36 +111,40 @@ fi
 # -------------------------------------------------------------------
 diva_get_device_major()
 {
-  if [ -c "$1" ]
+	local devmajor="0"
+
+	if [ -c "$1" ]
 	then
-		return $((0x$(stat --format "%t" "$1")))
+		devmajor=$((0x$(stat --format "%t" "$1")))
 	fi
 
-	return 0
+	echo "$devmajor"
 }
 
 diva_get_driver_major()
 {
+	local drvmajor="0"
+
 	if [ -f "/proc/devices" ]
 	then
-		return $(($(cat /proc/devices | grep " *$1 *$" | sed -e "s/^ //g;" -e "s/ .*$//" -)))
+		drvmajor=$(($(cat /proc/devices | grep " *$1 *$" | sed -e "s/^ //g;" -e "s/ .*$//" -)))
 	fi
 
-	return 0
+	echo "$drvmajor"
 }
 
 #
 # Check Diva driver device node
 # Parameter 1 - driver name
 # Parameter 2 - device node name
+# Parameter 3 - minor
+# Parameter 4 - permissions
 #
 check_diva_device_node_file()
 {
-	diva_get_driver_major "$1"
-	drv_major=$(($?))
+	drv_major=$(diva_get_driver_major "$1")
 
-	diva_get_device_major "$2"
-	dev_major=$(($?))
+	dev_major=$(diva_get_device_major "$2")
 
 	dev_minor=$(($3))
 
@@ -165,6 +164,15 @@ check_diva_device_node_file()
 			fatal_exit
 		fi
 	fi
+
+	if [ ! -z "$4" ]
+	then
+		dev_access_rights=$(stat --print="%a\n" $2 2>/dev/null)
+		if [ "$4" != "$dev_access_rights" ]
+		then
+			chmod $4 $2
+		fi
+	fi
 }
 
 # -------------------------------------------------------------------
@@ -178,7 +186,10 @@ clean_files()
 		idi_nr_list=$(${mantool} -L 2>/dev/null | sed -e "/help/d;" - | sed -e "s/^.*{//" -e "s/,/ /g;" -e "s/}//" - 2>/dev/null)
 		for idi_nr in ${idi_nr_list}
 		do
-			${mantool} -c $((idi_nr)) -eDebug/DebugStop > /dev/null 2>&1
+			if [ $((idi_nr)) -gt $((64)) ]
+			then
+				${mantool} -c $((idi_nr)) -eDebug/DebugStop > /dev/null 2>&1
+			fi
 		done
 		${unload_maint_drv}
   fi
@@ -194,8 +205,8 @@ fatal_exit()
   $dialog --title "Trace configuration aborted" --backtitle "$backtitle" \
       --clear --msgbox "$exit_message" 5 70
 
-  setterm -default
-  setterm -clear
+  $settermdef > /dev/null 2>&1
+  $settermclr > /dev/null 2>&1
 
   clean_files
 
@@ -213,8 +224,8 @@ ok_exit()
   $dialog --title "Operation success" --backtitle "$backtitle" \
       --clear --msgbox "$exit_message" 5 70
 
-  setterm -default
-  setterm -clear
+  $settermdef > /dev/null 2>&1
+  $settermclr > /dev/null 2>&1
 
   clean_files
 
@@ -228,7 +239,7 @@ detect_trace_running()
 
 	for cur in ${running}
 	do
-		ls -l /proc/${cur}/fd | grep "/var/log/ditrace\.bin" > /dev/null 2>&1
+		ls -l /proc/${cur}/fd | grep "ditrace\.bin" > /dev/null 2>&1
 		if [ $(($?)) -eq $((0)) ]
 		then
 			trace_pid=$((cur))
@@ -316,6 +327,30 @@ create_mtpx_log()
 	fi
 }
 
+terminfo()
+{
+  if [ $kernel_main -gt 3 ]
+  then
+    # workaround "xterm" terminal issues
+    tty_type=$(env | grep TERM | awk 'BEGIN { FS = "=" } ; { print $2 }')
+    if [ ${tty_type} = "xterm" ]
+    then
+      # this works around ncurses xterm uggliness
+      TERM=xterm-color
+    elif [ ${tty_type} = "xterm-256color" ]
+    then
+      # old static lib ncurses lacks support for xterm-256color; check first
+      ${diva_dir}/dialog --clear > /dev/null 2>&1
+      if [ $(($?)) -ne 0 ]
+      then
+        TERM=xterm-color
+      fi
+    fi
+	settermdef="setterm --default"
+	settermclr="setterm --clear all"
+  fi
+}
+
 # ----------------------------------------------------
 # ENTRY POINT FOR THE EXTERNAL TOOLS
 # ----------------------------------------------------
@@ -371,7 +406,7 @@ then
 				fi
 				if [ $(($#)) -gt 4 ]
 				then
-					if [ -a $5 = "-search" ]
+					if [ $5 = "-search" ]
 					then
 						search="-search"
 					fi
@@ -384,7 +419,7 @@ then
 	esac
 fi
 
-
+terminfo
 # -----------------------------------------------------
 #   Look if trace daemon already running
 # -----------------------------------------------------
@@ -396,7 +431,7 @@ then
  		msg=""
  		msg="$msg\"S\" \"Stop cumulative trace process\" on "
  		msg="$msg\"X\" \"Exit without changes\" off "
- 		set_help_id trace_stop
+ 		set_help_id dhlp_base_trace_stop
  		msg="$dialog ${help} \
  							--title \"Cumulative trace process is active\" --backtitle \"$backtitle\" \
  							--clear --radiolist \"Terminate trace process ?\" 10 70 3 $msg"
@@ -425,7 +460,7 @@ then
 				echo "Compressed trace files:" >> ${tmp}
 				ls -1d /var/log/diva_trace*.tgz >> ${tmp}
 				echo "" >> ${tmp}
-				echo "You can use comressed trace files" >> ${tmp}
+				echo "You can use compressed trace files" >> ${tmp}
 				echo "for support requests." >> ${tmp}
 				echo "" >> ${tmp}
 				echo "You can call 'tar -zxvf file.tgz' to" >> ${tmp}
@@ -440,17 +475,17 @@ then
 			$dialog --title "Trace process complete" \
 											--backtitle "$backtitle" \
 											--clear --textbox ${tmp} 18 70
-			setterm -default
-			setterm -clear
-			echo -e "Shutdown MAINT driver ...\c"
+			$settermdef > /dev/null 2>&1
+			$settermclr > /dev/null 2>&1
+			printf "Shutdown MAINT driver ..."
 			detect_trace_running
 			while [ $((trace_pid)) -ne 0 ]
 			do
 				sleep 1
 				detect_trace_running
-				echo -e ".\c"
+				printf "."
 			done
-			setterm -clear
+			$settermclr > /dev/null 2>&1
 
 			unload_maint=1
 			clean_files
@@ -505,7 +540,7 @@ then
 		exit_message="Can't stop trace daemon"
 		fatal_exit
 	fi
-  sleep 5
+	sleep 5
 
 
 	if [ $((compress_file)) -eq 1 ]
@@ -546,7 +581,10 @@ then
 	idi_nr_list=$(${mantool} -L 2>/dev/null | sed -e "/help/d;" - | sed -e "s/^.*{//" -e "s/,/ /g;" -e "s/}//" - 2>/dev/null)
 	for idi_nr in ${idi_nr_list}
 	do
-		${mantool} -c $((idi_nr)) -eDebug/DebugStop > /dev/null 2>&1
+		if [ $((idi_nr)) -gt $((64)) ]
+		then
+			${mantool} -c $((idi_nr)) -eDebug/DebugStop > /dev/null 2>&1
+		fi
 	done
 	${unload_maint_drv}
 
@@ -559,7 +597,7 @@ then
 	echo "Compressed trace file: '${trc}'" >> ${tmp}
 	echo "Binary trace file    : '${log_dir}/${trace_bin_file}.bin'" >> ${tmp}
 	echo "" >> ${tmp}
-	echo "You can use comressed trace file '${trc}'" >> ${tmp}
+	echo "You can use compressed trace file '${trc}'" >> ${tmp}
 	echo "for support requests." >> ${tmp}
 	echo "" >> ${tmp}
 	echo "You can call 'tar -zxvf ${trc}' to" >> ${tmp}
@@ -570,8 +608,8 @@ then
 	$dialog --title "Trace process complete" \
 					--backtitle "$backtitle" \
 					--clear --textbox ${tmp} 18 70
-	setterm -default
-	setterm -clear
+	$settermdef > /dev/null 2>&1
+	$settermclr > /dev/null 2>&1
 
 	clean_files
 	exit 0
@@ -617,15 +655,18 @@ then
 fi
 if [ $((check_diva_device_nodes)) -ne $((0)) ]
 then
-	check_diva_device_node_file "DivasMAINT" "/dev/DivasMAINT"  0
-	check_diva_device_node_file "DivasMAINT" "/dev/DivasDBG"    1
-	check_diva_device_node_file "DivasMAINT" "/dev/DivasDBGIFC" 2
+	check_diva_device_node_file "DivasMAINT" "/dev/DivasMAINT"  0 ""
+	check_diva_device_node_file "DivasMAINT" "/dev/DivasDBG"    1 "666"
+	check_diva_device_node_file "DivasMAINT" "/dev/DivasDBGIFC" 2 "666"
 fi
 
 idi_nr_list=$(${mantool} -L 2>/dev/null | sed -e "/help/d;" - | sed -e "s/^.*{//" -e "s/,/ /g;" -e "s/}//" - 2>/dev/null)
 for idi_nr in ${idi_nr_list}
 do
-	${mantool} -c $((idi_nr)) -eDebug/DebugStart > /dev/null 2>&1
+	if [ $((idi_nr)) -gt $((64)) ]
+	then
+		${mantool} -c $((idi_nr)) -eDebug/DebugStart > /dev/null 2>&1
+	fi
 done
 set_ss7_debug_trace_mask
 
@@ -642,6 +683,9 @@ ssdd_present=0
 dvscc_present=0
 
 ${ditrace} -l 2>/dev/null > /tmp/ditrace_l
+sed -ne "/SHELL_CFG_START/,/SHELL_CFG_END/p;" ${diva_dir}/divas_cfg.rc 2>/dev/null | grep CStart >Trace.cfg.tmp.$$ 2>/dev/null
+. ./Trace.cfg.tmp.$$
+rm -f Trace.cfg.tmp.$$
 
 cat /tmp/ditrace_l | grep "ADAPTER" > /dev/null 2>&1
 if [ $(($?)) -eq 0 ]
@@ -660,13 +704,11 @@ then
 	adapter_present=1
 	softip_present=1
 fi
-cat /tmp/ditrace_l | grep "CAPI" > /dev/null 2>&1
-if [ $(($?)) -eq 0 ]
+if [ $((CStartCAPI)) -eq 1 ]
 then
 	capi_present=1
 fi
-cat /tmp/ditrace_l | grep "TTY" > /dev/null 2>&1
-if [ $(($?)) -eq 0 ]
+if [ $((CStartTTY)) -eq 1 ]
 then
 	tty_present=1
 fi
@@ -700,30 +742,23 @@ set_trace_filter()
 
 if [ $((extern_execution)) -eq 0 ]
 then
-  $dialog --clear --title "Trace only specific calls ?" --backtitle "$backtitle" \
-    --yesno "Activate selective trace" 7 70 3>$tmp
-  if [ $(($?)) -eq 0 ]
+  $dialog --clear --title "Selective Tracing" --backtitle "$backtitle" \
+    --yesno "Trace all calls?" 5 70 2>$tmp
+  if [ $(($?)) -ne 0 ]
 	then
-    $dialog --clear --title "Trace single call at the time ?" --backtitle "$backtitle" \
-      --yesno "Please activate this option if requested by Dialogic support" 7 70 3>$tmp
-    if [ $(($?)) -eq 0 ]
+    $dialog --clear --title "Selective Tracing" \
+      --backtitle "$backtitle" \
+      --inputbox "\nPlease enter CPN or CiPN. To trace all calls please use *" 9 70 "${trace_filter}" 3>${tmp}
+    if [ $(($?)) -ne 0 ]
     then
-   	  trace_filter="Csingle"
-  	else
-  		$dialog --clear --title "Please enter CPN or CiPN for selective tracing" \
-  		  --backtitle "$backtitle" \
-  		  --inputbox "To trace all calls please use *" 8 70 "${trace_filter}" 2>${tmp}
-  		if [ $(($?)) -ne 0 ]
-  		then
-  			exit_message="Trace configuration aborted by user"
-  			fatal_exit
-  		fi
-   	 	trace_filter=$(cat ${tmp})
-   	 	if [ -z "${trace_filter}" ]
-   	 	then
-   	 	  trace_filter="*"
-   	 	fi
-  	fi
+      exit_message="Trace configuration aborted by user"
+      fatal_exit
+    fi
+    trace_filter=$(cat ${tmp})
+    if [ -z "${trace_filter}" ]
+    then
+      trace_filter="*"
+    fi
 	else
 		trace_filter="*"
 	fi
@@ -738,7 +773,7 @@ fi
 set_debug_trace_mask()
 {
 	key_name="$1"
-	if [ $1 == $"CDebugTraceDVSCC" ]
+	if [ $1 = $"CDebugTraceDVSCC" ]
 	then
 		sed -e "s/^CDebugTraceDVSCC_OWNER=.*/CDebugTraceDVSCC_OWNER=\"1\"/" divas_cfg.rc > divas_cfg.rc.Trace.$$ 2>&1
 		if [ $(($?)) -eq 0 ]
@@ -747,7 +782,7 @@ set_debug_trace_mask()
 		fi
 		rm -f divas_cfg.rc.Trace.$$
 	fi
-	if [ $1 == $"CDebugTraceSSDD" ]
+	if [ $1 = $"CDebugTraceSSDD" ]
 	then
 		sed -e "s/^CDebugTraceSSDD_OWNER=.*/CDebugTraceSSDD_OWNER=\"1\"/" divas_cfg.rc > divas_cfg.rc.Trace.$$ 2>&1
 		if [ $(($?)) -eq 0 ]
@@ -779,7 +814,7 @@ custom_driver_level()
 	j=0
 	while [ "${custom_entry_name[$(($j))]}" != "" ]
 	do
-		if [ "${custom_entry_driver[$(($j))]}" == "${drivername}" ]
+		if [ "${custom_entry_driver[$(($j))]}" = "${drivername}" ]
 		then
 			msg="$msg\"${custom_entry_short[$(($j))]}\" \"${custom_entry_name[$(($j))]}\" "
 			if [ $(($custom_level & custom_entry_value[$(($j))])) -eq $((custom_entry_value[$(($j))])) ]
@@ -796,7 +831,7 @@ custom_driver_level()
 	j=0
 	while [ "${custom_extraentry_name[$(($j))]}" != "" ]
 	do
-		if [ "${custom_extraentry_driver[$(($j))]}" == "${drivername}" ]
+		if [ "${custom_extraentry_driver[$(($j))]}" = "${drivername}" ]
 		then
 			eval extra_level="\${${custom_extraentry_param[$(($j))]}}"
 			msg="$msg\"${custom_extraentry_short[$(($j))]}\" \"${custom_extraentry_name[$(($j))]}\" "
@@ -829,7 +864,7 @@ custom_driver_level()
 	j=0
 	while [ "${custom_entry_name[$(($j))]}" != "" ]
 	do
-		if [ "${custom_entry_driver[$(($j))]}" == "${drivername}" ]
+		if [ "${custom_entry_driver[$(($j))]}" = "${drivername}" ]
 		then
 			grep "^${custom_entry_short[$(($j))]}$" $tmp > /dev/null 2>&1
 			if [ $(($?)) -eq $((0)) ]
@@ -842,7 +877,7 @@ custom_driver_level()
 	j=0
 	while [ "${custom_extraentry_name[$(($j))]}" != "" ]
 	do
-		if [ "${custom_extraentry_driver[$(($j))]}" == "${drivername}" ]
+		if [ "${custom_extraentry_driver[$(($j))]}" = "${drivername}" ]
 		then
 			grep "^${custom_extraentry_short[$(($j))]}$" $tmp > /dev/null 2>&1
 			if [ $(($?)) -eq $((0)) ]
@@ -873,7 +908,7 @@ set_custom_driver_trace_levels()
 		k=1
 		while [ "${custom_driver[$(($j))]}" != "" ]
 		do
-			if [[ "${custom_required[$(($j))]}" == "" ]] || \
+			if [ "${custom_required[$(($j))]}" = "" ] || \
 			     ( [ "${custom_required[$(($j))]}" != "TTY" -o $((tty_present)) -eq 1 ] && \
 			       [ "${custom_required[$(($j))]}" != "CAPI" -o $((capi_present)) -eq 1 ] && \
 			       [ "${custom_required[$(($j))]}" != "softIP" -o $((softip_present)) -eq 1 ] && \
@@ -918,10 +953,10 @@ sourced=1
 # ------------------------------------------------
 sed -ne "/SHELL_CFG_START/,/SHELL_CFG_END/p;" ${diva_dir}/divas_cfg.rc 2>/dev/null | grep CDebugTrace \
   > Trace.cfg.tmp.$$ 2>/dev/null
-source Trace.cfg.tmp.$$
+. ./Trace.cfg.tmp.$$
 rm -f Trace.cfg.tmp.$$
 cat ${diva_dir}/config.xml | awk -f ${diva_dir}/diva.trace.awk > Trace.cfg.tmp.$$
-source Trace.cfg.tmp.$$
+. ./Trace.cfg.tmp.$$
 rm -f Trace.cfg.tmp.$$
 
 if [ $((extern_execution)) -eq 0 ]
@@ -929,6 +964,7 @@ then
 	# ----------------------------------------------------------------
 	#   Select Debug Profile
 	# ----------------------------------------------------------------
+	asterisk_running=$(fuser -v /dev/capi20 2>&1 | grep asterisk 2>/dev/null | wc -l)
 	msg=""
 	i=1
 
@@ -939,12 +975,12 @@ then
 	j=0
 	while [ "${trace_short[$(($j))]}" != "" ]
 	do
-		if [[ "${trace_required[$(($j))]}" == "" ]] || \
+		if [ "${trace_required[$(($j))]}" = "" ] || \
 		     ( [ "${trace_required[$(($j))]}" != "TTY" -o $((tty_present)) -eq 1 ] && \
 		       [ "${trace_required[$(($j))]}" != "CAPI" -o $((capi_present)) -eq 1 ] )
 		then
 			msg="$msg\"${trace_short[$(($j))]}\" \"${trace_name[$(($j))]}\" "
-			if [ $(($j)) -eq $((0)) ]
+			if [ $((asterisk_running)) -eq 0 -a $(($j)) -eq $((0)) ]
 			then
 				msg="$msg on "
 			else
@@ -958,9 +994,17 @@ then
 	msg="$msg\"1\" \"Accumulate protocol traces\" off "
 	msg="$msg\"2\" \"Accumulate modulation traces\" off "
 
+#	msg="$msg\"3\" \"Asterisk chan-CAPI trace\" "
+#	if [ $((asterisk_running)) -eq 0 ]
+#	then
+#		msg="${msg}off "
+#	else
+#		msg="${msg}on "
+#	fi
+
 	msg="$msg\"*\" \"Custom trace level\" off "
 	
-	set_help_id trace_profile
+	set_help_id dhlp_base_trace_profile
 	msg="$dialog ${help} \
 						 --title \"Please select trace profile\" --backtitle \"$backtitle\" \
 						 --clear --radiolist \"Available trace profiles\" $(($i+7)) 70 $((i)) $msg"
@@ -986,8 +1030,12 @@ case "$trace_profile" in
 	'U') idi_nr_list=$(${mantool} -L 2>/dev/null | sed -e "/help/d;" - | sed -e "s/^.*{//" -e "s/,/ /g;" -e "s/}//" - 2>/dev/null)
 			 for idi_nr in ${idi_nr_list}
 			 do
-				 ${mantool} -c $((idi_nr)) -eDebug/DebugStop > /dev/null 2>&1
+					if [ $((idi_nr)) -gt $((64)) ]
+					then
+						${mantool} -c $((idi_nr)) -eDebug/DebugStop > /dev/null 2>&1
+					fi
 			 done
+			 ${asterisk} -rx "capi no verbose" > /dev/null 2>&1
 			 ${unload_maint_drv}
        if [ -f ${diva_proc}/maint ]
 			 then
@@ -1018,6 +1066,21 @@ case "$trace_profile" in
 			trace_length=64
 			set_debug_trace_mask "CDebugTraceMTPX"   "0xe03"
 		;;
+# -------------------------------
+# Trace asterisk
+# -------------------------------
+#	'3') set_debug_trace_mask "CDebugTraceTTY"     "0x0"
+#       set_debug_trace_mask "CDebugTraceCAPI"    "0x197"
+#       set_debug_trace_mask "CDebugTraceXDI"     "0x197"
+#       set_debug_trace_mask "CDebugTraceMTPX"    "0x197"
+#       set_debug_trace_mask "CDebugTraceADAPTER" "0x1ff"
+#       trace_length=128
+#       ${asterisk} -rx "capi debug" > /dev/null 2>&1
+#       ${asterisk} -rx "capi verbose" > /dev/null 2>&1
+#       ${asterisk} -rx "core set verbose $((asterisk_verbose))" > /dev/null 2>&1
+#       ${asterisk} -rx "set verbose $((asterisk_verbose))" > /dev/null 2>&1
+#		;;
+# -------------------------------
 	'*')
 		set_trace_filter
 		if [ $((extern_execution)) -eq 0 ]
@@ -1026,7 +1089,7 @@ case "$trace_profile" in
 			j=0
 			while [ "${custom_driver[$(($j))]}" != "" ]
 			do
-				if [[ "${custom_required[$(($j))]}" == "" ]] || \
+				if [ "${custom_required[$(($j))]}" = "" ] || \
 				     ( [ "${custom_required[$(($j))]}" != "TTY" -o $((tty_present)) -eq 1 ] && \
 				       [ "${custom_required[$(($j))]}" != "CAPI" -o $((capi_present)) -eq 1 ] && \
 				       [ "${custom_required[$(($j))]}" != "softIP" -o $((softip_present)) -eq 1 ] && \
@@ -1058,13 +1121,21 @@ case "$trace_profile" in
 			found=0
 			while [ "${mask_short[$((mask))]}" != "" ]
 			do
-				if [ "${mask_short[$((mask))]}" == "$trace_profile" ]
+				if [ "${mask_short[$((mask))]}" = "$trace_profile" ]
 				then
 					found=1
 					set_debug_trace_mask "${mask_name[$((mask))]}" "${mask_value[$((mask))]}"
 				fi
 				mask=$(($mask+1))
 			done
+			if [ "${trace_profile}" = "3" ]
+			then
+				trace_length=128
+				${asterisk} -rx "capi debug" > /dev/null 2>&1
+				${asterisk} -rx "capi verbose" > /dev/null 2>&1
+				${asterisk} -rx "core set verbose $((asterisk_verbose))" > /dev/null 2>&1
+				${asterisk} -rx "set verbose $((asterisk_verbose))" > /dev/null 2>&1
+			fi
 			if [ $(($found)) -eq $((0)) -a $((extern_execution)) -eq 1 ]
 			then
 				exit_message="Wrong trace profile: '${trace_profile}'"
@@ -1097,7 +1168,7 @@ ${diva_dir}/Config.dlg 1 > /dev/null 2>&1
 # -------------------------------------------
 ${diva_dir}/divas_cfg.rc restart -1 > /dev/null 2>&1
 
-if [ "${trace_profile}" == "none" ]
+if [ "${trace_profile}" = "none" ]
 then
 	exit
 fi
@@ -1118,7 +1189,7 @@ then
 	do
 		$dialog --clear --title "Please enter trace ring buffer size in megabytes" \
 			  --backtitle "$backtitle" \
-			  --inputbox "Suggested value: 16" 8 70 ${trace_length} 2>${tmp}
+			  --inputbox "Suggested value: 128" 8 70 ${trace_length} 2>${tmp}
 		if [ $(($?)) -ne 0 ]
 		then
 			exit_message="Trace configuration aborted by user"
@@ -1286,8 +1357,8 @@ echo "save trace file." >>  ${tmp}
 $dialog --title "Trace process activated" \
 				--backtitle "$backtitle" \
 				--clear --textbox ${tmp} 18 70
-setterm -default
-setterm -clear
+$settermdef > /dev/null 2>&1
+$settermclr > /dev/null 2>&1
 
 clean_files
 exit 0

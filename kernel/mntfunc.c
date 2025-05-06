@@ -1,16 +1,32 @@
-/* $Id: mntfunc.c,v 1.19 2004/01/09 21:22:03 armin Exp $
- *
- * Driver for Dialogic DIVA Server ISDN cards.
- * Maint module
- *
- * Copyright 2000-2009 by Armin Schindler (mac@melware.de)
- * Copyright 2000-2009 Cytronics & Melware (info@melware.de)
- * Copyright 2000-2007 Dialogic
- *
- * This software may be used and distributed according to the terms
- * of the GNU General Public License, incorporated herein by reference.
- */
 
+/*
+ *
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
+ *
+  This source file is supplied for the use with
+  Sangoma (formerly Dialogic) range of Adapters.
+ *
+  File Revision :    2.1
+ *
+  This program is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; either version 2, or (at your option)
+  any later version.
+ *
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY OF ANY KIND WHATSOEVER INCLUDING ANY
+  implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+  See the GNU General Public License for more details.
+ *
+  You should have received a copy of the GNU General Public License
+  along with this program; if not, write to the Free Software
+  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *
+ */
 
 #include "platform.h"
 #include "di_defs.h"
@@ -78,7 +94,7 @@ static void didd_callback(void *context, DESCRIPTOR * adapter,
 }
 
 static IDI_CALL DIVA_INIT_FUNCTION get_dadapter_request (void) {
-	static DESCRIPTOR DIDD_Table[MAX_DESCRIPTORS];
+	DESCRIPTOR DIDD_Table[MAX_DESCRIPTORS];
 	int x = 0;
 
 	DIVA_DIDD_Read(DIDD_Table, sizeof(DIDD_Table));
@@ -100,7 +116,7 @@ static int DIVA_INIT_FUNCTION connect_didd(void)
 	int x = 0;
 	int dadapter = 0;
 	IDI_SYNC_REQ req;
-	static DESCRIPTOR DIDD_Table[MAX_DESCRIPTORS];
+	DESCRIPTOR DIDD_Table[MAX_DESCRIPTORS];
 
 	DIVA_DIDD_Read(DIDD_Table, sizeof(DIDD_Table));
 
@@ -377,6 +393,7 @@ static int maint_um_dbg_read_write_data (void** info, const void* buf, int count
 			diva_mtpx_um_client_t* pC;
 			byte data[128];
 			int i;
+			size_t __size = sizeof(*pC), *psize = &__size;
 
 			if (diva_os_copy_from_user(NULL, (void*)&data[0], (void*)(((byte*)buf)+1), MIN(count-1,sizeof(data)-1)))
 				return (-EFAULT);
@@ -386,7 +403,7 @@ static int maint_um_dbg_read_write_data (void** info, const void* buf, int count
 				return (-EINVAL);
 			i += 5;
 
-			if ((pC = (diva_mtpx_um_client_t*)diva_os_malloc (0, sizeof(*pC))) != 0) {
+			if ((pC = (diva_mtpx_um_client_t*)diva_os_malloc (0, *psize)) != 0) {
 				memset (pC, 0x00, sizeof(*pC));
 				if (DbgRegisterH (&pC->hDbg, &data[4], &data[i], READ_DWORD(data)) == 0) {
 					DbgDeregisterH (&pC->hDbg);
@@ -407,16 +424,13 @@ static int maint_um_dbg_read_write_data (void** info, const void* buf, int count
 		diva_mtpx_um_client_t* pC = (diva_mtpx_um_client_t*)ident;
 		byte data[257+2];
 		word dli, length;
+		int dli_string_format = 0;
 
 		if (diva_os_copy_from_user(NULL, (void*)&data[0], (void*)(((byte*)buf)+1), MIN(count-1, sizeof(data)-1)))
 			return (-EFAULT);
 
 		dli = READ_WORD(&data[0]);
 		switch (dli) {
-			case DLI_BLK :
-			case DLI_SEND:
-			case DLI_RECV:
-			case DLI_MXLOG:
 			case DLI_LOG :
 			case DLI_FTL :
 			case DLI_ERR :
@@ -434,6 +448,13 @@ static int maint_um_dbg_read_write_data (void** info, const void* buf, int count
 			case DLI_PRV1:
 			case DLI_PRV2:
 			case DLI_PRV3:
+				dli_string_format = 1;
+				break;
+
+			case DLI_BLK :
+			case DLI_SEND:
+			case DLI_RECV:
+			case DLI_MXLOG:
 				break;
 
 			default:
@@ -443,7 +464,11 @@ static int maint_um_dbg_read_write_data (void** info, const void* buf, int count
 		length = MIN(count - 3, 256);
 		data[length+2] = 0;
 
-		dump_dli_data (&pC->hDbg, dli, &data[2], length);
+		if (dli_string_format != 0) {
+			dump_dli_data (&pC->hDbg, dli, "%s", &data[2]);
+		} else {
+			dump_dli_data (&pC->hDbg, dli, &data[2], length);
+		}
 
 		return (count);
 	}

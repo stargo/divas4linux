@@ -1,40 +1,33 @@
 
-/*****************************************************************************
- *
- * (c) COPYRIGHT 2005-2008       Dialogic Corporation
- *
- * ALL RIGHTS RESERVED
- *
- * This software is the property of Dialogic Corporation and/or its
- * subsidiaries ("Dialogic"). This copyright notice may not be removed,
- * modified or obliterated without the prior written permission of
- * Dialogic.
- *
- * This software is a Trade Secret of Dialogic and may not be copied,
- * transmitted, provided to or otherwise made available to any company,
- * corporation or other person or entity without written permission of
- * Dialogic.
- *
- * No right, title, ownership or other interest in the software is hereby
- * granted or transferred. The information contained herein is subject
- * to change without notice and should not be construed as a commitment of
- * Dialogic.
- *
- *----------------------------------------------------------------------------*/
 /*
-  Requires the following OS dependent functions to be implemented:
-  int fp->sysFileRead (OsFileHandle *fp, void *buffer, unsigned long count);
-    Returns count on success
-  int fp->sysFileSeek (OsFileHandle *fp, long offset, int origin);
-    Returns -1 on error
-  int fp->sysCardLoad (OsFileHandle *fp, long length, (void  *  *) anchor);
-    Reads length bytes from the file and writes it to the adapter. The address
-    where the block has written to is stored in *p_anchor.
-    Returns 0 on success
-  void dsp_download_reserve_space (OsFileHandle *fp, long length)
-    If necessary reserves memory space to store one piece of download
-*/
-/*****************************************************************************/
+ *
+  Copyright (c) Sangoma Technologies, 2018-2022
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
+ *
+  This source file is supplied for the use with
+  Sangoma (formerly Dialogic) range of Adapters.
+ *
+  File Revision :    2.1
+ *
+  This program is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; either version 2, or (at your option)
+  any later version.
+ *
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY OF ANY KIND WHATSOEVER INCLUDING ANY
+  implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+  See the GNU General Public License for more details.
+ *
+  You should have received a copy of the GNU General Public License
+  along with this program; if not, write to the Free Software
+  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *
+ */
+
 #if defined(DIVA_OS_DSP_FILE) /* do compile as os independent standalone file */
 #include "platform.h"
 #include "di_defs.h"

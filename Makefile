@@ -27,7 +27,7 @@ tty_module: $(KDIR)/.config kernel
 	@echo
 	@rm -f tty_module/divainclude
 	@ln -s `pwd`/kernel tty_module/divainclude
-	@make DIVA_CFLAGS="-I`pwd`/tty_module -I`pwd`/kernel" -C $(KDIR) M=`pwd`/tty_module KBUILD_EXTRA_SYMBOLS="`pwd`/kernel/Module.symvers" modules -j $(nproc)
+	@make DIVA_CFLAGS="-I`pwd`/tty_module -I`pwd`/kernel" -C $(KDIR) M=`pwd`/tty_module KBUILD_EXTRA_SYMBOLS="`pwd`/kernel/Module.symvers" modules
 	@echo
 
 kernel/divas.ko: $(KDIR)/.config config.h kernel
@@ -35,7 +35,7 @@ kernel/divas.ko: $(KDIR)/.config config.h kernel
 kernel: $(KDIR)/.config config.h
 	@echo "Building divas4linux kernel modules using kernel from $(KDIR) ..."
 	@echo
-	@make -C $(KDIR) M=`pwd`/kernel modules -j $(nproc)
+	@make -C $(KDIR) M=`pwd`/kernel modules
 	@echo
 
 divactrl/divactrl:
@@ -50,7 +50,7 @@ divactrl/divactrl:
 	 	--with-firmware=$(EICONDIR)	\
 		--with-kernel=`pwd`/dlinux		\
 		|| exit 1;		\
-	  make -j $(nproc) || exit 1;	\
+	  make || exit 1;	\
 	  rm -rf ./dlinux;		\
 	)
 
@@ -71,7 +71,7 @@ config.h:
 	  	echo " Note: if you say 'y' here, the common kernelcapi is not used";	\
 	  	echo " and therefore other CAPI cards than Diva are not usable.";	\
 		echo " If you use Diva cards only, you can say 'y'.";	\
-		echo -e "Your selection (y/n)[y]: \c";	\
+		echo "Your selection (y/n)[y]: \c";	\
 		read optimized;	\
 		if [ "$$optimized" = "n" ]; then	\
 			echo "No, using common kernelcapi drivers.";	\
@@ -107,19 +107,25 @@ clean:
 	@(cd divactrl; make distclean >/dev/null 2>&1; exit 0)
 	@rm -f kernel/*.o
 	@rm -f kernel/*.o.d
+	@rm -f kernel/.*.o.d
 	@rm -f kernel/*.ko
+	@rm -f kernel/*.mod
 	@rm -f kernel/*.mod.o
 	@rm -f kernel/*.mod.c
 	@rm -f kernel/.*.cmd
 	@rm -f kernel/Module.symvers
+	@rm -f kernel/modules.order
 	@rm -rf kernel/.tmp_versions
 	@rm -f tty_module/*.o
 	@rm -f tty_module/*.o.d
+	@rm -f tty_module/.*.o.d
 	@rm -f tty_module/*.ko
+	@rm -f tty_module/*.mod
 	@rm -f tty_module/*.mod.o
 	@rm -f tty_module/*.mod.c
 	@rm -f tty_module/.*.cmd
 	@rm -f tty_module/Module.symvers
+	@rm -f tty_module/modules.order
 	@rm -rf tty_module/.tmp_versions
 	@rm -f tty_module/divainclude
 	@echo

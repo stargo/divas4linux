@@ -1,25 +1,33 @@
-/*------------------------------------------------------------------------------
+
+/*
  *
- * (c) COPYRIGHT 1999-2009       Dialogic Corporation
+  Copyright (c) Sangoma Technologies, 2018-2022
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
  *
- * ALL RIGHTS RESERVED
+  This source file is supplied for the use with
+  Sangoma (formerly Dialogic) range of Adapters.
  *
- * This software is the property of Dialogic Corporation and/or its
- * subsidiaries ("Dialogic"). This copyright notice may not be removed,
- * modified or obliterated without the prior written permission of
- * Dialogic.
+  File Revision :    2.1
  *
- * This software is a Trade Secret of Dialogic and may not be
- * copied, transmitted, provided to or otherwise made available to any company,
- * corporation or other person or entity without written permission of
- * Dialogic.
+  This program is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; either version 2, or (at your option)
+  any later version.
  *
- * No right, title, ownership or other interest in the software is hereby
- * granted or transferred. The information contained herein is subject
- * to change without notice and should not be construed as a commitment of
- * Dialogic.
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY OF ANY KIND WHATSOEVER INCLUDING ANY
+  implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+  See the GNU General Public License for more details.
  *
- *------------------------------------------------------------------------------*/
+  You should have received a copy of the GNU General Public License
+  along with this program; if not, write to the Free Software
+  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *
+ */
+
 #include "platform.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -62,9 +70,12 @@ static int divas_get_card_serial_number (dword card, int fd, void* data);
 static int divas_get_card_xlog	(dword card, int fd, void* data);
 static int divas_get_pci_hw_config(dword card, int fd, void* str);
 static int divas_get_card_state	(dword card, int fd, void* data);
+static int divas_get_software_features (dword card, int fd, void* data);
 static int card_number_relates_to_handle (int use_ioctl, int card_number, dword handle);
 static int divas_get_plx_read (dword card, int fd, void* data);
+static int divas_get_io_device_read (dword card, int fd, void* data);
 static int divas_get_plx_write (dword card, int fd, void* data);
+static int divas_get_io_device_write (dword card, int fd, void* data);
 static int divas_get_clock_interrupt_control (dword card, int fd, void* data);
 static int divas_get_clock_interrupt_data (dword card, int fd, void* data);
 
@@ -72,7 +83,9 @@ static diva_get_card_property_proc_t card_properties[] = {
 {"clock_interrupt_data", divas_get_clock_interrupt_data, 255 },
 {"clock_interrupt_control", divas_get_clock_interrupt_control,  255 },
 {"plx_read",      divas_get_plx_read,  255 },
+{"io_read",      divas_get_io_device_read,  255 },
 {"plx_write",     divas_get_plx_write, 255 },
+{"io_write",      divas_get_io_device_write,  255 },
 {"vidi_info",     divas_get_vidi_info, sizeof(diva_xdi_um_cfg_cmd_data_init_vidi_t)},
 {"vidi_mode",     divas_get_vidi_mode, sizeof(dword)},
 {"clock_data",    divas_get_clock_data, sizeof(diva_xdi_um_cfg_cmd_get_clock_memory_info_t)},
@@ -81,6 +94,7 @@ static diva_get_card_property_proc_t card_properties[] = {
 {"xlog",					divas_get_card_xlog,					sizeof(struct mi_pc_maint)},
 {"pci hw config",	divas_get_pci_hw_config,			8*11+5},
 {"card state",		divas_get_card_state,					64},
+{"software features",	divas_get_software_features, 32},
 { 0,              0,                            0,}
 };
 
@@ -98,36 +112,36 @@ divas_open_driver (int card_number)
     diva_divas_uses_ioctl = 0;
     return ((dword)fd);
   }
-  else 
-  if (((fd = open("/proc/net/eicon/divas",  O_RDWR|O_NONBLOCK)) > 0) &&
+  else
+  if (((fd = open("/proc/net/isdn/eicon/divas",  O_RDWR|O_NONBLOCK)) > 0) &&
       card_number_relates_to_handle(1, card_number, fd)         ) {
     diva_divas_uses_ioctl = 1;
     return ((dword)fd);
-  }    
-  else 
+  }
+  else
   if (((fd = open("/dev/DivasP", O_RDWR|O_NONBLOCK)) > 0) &&
       card_number_relates_to_handle(0, card_number, fd)         ) {
     diva_divas_uses_ioctl = 0;
     return ((dword)fd);
   }
-  else 
-  if (((fd = open("/proc/net/eicon/divasp", O_RDWR|O_NONBLOCK)) > 0) &&
+  else
+  if (((fd = open("/proc/net/isdn/eicon/divasp", O_RDWR|O_NONBLOCK)) > 0) &&
       card_number_relates_to_handle(1, card_number, fd)         ) {
     diva_divas_uses_ioctl = 1;
     return ((dword)fd);
-  }    
-  else 
+  }
+  else
   if (((fd = open("/dev/DivasC", O_RDWR|O_NONBLOCK)) > 0) &&
       card_number_relates_to_handle(0, card_number, fd)         ) {
     diva_divas_uses_ioctl = 0;
     return ((dword)fd);
   }
-  else 
-  if (((fd = open("/proc/net/eicon/divasc", O_RDWR|O_NONBLOCK)) > 0) &&
+  else
+  if (((fd = open("/proc/net/isdn/eicon/divasc", O_RDWR|O_NONBLOCK)) > 0) &&
       card_number_relates_to_handle(1, card_number, fd)         ) {
     diva_divas_uses_ioctl = 1;
     return ((dword)fd);
-  }    
+  }
   return (DIVA_INVALID_FILE_HANDLE);
 }
 
@@ -189,58 +203,106 @@ card_number_relates_to_handle (int use_ioctl, int card_number, dword handle)
 	return 1;
 }
 
-int
-divas_get_card (int card_number)
+int divas_get_card (int card_number)
 {
-	dword handle = divas_open_driver (card_number);
-	diva_xdi_um_cfg_cmd_t msg;
+  dword handle = divas_open_driver (card_number);
+  diva_xdi_um_cfg_cmd_t msg;
   diva_xdi_io_cmd iomsg;
 
-	if (handle == DIVA_INVALID_FILE_HANDLE) {
-		return (-1);
-	}
+  if (handle == DIVA_INVALID_FILE_HANDLE) {
+    return (-1);
+  }
   if (diva_divas_uses_ioctl == 0) {
-		if (flock ((int)handle, LOCK_EX) != 0) {
-			divas_close_driver (handle);
-			return (-1);
-		}
-	}
+    if (flock ((int)handle, LOCK_EX) != 0) {
+      divas_close_driver (handle);
+      return (-1);
+    }
+  }
 
-	memset (&msg, 0x00, sizeof(msg));
-	msg.adapter = (dword)card_number;
-	msg.command = DIVA_XDI_UM_CMD_GET_CARD_ORDINAL;
+  memset (&msg, 0x00, sizeof(msg));
+  msg.adapter = (dword)card_number;
+  msg.command = DIVA_XDI_UM_CMD_GET_CARD_ORDINAL;
 
   iomsg.length = sizeof(msg);
   iomsg.cmd = (void *) &msg;
 
   if (diva_divas_uses_ioctl != 0) {
-	  if (ioctl ((int)handle, DIVA_XDI_IO_CMD_WRITE_MSG, (ulong)&iomsg) != sizeof(msg)) {
-  		divas_close_driver (handle);
-  		return (-1);
-  	}
+    if (ioctl ((int)handle, DIVA_XDI_IO_CMD_WRITE_MSG, (ulong)&iomsg) != sizeof(msg)) {
+      divas_close_driver (handle);
+      return (-1);
+    }
   } else {
-	  if (write ((int)handle, &msg, sizeof(msg)) != sizeof(msg)) {
-  		divas_close_driver (handle);
-  		return (-1);
-  	}
+   if (write ((int)handle, &msg, sizeof(msg)) != sizeof(msg)) {
+      divas_close_driver (handle);
+      return (-1);
+    }
   }
-	memset (&msg, 0x00, sizeof(msg));
+  memset (&msg, 0x00, sizeof(msg));
 
   if (diva_divas_uses_ioctl != 0) {
-	  if (ioctl ((int)handle, DIVA_XDI_IO_CMD_READ_MSG, (ulong)&iomsg) != sizeof(dword)) {
-  		divas_close_driver (handle);
-  		return (-1);
-  	}
+    if (ioctl ((int)handle, DIVA_XDI_IO_CMD_READ_MSG, (ulong)&iomsg) != sizeof(dword)) {
+      divas_close_driver (handle);
+      return (-1);
+    }
   } else {
     if (read ((int)handle, &msg, sizeof(msg)) != sizeof(dword)) {
-  		divas_close_driver (handle);
-  		return (-1);
+      divas_close_driver (handle);
+      return (-1);
+    }
+  }
+  divas_close_driver (handle);
+  return ((int)(*(dword*)&msg));
+}
+
+int divas_get_revision_id (int card_number)
+{
+  dword handle = divas_open_driver (card_number);
+  diva_xdi_um_cfg_cmd_t msg;
+  diva_xdi_io_cmd iomsg;
+
+  if (handle == DIVA_INVALID_FILE_HANDLE) {
+    return  -1;
+  }
+  if (!diva_divas_uses_ioctl) {
+    if (flock ((int)handle, LOCK_EX) != 0) {
+      divas_close_driver (handle);
+      return  -1;
     }
   }
 
-	divas_close_driver (handle);
+  memset (&msg, 0x00, sizeof(msg));
+  msg.adapter = (dword)card_number;
+  msg.command = DIVA_XDI_UM_CMD_GET_PCI_REVISION_ID;
 
-	return ((int)(*(dword*)&msg));
+  iomsg.length = sizeof(msg);
+  iomsg.cmd = (void *) &msg;
+
+  if (diva_divas_uses_ioctl) {
+    if (ioctl ((int)handle, DIVA_XDI_IO_CMD_WRITE_MSG, (ulong)&iomsg) != sizeof(msg)) {
+      divas_close_driver (handle);
+      return -1;
+    }
+  } else {
+   if (write ((int)handle, &msg, sizeof(msg)) != sizeof(msg)) {
+      divas_close_driver (handle);
+      return -1;
+    }
+  }
+  memset (&msg, 0x00, sizeof(msg));
+
+  if (diva_divas_uses_ioctl) {
+    if (ioctl ((int)handle, DIVA_XDI_IO_CMD_READ_MSG, (ulong)&iomsg) != 1) {
+      divas_close_driver (handle);
+      return -1;
+    }
+  } else {
+    if (read ((int)handle, &msg, sizeof(msg)) != 1) {
+      divas_close_driver (handle);
+      return -1;
+    }
+  }
+  divas_close_driver (handle);
+  return (int)(*(byte*)&msg);
 }
 
 /* --------------------------------------------------------------------------
@@ -358,6 +420,109 @@ divas_get_vidi_info (dword card, int fd, void* data)
   return 1;
 }
 
+dword divas_read_bar_dword (dword handle, byte bar, dword offset, int* info) {
+	diva_xdi_um_cfg_cmd_t msg;
+  diva_xdi_io_cmd iomsg;
+	dword dst[2];
+	int tmp;
+
+	if (info == 0)
+		info = &tmp;
+
+	memset (&msg, 0x00, sizeof(msg));
+	msg.adapter = (dword)card_number;
+	msg.command = DIVA_XDI_UM_CMD_BAR_ACCESS;
+	msg.command_data.bar_access_data.bar = 0;
+	msg.command_data.bar_access_data.access_type = DIVA_BAR_ACCESS_TYPE_READ | DIVA_BAR_ACCESS_TYPE_SINGLE;
+	msg.command_data.bar_access_data.length = 4;
+	msg.command_data.bar_access_data.offset = offset;
+
+	iomsg.length = sizeof(msg);
+	iomsg.cmd    = (void*)&msg;
+
+	if (diva_divas_uses_ioctl != 0) {
+		if (ioctl ((int)handle, DIVA_XDI_IO_CMD_WRITE_MSG, (ulong)&iomsg) != sizeof(msg)) {
+			*info |= -1;
+			return (0xffffffff);
+		}
+	} else {
+		if (write ((int)handle, &msg, sizeof(msg)) != sizeof(msg)) {
+			*info |= -1;
+			return (0xffffffff);
+		}
+	}
+
+	iomsg.length = 8;
+	iomsg.cmd = (void *) dst;
+
+	if (diva_divas_uses_ioctl != 0) {
+		if (ioctl ((int)handle, DIVA_XDI_IO_CMD_READ_MSG, (ulong)&iomsg) != 8) {
+			*info |= -1;
+			return (0xffffffff);
+		}
+	} else {
+		if (read ((int)handle, dst, 8) != 8) {
+			*info |= -1;
+			return (0xffffffff);
+		}
+	}
+
+
+	if (dst[0] != 4) {
+		*info |= -1;
+		return (0xffffffff);
+	}
+
+	*info = 0;
+
+	return (dst[1]);
+}
+
+int divas_write_bar_dword (dword handle, byte bar, dword offset, dword data) {
+	diva_xdi_um_cfg_cmd_t msg;
+  diva_xdi_io_cmd iomsg;
+	dword dst[2];
+
+	memset (&msg, 0x00, sizeof(msg));
+	msg.adapter = (dword)card_number;
+	msg.command = DIVA_XDI_UM_CMD_BAR_ACCESS;
+	msg.command_data.bar_access_data.bar = 0;
+	msg.command_data.bar_access_data.access_type = DIVA_BAR_ACCESS_TYPE_WRITE | DIVA_BAR_ACCESS_TYPE_SINGLE;
+	msg.command_data.bar_access_data.length = 4;
+	msg.command_data.bar_access_data.offset = offset;
+	msg.command_data.bar_access_data.data   = data;
+
+	iomsg.length = sizeof(msg);
+	iomsg.cmd    = (void*)&msg;
+
+	if (diva_divas_uses_ioctl != 0) {
+		if (ioctl ((int)handle, DIVA_XDI_IO_CMD_WRITE_MSG, (ulong)&iomsg) != sizeof(msg)) {
+			return (-1);
+		}
+	} else {
+		if (write ((int)handle, &msg, sizeof(msg)) != sizeof(msg)) {
+			return (-1);
+		}
+	}
+
+	iomsg.length = 8;
+	iomsg.cmd = (void *) dst;
+
+	if (diva_divas_uses_ioctl != 0) {
+		if (ioctl ((int)handle, DIVA_XDI_IO_CMD_READ_MSG, (ulong)&iomsg) != 8) {
+			return (-1);
+		}
+	} else {
+		if (read ((int)handle, dst, 8) != 8) {
+			return (-1);
+		}
+	}
+
+
+	return ((dst[0] == 0) ? 0 : -1);
+}
+
+
 static int divas_get_plx_read (dword card, int fd, void* data) {
 	diva_xdi_um_cfg_cmd_t msg;
   diva_xdi_io_cmd iomsg;
@@ -421,6 +586,48 @@ static int divas_get_plx_read (dword card, int fd, void* data) {
 											msg.command_data.plx_register.offset,
 											msg.command_data.plx_register.value);
 			break;
+	}
+
+	return (ret);
+}
+
+static int divas_get_io_device_read (dword card, int fd, void* data) {
+	dword offset = (dword)atoi((char*)data) & ~3U;
+	int err = 0, ret = -1;
+	dword v = divas_read_bar_dword (fd, 0, offset, &err);
+
+	if (err == 0) {
+		ret = snprintf ((char*)data, 0xff, "IO[%08x]=%08x", offset, v);
+	}
+
+	return (ret);
+}
+
+static int divas_get_io_device_write (dword card, int fd, void* data) {
+	int err = 0, ret = -1;
+	char* start = (char*)data, *next;
+	dword offset, value;
+
+	offset = (dword)strtoul(start, &next, 0);
+	if (next == start || next == 0 || *next != ':') {
+		return (-1);
+	}
+	start = next + 1;
+	value = (dword)strtoul (start, &next, 0);
+	if (next == start || next == 0) {
+		return (-1);
+	}
+
+	offset &= ~3U;
+
+	if (divas_write_bar_dword (fd, 0, offset, value) != 0) {
+		return (-1);
+	}
+
+	value = divas_read_bar_dword (fd, 0, offset, &err);
+
+	if (err == 0) {
+		ret = snprintf ((char*)data, 0xff, "IO[%08x]=%08x", offset, value);
 	}
 
 	return (ret);
@@ -682,7 +889,7 @@ divas_get_hardware_info_struct (dword card, int fd, void* data)
   }
 
 	return 1;
-}  
+}
 
 /* --------------------------------------------------------------------------
 		Return serial number of the card as ASCII string
@@ -1108,6 +1315,47 @@ divas_get_card_state (dword card, int fd, void* data)
 	return (strlen((char*)data)+1);
 }
 
+static int
+divas_get_software_features (dword card, int fd, void* data)
+{
+	diva_xdi_um_cfg_cmd_t msg;
+  diva_xdi_io_cmd iomsg;
+
+	memset (&msg, 0x00, sizeof(msg));
+	msg.adapter = (dword)card;
+	msg.command = DIVA_XDI_UM_CMD_READ_SOFTWARE_OPTIONS;
+
+  iomsg.length = sizeof(msg);
+  iomsg.cmd = (void *) &msg;
+
+  if (diva_divas_uses_ioctl != 0) {
+	  if (ioctl (fd, DIVA_XDI_IO_CMD_WRITE_MSG, (ulong)&iomsg) != sizeof(msg)) {
+  		return (-1);
+  	}
+  } else {
+	  if (write (fd, &msg, sizeof(msg)) != sizeof(msg)) {
+  		return (-1);
+  	}
+  }
+
+	memset (&msg, 0x00, sizeof(msg));
+
+  if (diva_divas_uses_ioctl != 0) {
+	  if (ioctl (fd, DIVA_XDI_IO_CMD_READ_MSG, (ulong)&iomsg) != sizeof(dword)) {
+		  return (-1);
+	  }
+  } else {
+	  if (read (fd, &msg, sizeof(msg)) != sizeof(dword)) {
+		  return (-1);
+	  }
+  }
+
+	sprintf ((char*)data, "%08x", *(dword*)&msg);
+
+	return (strlen((char*)data)+1);
+}
+
+
 int
 divas_write_fpga (int card_number,
                   int fpga_number,
@@ -1439,7 +1687,7 @@ int diva_cfg_lib_read_configuration (diva_entity_queue_t* q) {
 	byte* data = 0;
 
   if ((fd = open ("/dev/DivasDIDD", O_RDWR | O_NONBLOCK)) < 0) {
-    fd =  open ("/proc/net/eicon/divadidd", O_RDWR | O_NONBLOCK);
+    fd =  open ("/proc/net/isdn/eicon/divadidd", O_RDWR | O_NONBLOCK);
   }
 
 	if (fd >= 0) {

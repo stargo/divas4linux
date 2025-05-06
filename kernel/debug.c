@@ -1,11 +1,16 @@
+
 /*
  *
-  Copyright (c) Dialogic, 2007.
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
  *
   This source file is supplied for the use with
-  Dialogic range of DIVA Server Adapters.
+  Sangoma (formerly Dialogic) range of Adapters.
  *
-  Dialogic File Revision :    2.1
+  File Revision :    2.1
  *
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -343,7 +348,8 @@ static int diva_maint_parse_variable_name (const byte* variable,
 	const byte* variable_name;
 	dword variable_name_length;
 
-	if ((*(cfg_lib_ifc->diva_cfg_lib_get_name_ident_proc))(variable,
+	if (!cfg_lib_ifc || 
+			(*(cfg_lib_ifc->diva_cfg_lib_get_name_ident_proc))(variable,
 																												 &variable_name,
 																												 &variable_name_length) != DivaCfgLibOK) {
 		return (-1);
@@ -458,6 +464,8 @@ static int diva_maint_cfg_changed (void* context, const byte* message, const byt
 	diva_os_spin_lock_magic_t old_irql;
 	int init_complete = diva_maint_init_complete;
 
+	if (!cfg_lib_ifc) 
+		return -1;
 
 	if (init_complete != 0) {
 		diva_os_enter_spin_lock (&dbg_q_lock, &old_irql, "cfg_changed");
@@ -613,6 +621,8 @@ void diva_maint_connect_to_cfg_lib (void* _dadapter) {
 
 	if (cfg_lib_ifc == 0 && dadapter != 0) {
 		IDI_SYNC_REQ* sync_req = (IDI_SYNC_REQ*)diva_os_malloc (0, sizeof(*sync_req));
+		if (!sync_req)
+			return;
 
 		dadapter_request = dadapter;
 
@@ -632,6 +642,7 @@ void diva_maint_connect_to_cfg_lib (void* _dadapter) {
                                                           TargetMAINTDrv);
 			}
 		}
+		diva_os_free(0, sync_req);
 	}
 }
 
@@ -1599,7 +1610,24 @@ static int diva_get_idi_adapter_info (IDI_CALL request,
     sync_req->GetCardType.Rc = IDI_SYNC_REQ_GET_CARDTYPE;
     sync_req->GetCardType.cardtype = 0 ;
     (*request)((ENTITY*)sync_req);
-    ret = ((*adapter_type = (dword)sync_req->GetCardType.cardtype) != CARDTYPE_DIVASRV_SOFTIP_V20) ? 0 : (-1);
+    *adapter_type = (dword)sync_req->GetCardType.cardtype;
+
+		/*
+			Check if user mode adapter
+			*/
+		sync_req->xdi_sdram_bar.Req      = 0;
+		sync_req->xdi_sdram_bar.Rc       = IDI_SYNC_REQ_XDI_GET_ADAPTER_SDRAM_BAR;
+		sync_req->xdi_sdram_bar.info.bar = 0x00000001;
+		(*request)((ENTITY*)sync_req);
+		if (sync_req->xdi_sdram_bar.info.bar == 0x00000001) {
+			sync_req->xdi_sdram_bar.Req      = 0;
+			sync_req->xdi_sdram_bar.Rc       = IDI_SYNC_REQ_XDI_GET_ADAPTER_SDRAM_BAR;
+			sync_req->xdi_sdram_bar.info.bar = 0xabcd1234;
+			(*request)((ENTITY*)sync_req);
+			ret = (sync_req->xdi_sdram_bar.info.bar != 0xabcd1234) ? 0 : (-1);
+		} else {
+			ret = 0;
+		}
 
     sync_req->diva_get_adapter_debug_storage_address.Req = 0;
     sync_req->diva_get_adapter_debug_storage_address.Rc  = IDI_SYNC_REQ_GET_ADAPTER_DEBUG_STORAGE_ADDRESS;
@@ -1806,7 +1834,7 @@ void diva_mnt_add_xdi_adapter (const DESCRIPTOR* d) {
     Log driver register, MAINT driver ID is '0'
     */
   len = sprintf (tmp, "DIMAINT - drv # %d = '%s' registered",
-                 id, clients[id].Dbg.drvName);
+                 id, clients[id].drvName);
 
   while (!(pmsg = (diva_dbg_entry_head_t*)queueAllocMsg (dbg_queue,
                                       (word)(len+1+sizeof(*pmsg))))) {
@@ -2785,7 +2813,12 @@ static void diva_maint_trace_notify (void* user_context,
   */
 static void diva_change_management_debug_mask (diva_maint_client_t* pC, dword old_mask) {
   if (pC->request && pC->hDbg && pC->pIdiLib) {
-    dword changed = pC->hDbg->dbgMask ^ old_mask;
+    dword changed;
+
+    if (TraceFilter[0] != 0) {
+      pC->hDbg->dbgMask |= DIVA_MGT_DBG_LINE_EVENTS;
+    }
+    changed = pC->hDbg->dbgMask ^ old_mask;
 
     if (changed & DIVA_MGT_DBG_TRACE) {
       (*(pC->pIdiLib->DivaSTraceSetInfo))(pC->pIdiLib,
@@ -3044,6 +3077,13 @@ int diva_set_trace_filter (int filter_length, const char* filter) {
         (*(clients[i].pIdiLib->DivaSTraceSetAudioTap))(clients[i].pIdiLib->hLib, ch+1, client_atap_on);
       }
 			(*(clients[i].pIdiLib->DivaSTraceSetMaxTraceRecordLength))(clients[i].pIdiLib->hLib, 30);
+			if (on == 0) {
+				clients[i].hDbg->dbgMask |= DIVA_MGT_DBG_LINE_EVENTS;
+			} else {
+				clients[i].hDbg->dbgMask &= ~DIVA_MGT_DBG_LINE_EVENTS;
+			}
+			(*(clients[i].pIdiLib->DivaSTraceSetLineState))(clients[i].pIdiLib->hLib,
+															(clients[i].hDbg->dbgMask & DIVA_MGT_DBG_LINE_EVENTS) != 0);
     }
   }
 

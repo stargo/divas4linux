@@ -1,12 +1,16 @@
 
 /*
  *
-  Copyright (c) Dialogic, 2007.
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
  *
   This source file is supplied for the use with
-  Dialogic range of DIVA Server Adapters.
+  Sangoma (formerly Dialogic) range of Adapters.
  *
-  Dialogic File Revision :    2.1
+  File Revision :    2.1
  *
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -23,10 +27,14 @@
   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  */
+
 #include "platform.h"
 #include "di_defs.h"
 #include "pc.h"
 #include "capi20.h"
+#if defined(DIVA_STREAMING_USER_MODE_IFC)
+#include "dlist.h"
+#endif
 #include "divacapi.h"
 #include "mdm_msg.h"
 #include "divasync.h"
@@ -42,8 +50,13 @@ extern void dump_plcis (DIVA_CAPI_ADAPTER *a);
 extern APPL *application;
 extern byte max_appl;
 extern dword diva_capi_ncci_mapping_bug;
+#if (defined(WINNT) || defined(UNIX))
+extern byte MapController (byte);
 extern byte UnMapController (byte);
-
+#else
+#define MapController(c) c
+#define UnMapController(c) c
+#endif
 
 #ifndef DIVA_BUILD
 #include "buildver.h"
@@ -65,16 +78,32 @@ static int capi_man_max_plci_trace_entries = TRACE_QUEUE_ENTRIES;
 static void diva_capi_dump_status (void *info, PATH_CTXT *context, int cmd, INST_PARA *Ipar) {
 	diva_os_spin_lock_magic_t irql;
 	const DIVA_CAPI_ADAPTER* a;
-	int nr = 0;
+	int ctlr_count, ctlr, i;
 
 	DBG_LOG((" -------------- CAPI STATUS DUMP --------------- "))
 
 	diva_os_api_lock (&irql);
 
-	while ((a = diva_os_get_adapter(nr++))) {
-		DBG_LOG((" -------------- CAPI ADAPTER(%x) --------------- ", a->Id))
-		dump_plcis ((DIVA_CAPI_ADAPTER*)a);
-		DBG_LOG((" ----------------------------------------------- "))
+	ctlr_count = 0;
+	for (i = 0; diva_os_get_adapter(i); i++)
+	{
+		ctlr = UnMapController (i+1);
+		if (ctlr > ctlr_count)
+			ctlr_count = ctlr;
+	}
+	for (ctlr = 0; ctlr < ctlr_count; ctlr++)
+	{
+		i = MapController (ctlr+1);
+		if (i != 0)
+		{
+			a = diva_os_get_adapter (i-1);
+			if (a)
+			{
+				DBG_LOG((" -------------- CAPI ADAPTER(%08lx) --------------- ", (unsigned long)(ctlr+1)))
+				dump_plcis ((DIVA_CAPI_ADAPTER*)a);
+				DBG_LOG((" ----------------------------------------------- "))
+			}
+		}
 	}
 
 	diva_os_api_unlock (&irql);
@@ -750,13 +779,18 @@ static void *plci_info_v (void *info, PATH_CTXT *context, int cmd, INST_PARA *Ip
 	int ctlr = PtrToInt(context[2].fPara) ;
 	void* ret = 0;
 	const DIVA_CAPI_ADAPTER* a;
+	int i;
 
 	if (cmd == CMD_READVAR) {
 		diva_os_api_lock (&irql);
-		a = diva_os_get_adapter (ctlr);
-		if (a && (plci < a->max_plci)) {
-			ret = diva_man_read_value_by_offset (pM, (byte*)&a->plci[plci],
-			                                     PtrToUlong(context->fPara), context->node);
+		i = MapController (ctlr+1);
+		if (i != 0)
+		{
+			a = diva_os_get_adapter (i-1);
+			if (a && (plci < a->max_plci)) {
+				ret = diva_man_read_value_by_offset (pM, (byte*)&a->plci[plci],
+				                                     PtrToUlong(context->fPara), context->node);
+			}
 		}
 		diva_os_api_unlock (&irql);
 	}
@@ -770,32 +804,37 @@ static void *plci_info (void *info, PATH_CTXT *context, int cmd, INST_PARA *Ipar
 	int ctlr = PtrToInt(context[2].fPara) ;
 	void* ret = 0;
 	const DIVA_CAPI_ADAPTER* a;
+	int i;
 
 	if (cmd == CMD_READVAR) {
 		diva_os_api_lock (&irql);
-		a = diva_os_get_adapter (ctlr);
-		if (a && (plci < a->max_plci)) {
-			switch (*(char*)context->fPara) {
-				case 'i':
-					pM->dw_out = (dword)(plci + 1);
-					ret = &pM->dw_out;
-					break;
-				case 'A':
-					pM->dw_out = a->Id;
-					ret = &pM->dw_out;
-					break;
-				case 'L':
-					pM->dw_out = a->plci[plci].appl ? a->plci[plci].appl->Id : 0;
-					ret = &pM->dw_out;
-					break;
-				case 'R':
-					pM->dw_out = (a->plci[plci].req_in != a->plci[plci].req_in) ? 1 : 0;
-					ret = &pM->dw_out;
-					break;
-				case 'C':
-					pM->dw_out = appl_mask_empty (a->plci[plci].c_ind_mask_table) ? 0 : 1;
-					ret = &pM->dw_out;
-					break;
+		i = MapController (ctlr+1);
+		if (i != 0)
+		{
+			a = diva_os_get_adapter (i-1);
+			if (a && (plci < a->max_plci)) {
+				switch (*(char*)context->fPara) {
+					case 'i':
+						pM->dw_out = (dword)(plci + 1);
+						ret = &pM->dw_out;
+						break;
+					case 'A':
+						pM->dw_out = a->Id;
+						ret = &pM->dw_out;
+						break;
+					case 'L':
+						pM->dw_out = a->plci[plci].appl ? a->plci[plci].appl->Id : 0;
+						ret = &pM->dw_out;
+						break;
+					case 'R':
+						pM->dw_out = (a->plci[plci].req_in != a->plci[plci].req_in) ? 1 : 0;
+						ret = &pM->dw_out;
+						break;
+					case 'C':
+						pM->dw_out = appl_mask_empty (a->plci[plci].c_ind_mask_table) ? 0 : 1;
+						ret = &pM->dw_out;
+						break;
+				}
 			}
 		}
 		diva_os_api_unlock (&irql);
@@ -808,6 +847,7 @@ static void *plci_info_trace (void *info, PATH_CTXT *context, int cmd, INST_PARA
 	diva_driver_management_t* pM = (diva_driver_management_t*)Ipar;
 	diva_os_spin_lock_magic_t irql;
 	void* ret = 0;
+	int i;
 
 	if (cmd == CMD_READVAR) {
 		int trace_entry = PtrToInt(context[0].fPara);
@@ -816,10 +856,15 @@ static void *plci_info_trace (void *info, PATH_CTXT *context, int cmd, INST_PARA
 		const DIVA_CAPI_ADAPTER* a;
 
 		diva_os_api_lock (&irql);
-		if ((a = diva_os_get_adapter (ctlr)) != 0 && plci_nr < a->max_plci) {
-			const PLCI* plci = &a->plci[plci_nr];
-			pM->dw_out = (dword)plci->trace_queue[trace_entry];
-			ret = &pM->dw_out;
+		i = MapController (ctlr+1);
+		if (i != 0)
+		{
+			a = diva_os_get_adapter (i-1);
+			if (a && plci_nr < a->max_plci) {
+				const PLCI* plci = &a->plci[plci_nr];
+				pM->dw_out = (dword)plci->trace_queue[trace_entry];
+				ret = &pM->dw_out;
+			}
 		}
 		diva_os_api_unlock (&irql);
 	}
@@ -835,13 +880,20 @@ static void *plci_info_ext (void *info, PATH_CTXT *context, int cmd, INST_PARA *
 	int ctlr = PtrToInt(context[3].fPara) ;
 	void* ret = 0;
 	const DIVA_CAPI_ADAPTER* a;
+	int i;
 
 	if (cmd == CMD_READVAR) {
 		diva_os_api_lock (&irql);
-		a = diva_os_get_adapter (ctlr);
-		if (a && (plci < a->max_plci)) {
-			ret = diva_man_read_value_by_offset (pM, (byte*)&a->plci[plci],
+		i = MapController (ctlr+1);
+		if (i != 0)
+		{
+			a = diva_os_get_adapter (i-1);
+			if (a) {
+				if (a && (plci < a->max_plci)) {
+					ret = diva_man_read_value_by_offset (pM, (byte*)&a->plci[plci],
 			                                     PtrToUlong(context->fPara), context->node);
+				}
+			}
 		}
 		diva_os_api_unlock (&irql);
 	}
@@ -1142,10 +1194,6 @@ static MAN_INFO plci_info_dir[] =  {
                       plci_info_v,  (void*)DIVAS_OFFSET_OF(PLCI, adv_nl),
                       0,            0
   },
-  {"manufacturer",    MI_HINT,      0,                 MI_CALL, DIVAS_SIZE_OF(PLCI, manufacturer),
-                      plci_info_v,  (void*)DIVAS_OFFSET_OF(PLCI, manufacturer),
-                      0,            0
-  },
   {"call_dir",        MI_HINT,      0,                 MI_CALL, DIVAS_SIZE_OF(PLCI, call_dir),
                       plci_info_v,  (void*)DIVAS_OFFSET_OF(PLCI, call_dir),
                       0,            0
@@ -1223,12 +1271,18 @@ static void* plci_count (void *info, PATH_CTXT *context, int cmd, INST_PARA *Ipa
 	diva_os_spin_lock_magic_t irql;
 	int ctlr = PtrToInt(context[1].fPara) ;
 	const DIVA_CAPI_ADAPTER* a;
+	int i;
 
 	if (cmd == CMD_READVAR) {
+		a = 0;
 		diva_os_api_lock (&irql);
-		a = diva_os_get_adapter (ctlr);
-		if (a) {
-			pM->dw_out = (dword)(a->max_plci);
+		i = MapController (ctlr+1);
+		if (i != 0)
+		{
+			a = diva_os_get_adapter (i-1);
+			if (a) {
+				pM->dw_out = (dword)(a->max_plci);
+			}
 		}
 		diva_os_api_unlock (&irql);
 
@@ -1249,11 +1303,17 @@ static void* plci_dir (void *info, PATH_CTXT *context, int cmd, INST_PARA *Ipar)
 	const DIVA_CAPI_ADAPTER* a;
 	int ctlr = PtrToInt(context[1].fPara) ;
 	byte max_plci = 0;
+	int i;
 
+	a = 0;
 	diva_os_api_lock (&irql);
-	a = diva_os_get_adapter (ctlr);
-	if (a) {
-		max_plci = a->max_plci;
+	i = MapController (ctlr+1);
+	if (i != 0)
+	{
+		a = diva_os_get_adapter (i-1);
+		if (a) {
+			max_plci = a->max_plci;
+		}
 	}
 	diva_os_api_unlock (&irql);
 
@@ -1286,13 +1346,38 @@ static MAN_INFO controller_plcis[] = {
   }
 };
 
+static void *controller_count (void *info, PATH_CTXT *context, int cmd, INST_PARA *Ipar) {
+	diva_driver_management_t* pM = (diva_driver_management_t*)Ipar;
+	diva_os_spin_lock_magic_t irql;
+	int ctlr_count, ctlr, i;
+
+	switch (cmd) {
+		case CMD_READVAR:
+			diva_os_api_lock (&irql);
+			ctlr_count = 0;
+			for (i = 0; diva_os_get_adapter(i); i++)
+			{
+				ctlr = UnMapController (i+1);
+				if (ctlr > ctlr_count)
+					ctlr_count = ctlr;
+			}
+			diva_os_api_unlock (&irql);
+			pM->dw_out = ctlr_count;
+			return ((void*)&pM->dw_out);
+
+		default:
+			return (0);
+	}
+}
+
 static void* controller_dir (void *info, PATH_CTXT *context, int cmd, INST_PARA *Ipar) {
 	diva_os_spin_lock_magic_t irql;
 	int ctlr = PtrToInt(context->fPara) ;
-	int found;
+	int i, found;
 
 	diva_os_api_lock (&irql);
-	found = (diva_os_get_adapter(ctlr) != 0);
+	i = MapController (ctlr+1);
+	found = ((i != 0) && (diva_os_get_adapter(i-1) != 0));
 	diva_os_api_unlock (&irql);
 
 	if (found) {
@@ -1319,7 +1404,7 @@ static MAN_INFO controllers[] =  {
 /*                    wlock,        *EvQ,                                             */
 /* ---------------------------------------------------------------------------------- */
   {"Count",           MI_UINT,      0,                 MI_CALL,              4,
-                      adapter_count,0,
+                      controller_count,0,
                       0,            0
   },
   CONTROLLER_ENTRY(1),
@@ -1448,6 +1533,9 @@ static void *plci_count_total (void *info, PATH_CTXT *context, int cmd, INST_PAR
 /*
 	Root directory
 	*/
+#if USE_CFGLIB
+extern MAN_INFO configs[] ;
+#endif
 static MAN_INFO root[] = {
 /* ---------------------------------------------------------------------------------- */
 /*  *name,            type,         attrib,            flags,                max_len, */
@@ -1462,6 +1550,12 @@ static MAN_INFO root[] = {
                       NVer,         0,
                       0,            0
   },
+#if USE_CFGLIB
+  {"Config",          MI_DIR,       0,                 0,                    0,
+                      configs,      0,
+                      0,            0
+  },
+#endif
   {"XDI",             MI_DIR,       0,                 0,                    0,
                       adapters,     0,
                       0,            0

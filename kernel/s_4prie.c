@@ -1,11 +1,16 @@
+
 /*
  *
-  Copyright (c) Dialogic, 2007.
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
  *
   This source file is supplied for the use with
-  Dialogic range of DIVA Server Adapters.
+  Sangoma (formerly Dialogic) range of Adapters.
  *
-  Dialogic File Revision :    2.1
+  File Revision :    2.1
  *
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -22,6 +27,7 @@
   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  */
+
 #include "platform.h"
 #include "di_defs.h"
 #include "pc.h"
@@ -38,6 +44,8 @@
 #include "fpga_rom.h"
 #include "fpga_rom_xdi.h"
 #include "dsrv_4prie.h"
+
+#define MAX_XLOG_SIZE  (64*1024)
 
 int start_4prie_hardware (PISDN_ADAPTER IoAdapter) {
 	volatile dword *cpu_reset_ctrl = (volatile dword*)&IoAdapter->reset[DIVA_4PRIE_FS_CPU_RESET_REGISTER_OFFSET];
@@ -59,9 +67,44 @@ int start_4prie_hardware (PISDN_ADAPTER IoAdapter) {
 
 static void stop_4prie_hardware (PISDN_ADAPTER IoAdapter) {
 	volatile dword *cpu_reset_ctrl = (volatile dword*)&IoAdapter->reset[DIVA_4PRIE_FS_CPU_RESET_REGISTER_OFFSET];
+  volatile dword *dsp_reset = (volatile dword*)&IoAdapter->reset[DIVA_4PRIE_FS_DSP_RESET_REGISTER_OFFSET];
 	dword cpu_reset = *cpu_reset_ctrl;
+	dword i = 0;
+
+	if (IoAdapter->host_vidi.vidi_active == 0) {
+		IoAdapter->a.ram_out (&IoAdapter->a, &RAM->SWReg, SWREG_HALT_CPU) ;
+		while ( (i < 100) && (IoAdapter->a.ram_in (&IoAdapter->a, &RAM->SWReg) != 0)) {
+			diva_os_wait (1) ;
+			i++ ;
+		}
+		if (i >= 100) {
+			DBG_ERR(("A(%d) idi, failed to stop CPU", IoAdapter->ANum))
+		}
+	} else {
+		diva_os_spin_lock_magic_t OldIrql;
+
+		diva_os_enter_spin_lock (&IoAdapter->data_spin_lock, &OldIrql, "stop");
+		IoAdapter->host_vidi.request_flags |= DIVA_VIDI_REQUEST_FLAG_STOP_AND_INTERRUPT;
+		diva_os_schedule_soft_isr (&IoAdapter->req_soft_isr);
+		diva_os_leave_spin_lock (&IoAdapter->data_spin_lock, &OldIrql, "stop");
+
+		do {
+			diva_os_sleep(10);
+		} while (i++ < 10 &&
+					 (IoAdapter->host_vidi.request_flags & DIVA_VIDI_REQUEST_FLAG_STOP_AND_INTERRUPT) != 0);
+		if ((IoAdapter->host_vidi.request_flags & DIVA_VIDI_REQUEST_FLAG_STOP_AND_INTERRUPT) == 0) {
+			i = 0;
+			do {
+				diva_os_sleep(10);
+			} while (i++ < 10 && IoAdapter->host_vidi.cpu_stop_message_received != 2);
+		}
+		if (i >= 10) {
+			DBG_ERR(("A(%d) vidi, failed to stop CPU", IoAdapter->ANum))
+		}
+	}
 
 	*cpu_reset_ctrl = cpu_reset | (DIVA_4PRIE_FS_CPU_RESET_REGISTER_COLD_RESET_BIT | DIVA_4PRIE_FS_CPU_RESET_REGISTER_WARM_RESET_BIT);
+	*dsp_reset = DIVA_4PRIE_FS_DSP_RESET_BITS;
 }
 
 static int load_4prie_hardware (PISDN_ADAPTER IoAdapter) {
@@ -69,13 +112,25 @@ static int load_4prie_hardware (PISDN_ADAPTER IoAdapter) {
 }
 
 static void disable_4prie_interrupt (PISDN_ADAPTER IoAdapter) {
+	dword mask;
+	int i = 1000;
+
+	*(volatile dword*)&IoAdapter->reset[DIVA_4PRIE_FS_INTERRUPT_CONTROL_REGISTER] &= ~DIVA_4PRIE_FS_INTERRUPT_CONTROL_REGISTER_INTERRUPT_REGISTER_BIT;
+	while (i-- > 0 && (mask = *(volatile dword*)&IoAdapter->reset[DIVA_4PRIE_FS_DOORBELL_REGISTER_OFFSET]) != 0) {
+		*(volatile dword*)&IoAdapter->reset[DIVA_4PRIE_FS_DOORBELL_REGISTER_OFFSET] = mask;
+	}
 }
 
 static void reset_4prie_hardware (PISDN_ADAPTER IoAdapter) {
 	volatile dword *cpu_reset_ctrl = (volatile dword*)&IoAdapter->reset[DIVA_4PRIE_FS_CPU_RESET_REGISTER_OFFSET];
+  volatile dword *dsp_reset = (volatile dword*)&IoAdapter->reset[DIVA_4PRIE_FS_DSP_RESET_REGISTER_OFFSET];
 	dword cpu_reset = *cpu_reset_ctrl;
 
-	*cpu_reset_ctrl = cpu_reset | (DIVA_4PRIE_FS_CPU_RESET_REGISTER_COLD_RESET_BIT | DIVA_4PRIE_FS_CPU_RESET_REGISTER_WARM_RESET_BIT); /* Stop CPU */
+	*cpu_reset_ctrl = cpu_reset |
+        (DIVA_4PRIE_FS_CPU_RESET_REGISTER_COLD_RESET_BIT | DIVA_4PRIE_FS_CPU_RESET_REGISTER_WARM_RESET_BIT) /* Stop CPU */ |
+				DIVA_4PRIE_FS_CPU_RESET_REGISTER_FPGA_RESET_BITS; /* Reset FPGA */
+	*dsp_reset = DIVA_4PRIE_FS_DSP_RESET_BITS;
+  diva_os_sleep (1);
 
 	cpu_reset = *cpu_reset_ctrl;
 	DBG_LOG(("CPU RESET REGISTER: %d %d",
@@ -93,17 +148,103 @@ static dword diva_4prie_ram_offset (ADAPTER* a) {
 }
 
 static void diva_4prie_cpu_trapped (PISDN_ADAPTER IoAdapter) {
+ byte  *base ;
+ dword   regs[4], TrapID, size ;
+ Xdesc   xlogDesc ;
+/*
+ * check for trapped MIPS 46xx CPU, dump exception frame
+ */
+ base = IoAdapter->ram - MP_SHARED_RAM_OFFSET ;
+ TrapID = *((dword *)&base[0x80]) ;
+ if ( (TrapID == 0x99999999) || (TrapID == 0x99999901) )
+ {
+  dump_trap_frame (IoAdapter, &base[0x90]) ;
+  IoAdapter->trapped = 1 ;
+ }
+ memcpy (&regs[0], &base[0x70], sizeof(regs)) ;
+ regs[0] &= IoAdapter->MemorySize - 1 ;
+ if ( regs[0] != 0 && (regs[0] < IoAdapter->MemorySize - 1) )
+ {
+  size = IoAdapter->MemorySize - regs[0] ;
+  if ( size > MAX_XLOG_SIZE )
+   size = MAX_XLOG_SIZE ;
+  xlogDesc.buf = (word*)&base[regs[0]];
+  xlogDesc.cnt = *((word *)&base[regs[1] & (IoAdapter->MemorySize - 1)]) ;
+  xlogDesc.out = *((word *)&base[regs[2] & (IoAdapter->MemorySize - 1)]) ;
+  dump_xlog_buffer (IoAdapter, &xlogDesc, size) ;
+  IoAdapter->trapped = 2 ;
+ }
 }
 
 static int diva_4prie_ISR (struct _ISDN_ADAPTER* IoAdapter) {
+	PADAPTER_LIST_ENTRY QuadroList = IoAdapter->QuadroList;
+	dword mask;
+	int i;
+
+	mask = *(volatile dword*)&IoAdapter->reset[DIVA_4PRIE_FS_DOORBELL_REGISTER_OFFSET];
+
+	if (mask == 0)
+		return (0);
+
+	*(volatile dword*)&IoAdapter->reset[DIVA_4PRIE_FS_DOORBELL_REGISTER_OFFSET] = mask;
+
+	for (i = 0; i < IoAdapter->tasks; i++) {
+		if (mask & (((dword)1) << i)) {
+		IoAdapter = QuadroList->QuadroAdapter[i] ;
+		IoAdapter->IrqCount++ ;
+			if (IoAdapter && IoAdapter->Initialized && IoAdapter->tst_irq(&IoAdapter->a)) {
+				diva_os_schedule_soft_isr (&IoAdapter->isr_soft_isr);
+			}
+		}
+	}
+
   return (1);
 }
 
 static int diva_4prie_msi_ISR (struct _ISDN_ADAPTER* IoAdapter) {
-  return (1);
+	PADAPTER_LIST_ENTRY QuadroList = IoAdapter->QuadroList;
+	dword mask;
+	int i;
+
+	mask = *(volatile dword*)&IoAdapter->reset[DIVA_4PRIE_FS_DOORBELL_REGISTER_OFFSET];
+
+	if (mask == 0)
+		return (1);
+
+	*(volatile dword*)&IoAdapter->reset[DIVA_4PRIE_FS_DOORBELL_REGISTER_OFFSET] = mask;
+
+	for (i = 0; i < IoAdapter->tasks; i++) {
+		if (mask & (((dword)1) << i)) {
+			IoAdapter = QuadroList->QuadroAdapter[i];
+			IoAdapter->IrqCount++ ;
+			if (IoAdapter && IoAdapter->Initialized && IoAdapter->tst_irq(&IoAdapter->a)) {
+				diva_os_schedule_soft_isr (&IoAdapter->isr_soft_isr);
+			}
+		}
+	}
+
+	return (1);
 }
 
 static int diva_4prie_save_maint_buffer (PISDN_ADAPTER IoAdapter, const void* data, dword length) {
+  if (IoAdapter->ram != 0 && IoAdapter->MemorySize > MP_SHARED_RAM_OFFSET &&
+      (IoAdapter->MemorySize - MP_SHARED_RAM_OFFSET) > length) {
+    if (IoAdapter->Initialized) {
+			volatile dword *cpu_reset_ctrl = (volatile dword*)&IoAdapter->reset[DIVA_4PRIE_FS_CPU_RESET_REGISTER_OFFSET];
+			volatile dword *dsp_reset = (volatile dword*)&IoAdapter->reset[DIVA_4PRIE_FS_DSP_RESET_REGISTER_OFFSET];
+			dword cpu_reset = *cpu_reset_ctrl;
+
+			*cpu_reset_ctrl = cpu_reset | (DIVA_4PRIE_FS_CPU_RESET_REGISTER_COLD_RESET_BIT | DIVA_4PRIE_FS_CPU_RESET_REGISTER_WARM_RESET_BIT);
+			*dsp_reset = DIVA_4PRIE_FS_DSP_RESET_BITS;
+			reset_4prie_hardware (IoAdapter);
+      IoAdapter->Initialized = 0;
+			disable_4prie_interrupt (IoAdapter);
+
+      memcpy (IoAdapter->ram, data, length);
+      return (0);
+		}
+	}
+
   return (-1);
 }
 
@@ -127,7 +268,7 @@ static dword diva_4prie_detect_dsps (PISDN_ADAPTER IoAdapter) {
 #define FPGA_DIN    FPGA_DOUT   /* bidirectional I/O */
 #endif
 
-#define DIVA_4PRIE_CUSTOM_HARDWARE_FPFA_DOWNLOAD_REGISTER_ADDRESS 0x3010  
+#define DIVA_4PRIE_CUSTOM_HARDWARE_FPFA_DOWNLOAD_REGISTER_ADDRESS 0x3010
 #define FPGA_PROG   (1U << 16) /* PROG enable low     */
 #define FPGA_BUSY   (1U << 17)  /* BUSY high, DONE low */
 #define FPGA_CS     0x000C not used     /* Enable I/O pins     */
@@ -135,7 +276,7 @@ static dword diva_4prie_detect_dsps (PISDN_ADAPTER IoAdapter) {
 #define FPGA_DOUT   (1U << 26)
 #define FPGA_DIN    FPGA_DOUT   /* bidirectional I/O */
 /*
-Bit 0:    DONE              (read only)                   
+Bit 0:    DONE              (read only)
 
 
 Bit 16: Program Pin      (read and write)
@@ -147,15 +288,20 @@ Bit 26:  DATA               (read and write)
 
 int pri_4prie_FPGA_download (PISDN_ADAPTER IoAdapter) {
   volatile dword *addr = (volatile dword*)&IoAdapter->reset[0x3010];
-  char* name   = "ds4prie_10.bit";
+  volatile dword *dsp_reset = (volatile dword*)&IoAdapter->reset[DIVA_4PRIE_FS_DSP_RESET_REGISTER_OFFSET];
   dword code   = 0, FileLength;
   dword val, baseval = FPGA_PROG;
   int bit;
   byte *File;
 
-  if (!(File = (byte *)xdiLoadFile(name, &FileLength, 0))) {
+  if (!(File = (byte *)xdiLoadFile("ds4prie_10.bit", &FileLength, 0))) {
     return (0);
   }
+
+  /*
+    Reset DSP
+    */
+	*dsp_reset = DIVA_4PRIE_FS_DSP_RESET_BITS;
 
   /*
    *  prepare download, pulse PROGRAM pin down.
@@ -227,6 +373,7 @@ void prepare_4prie_functions (PISDN_ADAPTER BaseIoAdapter) {
     ADAPTER *a = &IoAdapter->a;
 
     IoAdapter->MemorySize = MP2_MEMORY_SIZE;
+    IoAdapter->plx_offset = 0x20080;
 
     a->ram_in           = mem_in;
     a->ram_inw          = mem_inw;
@@ -254,7 +401,7 @@ void prepare_4prie_functions (PISDN_ADAPTER BaseIoAdapter) {
 
     IoAdapter->pcm      = (struct pc_maint *)(MIPS_MAINT_OFFS - MP_SHARED_RAM_OFFSET);
     IoAdapter->stop     = stop_4prie_hardware;
-    
+
     IoAdapter->load     = load_4prie_hardware;
     IoAdapter->disIrq   = disable_4prie_interrupt;
     IoAdapter->rstFnc   = reset_4prie_hardware;

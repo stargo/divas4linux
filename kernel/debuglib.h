@@ -1,12 +1,16 @@
 
 /*
  *
-  Copyright (c) Dialogic, 2007.
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
  *
   This source file is supplied for the use with
-  Dialogic range of DIVA Server Adapters.
+  Sangoma (formerly Dialogic) range of Adapters.
  *
-  Dialogic File Revision :    2.1
+  File Revision :    2.1
  *
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -23,6 +27,7 @@
   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  */
+
 #if !defined(__DEBUGLIB_H__)
 #define __DEBUGLIB_H__
 /*
@@ -128,6 +133,13 @@
  * with _KERNEL_DBG_PRINT_
  */
 #define DL_TO_KERNEL    0x40000000
+/*
+ * If a FATAL occurs, sometimes it's necessary to keep the current DebugBuffer.
+ * The DebugMask DL_FATALONLYMODE switches on this behaviour. Only FATALS will
+ *  be copied, if the first FATAL occurs. After reading the DebugBuffer by the
+ *  trace application all debug messages will be copied again.
+ */
+#define DL_FATALONLYMODE    0x20000000
 #if !defined(__DIVA_DEBUG_H_NO_FUNCTIONS__) /* { */
 /*
  * define low level macros for formatted & raw debugging
@@ -168,6 +180,12 @@ DBG_DECL(PRV3)
   pMyDriverDebugHandle = &MYDRIVERDEBUGHANDLE ; \
         myDbgPrint_##func args ; \
 } }
+#define DBG_NOTEST(func,args) \
+{ if ( (MYDRIVERDEBUGHANDLE.dbgMask) & DL_TO_KERNEL ) \
+  {DbgPrint args; DbgPrint ("\n");} \
+ pMyDriverDebugHandle = &MYDRIVERDEBUGHANDLE ; \
+ myDbgPrint_##func args ; \
+}
 #else
 /*
  * Standard tracing to maint driver.
@@ -177,6 +195,10 @@ DBG_DECL(PRV3)
  { pMyDriverDebugHandle = &MYDRIVERDEBUGHANDLE ; \
   myDbgPrint_##func args ; \
 } }
+#define DBG_NOTEST(func,args) \
+{ pMyDriverDebugHandle = &MYDRIVERDEBUGHANDLE ; \
+ myDbgPrint_##func args ; \
+}
 #endif
 /*
  * For event level debug use a separate define, the paramete are

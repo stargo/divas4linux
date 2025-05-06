@@ -1,12 +1,16 @@
 
 /*
  *
-  Copyright (c) Dialogic, 2007.
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
  *
   This source file is supplied for the use with
-  Dialogic range of DIVA Server Adapters.
+  Sangoma (formerly Dialogic) range of Adapters.
  *
-  Dialogic File Revision :    2.1
+  File Revision :    2.1
  *
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -23,6 +27,7 @@
   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  */
+
 #ifndef __DIVA_DRV_MANAGEMENT_
 #define __DIVA_DRV_MANAGEMENT_
 
@@ -72,6 +77,7 @@ typedef struct _diva_driver_management_req_entry {
 	ENTITY* e; /* User entity */
 	int req_pending; /* User request pending */
 	unsigned int chain_ind; // set by appl if multible INDs for one REQ supported
+	unsigned int nohide; // set by appl to access hidden entries
 } diva_driver_management_req_entry_t;
 
 typedef struct _diva_driver_management {
@@ -88,6 +94,7 @@ typedef struct _diva_driver_management {
 	NET_DBUFFER man_ind_data_to_user[NUM_NET_DBUFFER+1];
 	unsigned int chain_ind; // set by appl if multible INDs for one REQ supported
 	unsigned int ind_count; // number of (by MIF info elements) occupied NET_DBUFFER's
+	unsigned int nohide; // set by appl to access hidden entries
 	byte sig_ind_to_user;
 
 	int   int_out;

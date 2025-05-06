@@ -1,12 +1,13 @@
 
 /*
  *
-  Copyright (c) Dialogic(R), 2009.
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2009-2014.
  *
   This source file is supplied for the use with
-  Dialogic range of DIVA Server Adapters.
+  Sangoma (formerly Dialogic) range of DIVA Server Adapters.
  *
-  Dialogic(R) File Revision :    2.1
+  File Revision :    2.1
  *
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -28,6 +29,8 @@ int divas_tty_debug_sig = 1;
 int divas_tty_debug_net = 1;
 int divas_tty_debug_net_data = 0;
 
+static unsigned char lastUsedDialLine;
+
 /*
 	After N_DISC wait with detach of the
 	TTY interface until HANGUP was received.
@@ -37,7 +40,7 @@ int divas_tty_wait_sig_disc  = 0;
 
 extern void diva_port_add_pending_data (void* C, void* hP, int count);
 char* get_port_name (void* hP);
-#define port_name(__x__)  ((C) ? get_port_name(C->Port) : "?")
+#define port_name(__x__)  ((__x__ != 0) ? get_port_name(__x__->Port) : "??")
 
 #define TRANSPARENT_DETECT_OFF        0x00
 #define TRANSPARENT_DETECT_ON         0x01
@@ -173,9 +176,6 @@ typedef struct ISDN_FIND_INFO {
 	byte *Octets;	/* info octets				*/
 } ISDN_FIND_INFO;
 
-#if 0
-static void diva_getname (ISDN_FIND_INFO *I, word Cmd, byte *Name, word sizeName);
-#endif
 
 /* ---------------------------------------------------------------------------
 		IDI info element parsing
@@ -782,11 +782,14 @@ static void set_esc_uid (ISDN_CHANNEL *C, char *pName)
 }
 
 static void attach_port (ISDN_CHANNEL *C, void *P)
-{ 
+{
+	char	*pName;
+
 	/* set port handle and name */
 	C->Port = P ;
-	set_channel_id (C, sprintf (C->Id,(byte*) "%s-", Machine.Port->Name (C, P)));
-	set_esc_uid (C, port_name(C)) ;
+	pName = Machine.Port->Name (C, P);
+	set_channel_id (C, sprintf (C->Id,(byte*) "%s-", pName));
+	set_esc_uid (C, pName) ;
 }
 
 static void detach_port (ISDN_CHANNEL *C)
@@ -923,7 +926,7 @@ static void s_hup_ind (ISDN_CHANNEL *C, byte *Parms, word sizeParms)
 	};
 
 	ISDN_FIND_INFO *I, elems [sizeof (s_hup_info) / sizeof (s_hup_info[0])];
-	byte CauseQ931, Cause1TR6, Charges[64];
+	byte CauseQ931, Cause1TR6, Cause, Charges[64];
 
 	/* scan the parameters */
 
@@ -937,10 +940,19 @@ static void s_hup_ind (ISDN_CHANNEL *C, byte *Parms, word sizeParms)
 	if (I->numOctets == 2) {
 		CauseQ931 = I->Octets[0] & 0x7f;
 		Cause1TR6 = I->Octets[1] & 0x7f;
+		Cause = mappedcause( CauseQ931 );
+		if ((C->State == C_CALL_DIAL)
+		 && ((Cause == CAUSE_NORMAL)
+		  || (Cause == CAUSE_UNKNOWN)
+		  || (Cause == CAUSE_UNAVAIL)))
+		{
+			Cause = CAUSE_NOANSWER;
+		}
 	} else {
-		CauseQ931 = (C->State == C_CALL_DIAL) ?
-					  CAUSE_FATAL : CAUSE_UNAVAIL;
+		CauseQ931 = 0;
 		Cause1TR6 = 0;
+		Cause = (C->State == C_CALL_DIAL) ?
+					  CAUSE_FATAL : CAUSE_UNAVAIL;
 	}
 
 	I++;
@@ -974,15 +986,12 @@ static void s_hup_ind (ISDN_CHANNEL *C, byte *Parms, word sizeParms)
 
 		/* give some info (correct only when setup fails)	*/
 
-		if (CauseQ931 & CAUSE_MAPPED) {
-			DBG_TRC(("[%p:%s] hangup: cause=unavail", C, port_name(C)))
-		} else {
-			DBG_TRC(("[%p:%s] hangup: Q931=%x(%x) 1TR6=%x(%x) charges=%s",
-				  C, port_name(C),
-				  CauseQ931, CauseQ931 | 0x80,
-				  Cause1TR6, Cause1TR6 | 0x80,
-				  Charges[0]? (char*)Charges : "unknown"))
-		}
+		DBG_TRC(("[%p:%s] hangup: Q931=%x(%x) 1TR6=%x(%x) %x charges=%s",
+			  C, port_name(C),
+			  CauseQ931, CauseQ931 | 0x80,
+			  Cause1TR6, Cause1TR6 | 0x80,
+			  Cause,
+			  Charges[0]? (char*)Charges : "unknown"))
 
 		C->State = C_IDLE;
 #if APPLY_AGE_CHECK
@@ -1017,7 +1026,7 @@ static void s_hup_ind (ISDN_CHANNEL *C, byte *Parms, word sizeParms)
 
 		/* Hangup is not to be acknowlegded, indicate down/idle	*/
 
-		link_down (C, mappedcause (CauseQ931));
+		link_down (C, Cause);
 		link_idle (C);
 
 		C->State = C_INIT;
@@ -1655,6 +1664,7 @@ int isdnListen (int Listen)
 	}
 
 	DBG_TRC(("Listen: %d -> %d ", Listening, Machine.Listen))
+	printk(KERN_INFO "%s: %d -> %d\n", __FUNCTION__, Listening, Machine.Listen);
 
 	if (!((Listening == 0) ^ (Machine.Listen == 0))) {
 		/* no fundamental change in listen state */
@@ -1832,14 +1842,63 @@ static byte isdnKindFax (T30_INFO *T30Info, byte *Func)
 	return (ISDN_PROT_DET);
 }
 
+static ISDN_CHANNEL* isdnGetRRChannel (unsigned char lastUsedLine, int selectedLine, const ISDN_PROT_MAP	*F) {
+	ISDN_CHANNEL	*C[2], *lastChannel[2];
+	word dummy = 0;
+	unsigned int i;
+
+	if (selectedLine != 0 && selectedLine <= Machine.numAdapters) {
+		C[0] = (Machine.Adapters + (selectedLine - 1))->Channels ;
+		lastChannel[0] = (Machine.Adapters + (selectedLine - 1))->lastChannel;
+		C[1] = 0;
+		lastChannel[1] = 0;
+	} else if ((global_options & DIVA_ISDN_DIAL_RR) != 0 && lastUsedLine != 0 && lastUsedLine <= Machine.numAdapters) {
+		C[0]           = (Machine.Adapters + (lastUsedLine - 1))->lastChannel + 1;
+		lastChannel[0] = Machine.lastChannel;
+		C[1]           = Machine.Channels;
+		lastChannel[1] = (Machine.Adapters + (lastUsedLine - 1))->lastChannel;
+	} else {
+		C[0]           = Machine.Channels;
+		lastChannel[0] = Machine.lastChannel;
+		C[1] = 0;
+		lastChannel[1] = 0;
+	}
+
+
+	for (i = 0; i < sizeof(C)/sizeof(C[0]) && C[i] != 0; i++) {
+		for (;;) {
+			if (C[i] >= lastChannel[i]) {
+				break;
+			}
+			if ((C[i]->State	 == C_IDLE)											&&
+					(C[i]->Net.Id == NL_ID)											&&
+					(C[i]->Sig.Id != DSIG_ID)										&&
+					(!(C[i]->net_busy))													&&
+					(!(C[i]->net_rc))														&&
+					(!(C[i]->sig_busy))													&&
+					(!queuePeekMsg (&C[i]->Xqueue, &dummy))			&&
+					(!queuePeekMsg (&C[i]->Squeue, &dummy))			&&
+					(!(F->Feature) || (F->Feature & C[i]->Features))) {
+				return (C[i]);
+			}
+			if (++C[i] >= lastChannel[i]) {
+				break;
+			}
+		}
+	}
+
+	return (0);
+}
+
 /*
  * Outgoing call handling
  */
 static void *isdnDial (void *P, ISDN_CONN_PARMS *Parms, T30_INFO *T30Info)
 { /* construct call request and send it to board */
 
-	ISDN_CHANNEL	*C, *lastChannel;
+	ISDN_CHANNEL	*C;
 	ISDN_PROT_MAP	*F;
+	char		*pName;
 	byte		Prot,msg[270], *elem;
   
 	/* check protocol */
@@ -1871,39 +1930,24 @@ static void *isdnDial (void *P, ISDN_CONN_PARMS *Parms, T30_INFO *T30Info)
 	}
 
 	/* find a suitable adapter to serve this request */
-	if ( (Parms->Line != 0) && (Parms->Line <= Machine.numAdapters) )
-	{
-		C = (Machine.Adapters + (Parms->Line - 1))->Channels ;
-		lastChannel = (Machine.Adapters + (Parms->Line - 1))->lastChannel;
-	}
-	else
-	{
-		C = Machine.Channels ;
-		lastChannel = Machine.lastChannel ;
+	C = isdnGetRRChannel (lastUsedDialLine, Parms->Line, F);
+	if (C == 0) {
+		DBG_ERR(("A: Dial: no channel"))
+		Parms->Cause = CAUSE_AGAIN;
+		return (0);
 	}
 
-	for ( ; ; ) {
-		word dummy;
-		if ((C->State	 == C_IDLE)											&&
-				(C->Net.Id == NL_ID)											&&
-				(C->Sig.Id != DSIG_ID)										&&
-				(!(C->net_busy))													&&
-				(!(C->net_rc))														&&
-				(!(C->sig_busy))													&&
-				(!queuePeekMsg (&C->Xqueue, &dummy))			&&
-				(!queuePeekMsg (&C->Squeue, &dummy))			&&
-				(!(F->Feature) || (F->Feature & C->Features))) {
-			break ;
-		}
-		if (++C >= lastChannel) {
-			DBG_ERR(("A: Dial: no channel"))
-			Parms->Cause = CAUSE_AGAIN;
-			return (0);
-		}
+	if ((global_options & DIVA_ISDN_DIAL_RR) != 0) {
+		unsigned char i = lastUsedDialLine;
+
+		lastUsedDialLine = (unsigned char)(C->Adapter - Machine.Adapters) + 1;
+
+		DBG_LOG(("RR: %d -> %d", i, lastUsedDialLine))
 	}
 
-	set_channel_id (C, sprintf (C->Id,(byte*) "%s-", Machine.Port->Name (C, P)));
-	set_esc_uid (C, port_name(C)) ;
+	pName = Machine.Port->Name (C, P);
+	set_channel_id (C, sprintf (C->Id,(byte*) "%s-", pName));
+	set_esc_uid (C, pName) ;
 
 	/* first place the call */
 
@@ -2182,53 +2226,45 @@ static void n_conn_ack (ISDN_CHANNEL *C, byte *Parms, word sizeParms)
 	isdnUp (C, (byte *)"n_conn_ack");
 }
 
-#if 0
-/*
- * Incoming call handling
- */
+static void diva_getname (diva_mtpx_is_parse_t *parse_ie, word Cmd, byte *Name, word sizeName)
+{
+	byte 	                Len ;
+	byte *                  CurElem ;
+	word                    CorNetCmd;
 
-static int getaddr (ISDN_FIND_INFO *I, byte *Number, word sizeNumber,
-										int use_type, int one_digit)
-{	/*  All address info elements have the same format:		*/
-	/*	byte 2 = address type, numbering/addressing plan	*/
-	/*	byte 3.. address digits								*/
-	/*	We copy the plain address digits only !				*/
-	word number_type = 0;
-	int written = 0;
+	// This information element has the type SSEXTIE, which contain
+	// one or more CorNet-N information elements.
 
-	if (I->numOctets && use_type && (!(global_options & DIVA_ISDN_IGNORE_NUMBER_TYPE))) {
-		if				((I->Octets[0] & 0x70) == 0x10) { /* international */
-   		number_type = 2;
-   	} else if	((I->Octets[0] & 0x70) == 0x20) { /* national */
-			number_type = 1;
+	Name[0] = 0;
+	if (!parse_ie->data || parse_ie->data_length < 6 || parse_ie->data_length >= 128)
+		return;
+
+	/* scan all CorNet-N info elements */
+	CurElem = parse_ie->data ;
+	for (Len=0; Len < parse_ie->data_length; Len += 2+CurElem[1], CurElem += 2+CurElem[1])
+	{
+		if (   CurElem[0] != SSEXT_IND    // IE type; SSEXT_IND is what we want
+		    || CurElem[1] <  4)           // IE length;
+		{
+			continue ;	/* not interesting */
 		}
-	}
-	if (sizeNumber > number_type) {
-		sizeNumber -= number_type;
-	} else {
-		sizeNumber = 0;
-	}
+		CorNetCmd  = ((word)(CurElem[3]) << 8) | CurElem[2] ;
+		if (CorNetCmd != Cmd)
+			continue ;	/* not interesting */
 
-	if (I->numOctets > 1 && I->numOctets <= sizeNumber) {
-		while (number_type--) {
-    	*Number++ = '0';
-			written++;
+		if (CurElem[1] - 3 < sizeName)
+		{
+			mem_cpy(Name, &CurElem[5], CurElem[1] - 3) ;
+			Name[CurElem[1]-3] = 0 ;
 		}
-
-    if (!one_digit) {
-		  if ( I->Octets[1] & 0x80) { I->Octets++; I->numOctets--; }
-    }
-
-		mem_cpy (&Number[0], I->Octets + 1, I->numOctets - 1);
-		Number[I->numOctets - 1] = 0;
-		written += (I->numOctets - 1);
-	} else {
-		Number[0] = 0 ;
+		else
+		{
+			mem_cpy(Name, &CurElem[5], sizeName - 1) ;
+			Name[sizeName-1] = 0 ;
+		}
+		break ;
 	}
-
-	return (written);
 }
-#endif
 
 /*
 	Incoming call present (after INDICATE_REQ), pass on to upper layer
@@ -2450,10 +2486,44 @@ static void s_ring_ind (ISDN_CHANNEL *C, byte *Info, word sizeInfo) {
 										(ParseInfoElementCallbackProc_t)diva_mtpx_parse_sin_callback,
 										&sin_parse_ie);
 
-#if 0
-	diva_getname (&elems[RING_INFO_SSEXTIE], CORNET_CMD_CALLING_PARTY_NAME,
-	    &Parms.OrigName[0], sizeof(Parms.OrigName));
-#endif
+	/*
+		Retrieve calling name
+		*/
+	{
+		diva_mtpx_is_parse_t parse_ie;
+
+		memset (&parse_ie, 0x00, sizeof(parse_ie));
+		parse_ie.wanted_ie        = SSEXTIE;
+		parse_ie.wanted_escape_ie = 0x7f;
+		ParseInfoElement (Info,
+											sizeInfo,
+											(ParseInfoElementCallbackProc_t)diva_mtpx_parse_ie_callback,
+											&parse_ie);
+
+		diva_getname (&parse_ie, CORNET_CMD_CALLING_PARTY_NAME,
+		    &Parms.OrigName[0], sizeof(Parms.OrigName));
+	}
+
+	/*
+		Retrieve DSP
+		*/
+	{
+		diva_mtpx_is_parse_t parse_ie;
+
+		memset (&parse_ie, 0x00, sizeof(parse_ie));
+		parse_ie.wanted_ie = DSP;
+		ParseInfoElement (Info,
+											sizeInfo,
+											(ParseInfoElementCallbackProc_t)diva_mtpx_parse_ie_callback,
+											&parse_ie);
+
+		Parms.DisplayIE[0] = 0;
+		if (parse_ie.data) {
+			byte length = MIN((sizeof(Parms.DisplayIE)-1), parse_ie.data_length);
+			memcpy (&Parms.DisplayIE[1], parse_ie.data, length);
+			Parms.DisplayIE[0] = length;
+		}
+	}
 
 	/* service indicator (from 1TR6-indication or generated from DSS1-BC) */
 
@@ -3059,6 +3129,7 @@ static int isdnSigEnq (ISDN_CHANNEL *C,
 
 	if (!(ret = isdnEnq (C, ISDN_SIG_REQ, Type, Parms, sizeParms))) {
 		DBG_ERR(("A: [%p:%s] Squeue overrun", C, port_name(C)))
+		printk(KERN_ERR "%s: [%p:%s] Squeue overrun\n", __FUNCTION__, C, port_name(C));
 	}
 
 	return (ret);
@@ -3282,6 +3353,7 @@ static void isdnSigRc (ISDN_CHANNEL *C, ISDN_MSG *M) {
 	/*								*/
 	/* Unfortunately ASSIGN has the same coding as CALL_REQ and	*/
 	/* thus it cannot be handled in the switch() below.		*/
+	byte esc_cause[5];
 
 	if ((C->State == C_INIT) && (M->Type == ASSIGN) && (M->Rc == ASSIGN_OK)) {
 		C->State = C_IDLE;
@@ -3295,7 +3367,12 @@ static void isdnSigRc (ISDN_CHANNEL *C, ISDN_MSG *M) {
 		*/
 	if (M->Rc != OK) {
 		DBG_ERR(("A: [%p:%s] SigRc=%02x", C, port_name(C), M->Rc))
-		s_hup_ind (C, "", 1);
+		esc_cause[0] = ESC;		/* elem type	*/
+		esc_cause[1] = 3;		/* info length	*/
+		esc_cause[2] = CAU;		/* real type 	*/
+		esc_cause[3] = 0x80 | Q931_CAUSE_UserBusy;
+		esc_cause[4] = 0;		/* 1tr6 cause	*/
+		s_hup_ind (C, esc_cause, sizeof (esc_cause));
 		return;
 	}
 
@@ -3903,7 +3980,6 @@ static void IDI_CALL_TYPE sync_isdnSigCallback (ENTITY *E) {
 	word		sizeMsg;
 	byte Rc;
 
-
 	C = BASE_POINTER (ISDN_CHANNEL, Sig, E);
 	A = C->Adapter;
 
@@ -4007,6 +4083,7 @@ static void IDI_CALL_TYPE sync_isdnSigCallback (ENTITY *E) {
 	}
 
 sig_unlock:
+
 	/* sysScheduleDpc (&A->EventDpc); */
 	isdnEvent(A);
 	isdnPutReq(C);
@@ -4308,6 +4385,7 @@ static int isdnAttach (void *DescTab, word sizeDescTab) {
 		}
 		if (!Desc->channels || !Desc->request) {
     			DBG_TRC(("Attach: bad desc"))
+				printk(KERN_ERR "%s Attach (A=%d): bad desc=%p\n", __FUNCTION__, Machine.numAdapters, Desc);
 			Desc->type = 0;	// don't use, don't scan again 
 			continue;
 		}
@@ -4321,6 +4399,7 @@ static int isdnAttach (void *DescTab, word sizeDescTab) {
 
 	if (!Machine.numAdapters) {
 		DBG_TRC(("Attach: no board"))
+		printk(KERN_ERR "%s Attach: no board", __FUNCTION__);
 		return (0);
 	}
 
@@ -4346,6 +4425,7 @@ static int isdnAttach (void *DescTab, word sizeDescTab) {
 
 	if (!(Machine.Memory = sysPageAlloc (&sizePages, &Machine.hMemory))) {	
 		DBG_TRC(("isdnAttach:Memory Allocation Failure"))
+		printk(KERN_ERR "isdnAttach: Memory Allocation Failure\n");
 		return (0);
 	}
 
@@ -4421,7 +4501,8 @@ static int isdnAttach (void *DescTab, word sizeDescTab) {
 
 	if (A != Machine.lastAdapter || C != Machine.lastChannel ||
 	    Memory != Machine.Memory + Machine.sizeMemory) {
-	    	DBG_ERR(("Attach: logic?"))
+		DBG_ERR(("Attach: logic?"))
+		printk(KERN_ERR "%s: Memory Allocation Failure (%d)\n", __FUNCTION__, Machine.sizeMemory);
 		sysPageFree (Machine.hMemory);
 		return (0);
 	}
@@ -4429,6 +4510,7 @@ static int isdnAttach (void *DescTab, word sizeDescTab) {
 	/* now we try to assign to IDI */
 
 	Machine.State = M_INIT;
+	Machine.Listen = 0;
 
 # if TRY_TO_QUIESCE
 	sysInitializeEvent (&Machine.QuiesceEvent);
@@ -4602,6 +4684,8 @@ static int isdnDetach (void) {
 					{
 						break ; /* this channel is busy, let's wait */
 					}
+					C->Sig.callback = 0;
+					C->Net.callback = 0;
 				}
 				if ( C >= Machine.lastChannel )
 				{
@@ -4668,19 +4752,21 @@ ISDN_REQUESTS *	isdnBind (
 
 	if (Indications) 
 	{
-		if (Machine.Port) 
+		if (Machine.Port)
 		{
 			/*DBG_ERR(("Bind: attach duplicate "))*/
 		} else if (!isdnAttach (DescBuf, sizeDescBuf)) 
-			{
+		{
 #if !defined(LINUX)
-				   cmn_err(CE_NOTE, "ETSR Bind: att err");
+			cmn_err(CE_NOTE, "ETSR Bind: att err");
+#else
+			printk(KERN_ERR "ETSR Bind: att err\n");
 #endif
-			} else 
-			{
+		} else 
+		{
 			Machine.Port = Indications;
 			Ret = &Requests;
-			}
+		}
 	}
 	else 
 	{
@@ -4698,7 +4784,6 @@ ISDN_REQUESTS *	isdnBind (
 			Machine.Port = 0;
 		}
 	}
-
 
 	return (Ret);
 }
@@ -5026,16 +5111,16 @@ static void local_no_req (ENTITY* e) {
   Notification from DADAPTER about adapter start/shutdown
   */
 void diva_adapter_change (IDI_CALL request, int insert) {
-	unsigned long old_irql = eicon_splimp ();
+  unsigned long old_irql = eicon_splimp ();
   ISDN_CHANNEL* C = Machine.Channels ;
-	ISDN_MSG msg, *M = &msg;
+  ISDN_MSG msg, *M = &msg;
 
   for (;;) {
     if ((!insert) && (C->RequestFunc == request)) {
       C->RequestFunc = local_no_req;
       link_down (C, CAUSE_FATAL);
       detach_port (C);
-			queueReset (&C->Xqueue);
+      queueReset (&C->Xqueue);
       queueReset (&C->Squeue);
       if (C->rx_dma_ref_count) {
         C->rx_dma_ref_count = 0;
@@ -5045,17 +5130,17 @@ void diva_adapter_change (IDI_CALL request, int insert) {
         C->rx_dma_handle = -1;
         C->rx_dma_magic  = 0;
       }
-			C->net_rc = 1; /* to mark channel as unuseable */
+      C->net_rc = 1; /* to mark channel as unuseable */
 
-			queueReset (&C->Adapter->Events);
+      queueReset (&C->Adapter->Events);
 
-			DBG_TRC(("[%p:?] Channel Stopped", C))
-		}
+      DBG_TRC(("[%p:?] Channel Stopped", C))
+    }
     if (insert && (C->RequestFunc == local_no_req) &&
         (C->Adapter->RequestFunc == request)) {
       C->RequestFunc = C->Adapter->RequestFunc;
-			C->Sig.Id	= DSIG_ID;
-			C->State = C_INIT;
+      C->Sig.Id	= DSIG_ID;
+      C->State = C_INIT;
 
       if (C->rx_dma_ref_count) {
         C->rx_dma_ref_count = 0;
@@ -5067,36 +5152,37 @@ void diva_adapter_change (IDI_CALL request, int insert) {
       M->Rc = OK;
       M->Type = REMOVE;
 
-			C->NetFC   = 0;
-			C->Net.Id  = NL_ID;
-			C->Net.ReqCh = 0;
-			C->Net.IndCh = 0;
-			C->Net.RcCh = 0;
-			C->net_disc_ok = 0;
-			C->net_disc_ind_pending = 0;
-			C->channel_assigned = 0;
-			C->in_assign = 0;
-			C->net_busy			= 0;
-			C->sig_busy			= 0;
-			C->net_rc				= 0;
+      C->NetFC   = 0;
+      C->Net.Id  = NL_ID;
+      C->Net.ReqCh = 0;
+      C->Net.IndCh = 0;
+      C->Net.RcCh = 0;
+      C->net_disc_ok = 0;
+      C->net_disc_ind_pending = 0;
+      C->channel_assigned = 0;
+      C->in_assign = 0;
+      C->net_busy      = 0;
+      C->sig_busy      = 0;
+      C->net_rc      	= 0;
       C->Net.Rc  = 0;
       C->Sig.Rc  = 0;
-			C->Sig.Ind   = 0;
-			C->Net.Ind   = 0;
-			C->NetUp   = 0;
-			C->MdmUp   = 0;
-			C->DetProt = DET_PROT_OFF;
-			C->Prot    = 0;
-			C->RcNotifyFlag = 0;
-			C->transparent_detect = 0;
+      C->Sig.Ind   = 0;
+      C->Net.Ind   = 0;
+      C->NetUp   = 0;
+      C->MdmUp   = 0;
+      C->DetProt = DET_PROT_OFF;
+      C->Prot    = 0;
+      C->RcNotifyFlag = 0;
+      C->transparent_detect = 0;
 
-			DBG_TRC(("[%p:?] Channel Started", C))
+      DBG_TRC(("[%p:?] Channel Started", C))
+      printk(KERN_INFO "%s: [%p:?] Channel Started\n", __FUNCTION__, C);
 
-			queueReset (&C->Xqueue);
+      queueReset (&C->Xqueue);
       queueReset (&C->Squeue);
       isdnSigRc (C, M);
-			isdnPutReq (C); 
-		}
+      isdnPutReq (C); 
+    }
     if (++C >= Machine.lastChannel) {
       eicon_splx (old_irql);
       return; /* All channels removed */
@@ -5105,41 +5191,6 @@ void diva_adapter_change (IDI_CALL request, int insert) {
 
 	eicon_splx (old_irql);
 }
-
-#if 0
-static void diva_getname (ISDN_FIND_INFO *I, word Cmd, byte *Name, word sizeName) {
-	byte 	                Len ;
-	byte *                  CurElem ;
-	word                    CorNetCmd;
-
-	// This information element has the type SSEXTIE, which contain
-	// one or more CorNet-N information elements.
-
-	if (I->numOctets < 6 || I->numOctets >= 128)
-		return;
-
-	/* scan all CorNet-N info elements */
-	CurElem = I->Octets ;
-	for (Len=0; Len < I->numOctets; Len += 2+CurElem[1], CurElem += 2+CurElem[1])
-	{
-		if (   CurElem[0] != SSEXT_IND    // IE type; SSEXT_IND is what we want
-		    || CurElem[1] <  4)           // IE length;
-		{
-			continue ;	/* not interresting */
-		}
-		CorNetCmd  = ((word)(CurElem[3]) << 8) | CurElem[2] ;
-		if (CorNetCmd != Cmd)
-			continue ;	/* not interresting */
-
-		if (CurElem[1] - 3 < sizeName)
-		{
-			mem_cpy(Name, &CurElem[5], CurElem[1] - 3) ;
-			Name[CurElem[1]-3] = 0 ;
-		}
-		break ;
-	}
-}
-#endif
 
 /*
 	Call filter used to bind the CPN's to the specified protocols, independent from the

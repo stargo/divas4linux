@@ -1,12 +1,16 @@
 
 /*
  *
-  Copyright (c) Dialogic, 2007.
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
  *
   This source file is supplied for the use with
-  Dialogic range of DIVA Server Adapters.
+  Sangoma (formerly Dialogic) range of Adapters.
  *
-  Dialogic File Revision :    2.1
+  File Revision :    2.1
  *
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -23,10 +27,23 @@
   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  */
+
 #ifndef __DIVA_XDI_COMMON_IO_H_INC__ /* { */
 #define __DIVA_XDI_COMMON_IO_H_INC__
 #include "dlist.h"
+#include "diva_pci.h"
+struct _diva_dma_fragment_map;
 struct _diva_xdi_clock_control_command;
+struct _diva_xdi_hw_access;
+
+typedef struct _diva_oob_entity_queue {
+  int count;
+  int read;
+  int write;
+  byte Id[0xff+1];
+  byte Ch[0xff+1];
+} diva_oob_entity_queue_t;
+
 /*
   Structure use to ack the page entries or Id
   The last of position of the buffer will contain the number of entries to be read
@@ -152,6 +169,7 @@ struct _ISDN_ADAPTER {
  byte    *cfg ;
  byte    *prom ;
  byte    *ctlReg ;
+ dword plx_offset;
  struct pc_maint  *pcm ;
  diva_os_dependent_devica_name_t os_name;
  byte                Name[32] ;
@@ -273,6 +291,7 @@ struct _ISDN_ADAPTER {
  dword               tasks;
  void               *dma_map;
  void               *dma_map2;
+ struct _diva_dma_fragment_map *fragment_map;
  int             (*DivaAdapterTestProc)(PISDN_ADAPTER);
  void               *AdapterTestMemoryStart;
  dword               AdapterTestMemoryLength;
@@ -284,6 +303,9 @@ struct _ISDN_ADAPTER {
  byte        msi;
  dword       shared_ram_offset; /* Offset between start of physical ram and the adapter memory */
  byte        uncached_mode;
+ dword       ControllerNumberShuffled ;  /* for QUADRO cards only */
+ dword       software_options; /* OR to PCINIT_SOFTWARE_OPTIONS */
+
  /*
   VIDI Variables
   */
@@ -336,6 +358,17 @@ struct _ISDN_ADAPTER {
  volatile dword            clock_isr_count;
  volatile dword            clock_isr_errors;
  volatile dword            clock_time_stamp_count;
+
+ void (*shedule_stream_proc)(const void* shedule_stream_context);
+ const void*               shedule_stream_proc_context;
+
+ void (*get_hw_ifc)(struct _ISDN_ADAPTER*, struct _diva_xdi_hw_access*);
+ int (*chained_isr_proc)(void*);
+ void* chained_isr_proc_context;
+
+ diva_oob_entity_queue_t oob_q;
+
+ divaXconnectExportMode_t xconnectExportMode;
 };
 /* ---------------------------------------------------------------------
   Entity table
@@ -405,6 +438,26 @@ void mem_inc(ADAPTER * a, void * adr);
 void mem_in_dw (ADAPTER *a, void *addr, dword* data, int dwords);
 void mem_out_dw (ADAPTER *a, void *addr, const dword* data, int dwords);
 void* mem_cma_va (ADAPTER* a, void* cma);
+/*
+  Dummy functions for L series
+	*/
+byte no_mem_in (ADAPTER *a, void *addr);
+word no_mem_inw (ADAPTER *a, void *addr);
+void no_mem_in_dw (ADAPTER *a, void *addr, dword* data, int dwords);
+void no_mem_in_buffer (ADAPTER *a, void *addr, void *buffer, word length);
+void no_mem_look_ahead (ADAPTER *a, PBUFFER *RBuffer, ENTITY *e);
+void no_mem_out (ADAPTER *a, void *addr, byte data);
+void no_mem_outw (ADAPTER *a, void *addr, word data);
+void no_mem_out_dw (ADAPTER *a, void *addr, const dword* data, int dwords);
+void no_mem_out_buffer (ADAPTER *a, void *addr, void *buffer, word length);
+void no_mem_inc (ADAPTER *a, void *addr);
+void no_pr_out(ADAPTER * a);
+dword no_ram_offset (ADAPTER* a);
+byte no_dpc(ADAPTER * a);
+byte no_test_int(ADAPTER * a);
+void no_clear_int(ADAPTER * a);
+void no_cpu_trapped (PISDN_ADAPTER IoAdapter);
+int no_load (PISDN_ADAPTER IoAdapter);
 /* ---------------------------------------------------------------------
   functions exported by io.c
    --------------------------------------------------------------------- */

@@ -1,11 +1,16 @@
+
 /*
  *
-  Copyright (c) Dialogic, 2009.
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
  *
   This source file is supplied for the use with
-  Dialogic range of DIVA Server Adapters.
+  Sangoma (formerly Dialogic) range of Adapters.
  *
-  Dialogic File Revision :    2.1
+  File Revision :    2.1
  *
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -270,6 +275,21 @@ diva_user_mode_idi_adapter_features (diva_um_idi_adapter_t* a,
     (*(a->d.request))((ENTITY *)&sync_req);
     strncpy(features->name, sync_req.GetName.name, sizeof(features->name)-1);
 
+    sync_req.GetName.Req = 0;
+    sync_req.GetName.Rc = IDI_SYNC_REQ_GET_CARDTYPE;
+    sync_req.GetCardType.cardtype = 0;
+    (*(a->d.request))((ENTITY *)&sync_req);
+
+    if (sync_req.GetCardType.cardtype != 0) {
+      int nameLength = strlen (features->name) + 1;
+      int freeLength = sizeof(features->name) - nameLength - 1;
+
+      if (freeLength > 24) {
+        char* p = &features->name[nameLength];
+        sprintf (p, "T:%d", (int)sync_req.GetCardType.cardtype);
+      }
+    }
+
     sync_req.GetSerial.Req = 0;
     sync_req.GetSerial.Rc = IDI_SYNC_REQ_GET_SERIAL;
     sync_req.GetSerial.serial = 0;
@@ -509,7 +529,7 @@ void* divas_um_idi_create_entity (dword adapter_nr, void* file) {
   diva_um_idi_adapter_t* a;
   diva_os_spin_lock_magic_t old_irql;
 	int license_server  = (adapter_nr & 0x4000) != 0;
-  int create_master   = (adapter_nr > 100) | license_server;
+	int create_master   = (!(adapter_nr < 100 || (adapter_nr > 199 && adapter_nr < 300))) | license_server;
 	int add_master_to_q = 1;
 
 	if (adapter_nr == DIVA_UM_IDI_SYSTEM_ADAPTER_NR) {

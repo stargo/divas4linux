@@ -176,8 +176,14 @@ module_sources: clean module_dir $(patsubst %.c,module/%.c,$(SRC) syslnx.c manag
 	@cp *.h module/
 	@cp options.sh module/
 	@cp makefile module/Makefile.2.4
+	@echo 'KVER_MAJOR=$$(shell uname -r | sed -e 's/-.*//' | cut -d. -f1)' >> module/Makefile
+	@echo 'RHEL_DRM=$$(shell sed -ne "/^ *RHEL_DRM_VERSION *=/p" /usr/src/linux/Makefile | cut -d= -f2 |sed -e 's/^[[:space:]]*//')' >> module/Makefile
+	@echo 'EXTRAVERSION=$$(shell grep "^ *EXTRAVERSION *=" /usr/src/linux/Makefile | cut -d- -f2 | cut -d. -f1)' >> module/Makefile
 	@echo 'DIVA_SMP_OPTIONS=$$(shell (cat /usr/src/linux/include/linux/autoconf.h 2>/dev/null || cat /usr/src/linux/include/generated/autoconf.h 2>/dev/null) | grep ''"^ *.define *CONFIG_SMP"'' > /dev/null 2>&1 && echo -DDIVA_SMP=1)' >> module/Makefile
-	@echo 'EXTRA_CFLAGS += -I. -I/usr/lib/eicon/divas/src/kernel/drivers/isdn/hardware/eicon -I/usr/src/linux/drivers/isdn/hardware/eicon $$(DIVA_SMP_OPTIONS) -DDIVA_BUILD=\"$(DIVA_BUILD)\" -DDIVA_GPL=$(DIVA_GPL) -DUNIX -DLINUX -D__KERNEL_VERSION_GT_2_4__=1' >> module/Makefile
+	@echo 'EXTRA_CFLAGS += -I. -I/usr/lib/eicon/divas/src/kernel/drivers/isdn/hardware/eicon -I/usr/src/linux/drivers/isdn/hardware/eicon $$(DIVA_SMP_OPTIONS) -DDIVA_BUILD=\"$(DIVA_BUILD)\" -DDIVA_GPL=$(DIVA_GPL) -DUNIX -DLINUX -D__KERNEL_VERSION_GT_2_4__=1 ' >> module/Makefile
+	@echo 'ifneq ($$(RHEL_DRM),)' >> module/Makefile
+	@echo 'EXTRA_CFLAGS += -D__RHEL_DRM__=$$(RHEL_DRM) -D__RHEL_EXTRAVERSION__=$$(EXTRAVERSION)' >> module/Makefile
+	@echo 'endif' >> module/Makefile
 	@echo "" >> module/Makefile
 	@echo "obj-m := Divatty.o" >> module/Makefile
 	@echo "Divatty-y := $(OBJECTS)" >> module/Makefile

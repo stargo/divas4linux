@@ -1,15 +1,32 @@
-/* $Id: i4lididrv.h,v 1.1.2.2 2002/10/02 14:38:37 armin Exp $
- *
- * ISDN interface module for Dialogic active cards.
- * I4L - IDI Interface
- *
- * Copyright 1998-2009  by Armin Schindler (mac@melware.de) 
- * Copyright 1999-2009  Cytronics & Melware (info@melware.de)
- *
- * This software may be used and distributed according to the terms
- * of the GNU General Public License, incorporated herein by reference.
- */
 
+/*
+ *
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
+ *
+  This source file is supplied for the use with
+  Sangoma (formerly Dialogic) range of Adapters.
+ *
+  File Revision :    2.1
+ *
+  This program is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; either version 2, or (at your option)
+  any later version.
+ *
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY OF ANY KIND WHATSOEVER INCLUDING ANY
+  implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+  See the GNU General Public License for more details.
+ *
+  You should have received a copy of the GNU General Public License
+  along with this program; if not, write to the Free Software
+  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *
+ */
 
 #ifndef i4lididrv_h
 #define i4lididrv_h
@@ -69,7 +86,7 @@ typedef struct {
 }
 
 /* Kernel includes */
-#include <linux/module.h>
+#include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/skbuff.h>
 #include <linux/errno.h>
@@ -78,33 +95,31 @@ typedef struct {
 #include <linux/mm.h>
 #include <linux/delay.h>
 #include <linux/ctype.h>
-#include <linux/workqueue.h>
-
 
 typedef struct {
-  __u16 length;       /* length of data/parameter field  */
-  __u8  P[1];         /* data/parameter field            */
-} __attribute__ ((packed)) eicon_PBUFFER;
+  __u16 length __attribute__ ((packed)); /* length of data/parameter field */
+  __u8  P[1];                          /* data/parameter field */
+} eicon_PBUFFER;
 
 typedef struct {
-  __u16 NextReq;      /* pointer to next Req Buffer      */
-  __u16 NextRc;       /* pointer to next Rc Buffer       */
-  __u16 NextInd;      /* pointer to next Ind Buffer      */
-  __u8 ReqInput;      /* number of Req Buffers sent      */
-  __u8 ReqOutput;     /* number of Req Buffers returned  */
-  __u8 ReqReserved;   /* number of Req Buffers reserved  */
-  __u8 Int;           /* ISDN-P interrupt                */
-  __u8 XLock;         /* Lock field for arbitration      */
-  __u8 RcOutput;      /* number of Rc buffers received   */
-  __u8 IndOutput;     /* number of Ind buffers received  */
-  __u8 IMask;         /* Interrupt Mask Flag             */
-  __u8 Reserved1[2];  /* reserved field, do not use      */
-  __u8 ReadyInt;      /* request field for ready int     */
-  __u8 Reserved2[12]; /* reserved field, do not use      */
-  __u8 InterfaceType; /* interface type 1=16K            */
-  __u16 Signature;    /* ISDN-P initialized ind          */
-  __u8 B[1];          /* buffer space for Req,Ind and Rc */
-} __attribute__ ((packed)) eicon_pr_ram;
+  __u16 NextReq  __attribute__ ((packed));  /* pointer to next Req Buffer */
+  __u16 NextRc   __attribute__ ((packed));  /* pointer to next Rc Buffer  */
+  __u16 NextInd  __attribute__ ((packed));  /* pointer to next Ind Buffer */
+  __u8 ReqInput  __attribute__ ((packed));  /* number of Req Buffers sent */
+  __u8 ReqOutput  __attribute__ ((packed)); /* number of Req Buffers returned */
+  __u8 ReqReserved  __attribute__ ((packed));/*number of Req Buffers reserved */
+  __u8 Int  __attribute__ ((packed));       /* ISDN-P interrupt           */
+  __u8 XLock  __attribute__ ((packed));     /* Lock field for arbitration */
+  __u8 RcOutput  __attribute__ ((packed));  /* number of Rc buffers received */
+  __u8 IndOutput  __attribute__ ((packed)); /* number of Ind buffers received */
+  __u8 IMask  __attribute__ ((packed));     /* Interrupt Mask Flag        */
+  __u8 Reserved1[2]  __attribute__ ((packed)); /* reserved field, do not use */
+  __u8 ReadyInt  __attribute__ ((packed));  /* request field for ready int */
+  __u8 Reserved2[12]  __attribute__ ((packed)); /* reserved field, do not use */
+  __u8 InterfaceType  __attribute__ ((packed)); /* interface type 1=16K    */
+  __u16 Signature  __attribute__ ((packed));    /* ISDN-P initialized ind  */
+  __u8 B[1];                            /* buffer space for Req,Ind and Rc */
+} eicon_pr_ram;
 
 typedef struct {
   __u8                  Req;            /* pending request          */
@@ -253,11 +268,12 @@ typedef struct eicon_card {
         isdn_if interface;               /* Interface to upper layer         */
         char regname[35];                /* Drivers card name 		     */
 	spinlock_t lock;		 /* spin lock per card		     */
-	struct work_struct wq;		/* work queue                       */
+        struct tq_struct tq;             /* task queue for thread            */
 } eicon_card;
 
 #include "i4l_idi.h"
 
+extern eicon_card *cards;
 extern char *eicon_ctype_name[];
 
 extern ulong DebugVar;

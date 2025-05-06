@@ -1,53 +1,33 @@
-//
-//  UNARIB62.CPP
-//
-//  Mark Nelson
-//  March 8, 1996
-//  http://web2.airmail.net/markn
-//  **** moded by David Scott in may of 2001
-//  to make bijective so it will be suited
-//
-// DESCRIPTION
-// -----------
-//
-//  This program performs an order-0 adaptive arithmetic decoding
-//  function on an input file/stream, and sends the result to an
-//  output file or stream.
-//
-//  This program contains the source code from the 1987 CACM
-//  article by Witten, Neal, and Cleary.  I have taken the
-//  source modules and combined them into this single file for
-//  ease of distribution and compilation.  Other than that,
-//  the code is essentially unchanged.
-//
-//  This program takes two arguments: an input file and an output
-//  file.  You can leave off one argument and send your output to
-//  stdout.  Leave off two arguments and read your input from stdin
-//  as well.
-//
-//  This program accompanies my article "Data Compression with the
-//  Burrows-Wheeler Transform."
-//
-// Build Instructions
-// ------------------
-//
-//  Define the constant unix for UNIX or UNIX-like systems.  The
-//  use of this constant turns off the code used to force the MS-DOS
-//  file system into binary mode.  g++ does this already, your UNIX
-//  C++ compiler might also.
-//
-//  Borland C++ 4.5 16 bit    : bcc -w unari.cpp
-//  Borland C++ 4.5 32 bit    : bcc32 -w unari.cpp
-//  Microsoft Visual C++ 1.52 : cl /W4 unari.cpp
-//  Microsoft Visual C++ 2.1  : cl /W4 unari.cpp
-//  g++                       : g++ -o unari unari.cpp
-//
-// Typical Use
-// -----------
-//
-//  unari < compressed-file | unrle | unmtf | unbwt | unrle > raw-file
-//
-//
+
+/*
+ *
+  Copyright (c) Sangoma Technologies, 2018-2022
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
+ *
+  This source file is supplied for the use with
+  Sangoma (formerly Dialogic) range of Adapters.
+ *
+  File Revision :    2.1
+ *
+  This program is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; either version 2, or (at your option)
+  any later version.
+ *
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY OF ANY KIND WHATSOEVER INCLUDING ANY
+  implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+  See the GNU General Public License for more details.
+ *
+  You should have received a copy of the GNU General Public License
+  along with this program; if not, write to the Free Software
+  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *
+ */
+
 #if 0
 #include <stdio.h>
 #include <stdlib.h>
@@ -85,7 +65,7 @@ static unsigned long cum_freq[No_of_symbols+1];  /* Cumulative symbol frequencie
 
 /* SIZE OF ARITHMETIC CODE VALUES. */
 
-#define Code_value_bits 30              /* Number of bits in a code value   */
+#define Code_value_bits 62              /* Number of bits in a code value   */
 typedef unsigned long code_value;    /* Type of an arithmetic code value */
 
 #define Top_value (((code_value)1<<Code_value_bits)-1)  /* Largest code value */
@@ -120,8 +100,8 @@ static unsigned int   input_buffer_length;
 /* INITIALIZE BIT INPUT. */
 
 #define EOF (-1)
-static int stdin;
-static __inline int getc(int i) {
+static int __diva_stdin;
+static __inline int __diva_getc(int i) {
 	if (input_buffer_length) {
 		input_buffer_length--;
 		return (*input_buffer++);
@@ -139,7 +119,7 @@ static __inline void start_inputing_bits( void )
     onef = 0;
     zbuffer = 0;
     lobuffer = 0;
-    bufferx = getc(stdin);
+    bufferx = __diva_getc(__diva_stdin);
 }
 
 
@@ -153,7 +133,7 @@ static __inline int input_bit( void )
         if ( buffer == 0x40 && zbuffer == 1) lobuffer = 1;
         if ( buffer == 0 ) zbuffer = 1;
         else zbuffer = 0;
-        bufferx = getc(stdin);                   /* bits are left in buffer. */
+        bufferx = __diva_getc(__diva_stdin);                   /* bits are left in buffer. */
         if (bufferx == EOF) {
            if ( zbuffer == 1 || lobuffer == 1) { /* add in last one bit */
              bufferx = 0x40;
@@ -195,10 +175,10 @@ int main( int argc, char *argv[] )
     fprintf( stderr, "Bijective UNArithmetic coding version May 30, 2001 \n " );
     fprintf( stderr, "Arithmetic decoding on " );
     if ( argc > 1 ) {
-        freopen( argv[ 1 ], "rb", stdin );
+        freopen( argv[ 1 ], "rb", __diva_stdin );
         fprintf( stderr, "%s", argv[ 1 ] );
     } else
-        fprintf( stderr, "stdin" );
+        fprintf( stderr, "__diva_stdin" );
     fprintf( stderr, " to " );
     if ( argc > 2 ) {
         freopen( argv[ 2 ], "wb", stdout );
@@ -207,7 +187,7 @@ int main( int argc, char *argv[] )
         fprintf( stderr, "stdout" );
     fprintf( stderr, "\n" );
 #if !defined( unix )
-    setmode( fileno( stdin ), O_BINARY );
+    setmode( fileno( __diva_stdin ), O_BINARY );
     setmode( fileno( stdout ), O_BINARY );
 #endif
 
@@ -233,7 +213,7 @@ int main( int argc, char *argv[] )
     return 1;
 }
 #else
-#define putc(__x__,__y__) dst[dst_length++]=(__x__)
+#define __diva_putc(__x__,__y__) dst[dst_length++]=(__x__)
 unsigned int trace_expand (unsigned char* src,
 													 unsigned int src_length,
 													 unsigned char* dst) {
@@ -256,10 +236,10 @@ unsigned int trace_expand (unsigned char* src,
 //        if (symbol==EOF_symbol) break;          /* Exit loop if EOF symbol. */
     ch = index_to_char[symbol];             /* Translate to a character.*/
     if ( ZATE == 0 && symbol != 1) break;
-    putc((char) ch,stdout);                 /* Write that character.    */
+    __diva_putc((char) ch,stdout);                 /* Write that character.    */
     update_model(symbol);                   /* Update the model.        */
   }
-  if ( (zerf + onef) == 0 ) putc((char) index_to_char[symbol],stdout);
+  if ( (zerf + onef) == 0 ) __diva_putc((char) index_to_char[symbol],stdout);
 
 	return (dst_length);
 }

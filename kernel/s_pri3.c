@@ -1,11 +1,16 @@
+
 /*
  *
-  Copyright (c) Dialogic, 2007.
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
  *
   This source file is supplied for the use with
-  Dialogic range of DIVA Server Adapters.
+  Sangoma (formerly Dialogic) range of Adapters.
  *
-  Dialogic File Revision :    2.1
+  File Revision :    2.1
  *
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -22,6 +27,7 @@
   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  */
+
 #include "platform.h"
 #include "di_defs.h"
 #include "pc.h"
@@ -37,14 +43,16 @@
 #include "dsrv_pri3.h"
 #include "dsp_defs.h"
 #include "dsrv4bri.h" /* PLX related definitions */
-#ifdef DIVA_ADAPTER_TEST_SUPPORTED
 #include "divatest.h" /* Adapter test framework */
-#endif
 #include "fpga_rom.h"
 #include "fpga_rom_xdi.h"
+#include "passivp3.h"
 
 #define DIVA_MEMORY_TEST_PATTERN "Hallo World!\0"
 #define MAX_XLOG_SIZE  (64 * 1024)
+
+int diva_xdi_disable_plx_reset = 0;
+int diva_xdi_disable_hardware_selftest = 0;
 
 static int load_pri_v3_hardware (PISDN_ADAPTER IoAdapter);
 static dword diva_pri_v3_detect_dsps (PISDN_ADAPTER IoAdapter);
@@ -179,7 +187,8 @@ int pri_v3_FPGA_download (PISDN_ADAPTER IoAdapter) {
 		return (0) ;
 	}
 
-	diva_xdi_show_fpga_rom_features (IoAdapter->ctlReg+0x30000);
+	diva_xdi_show_fpga_rom_features (IoAdapter->ctlReg +
+				((IDI_PROP(IoAdapter->cardType,Card) != CARD_PASSIVEP) ? 0x30000 : 0x20300));
 
 	/*
 		Set PLX Local BUS latency timer via MABR0
@@ -213,41 +222,88 @@ int pri_v3_FPGA_download (PISDN_ADAPTER IoAdapter) {
 		diva_os_sleep(50);
 	}
 	*reset &= ~(0x08 | 0x10 | 0x20 | 0x40); /* Let the LEDs ON to show that adapter FPGA is loaded now */
- memcpy(IoAdapter->ram, DIVA_MEMORY_TEST_PATTERN, sizeof(DIVA_MEMORY_TEST_PATTERN));
- if (memcmp (IoAdapter->ram, DIVA_MEMORY_TEST_PATTERN, sizeof(DIVA_MEMORY_TEST_PATTERN))) {
-		DBG_FTL(("Memory test failed"))
-  DBG_BLK((IoAdapter->ram, sizeof(DIVA_MEMORY_TEST_PATTERN)))
-		return (0);
-  }
 
-  if (IoAdapter->DivaAdapterTestProc) {
-    if ((*(IoAdapter->DivaAdapterTestProc))(IoAdapter)) {
-      return (0);
-    }
-  }
+	if (IDI_PROP(IoAdapter->cardType,Card) != CARD_PASSIVEP) {
+ 		memcpy(IoAdapter->ram, DIVA_MEMORY_TEST_PATTERN, sizeof(DIVA_MEMORY_TEST_PATTERN));
+ 		if (memcmp (IoAdapter->ram, DIVA_MEMORY_TEST_PATTERN, sizeof(DIVA_MEMORY_TEST_PATTERN))) {
+			DBG_FTL(("Memory test failed"))
+  		DBG_BLK((IoAdapter->ram, sizeof(DIVA_MEMORY_TEST_PATTERN)))
+			return (0);
+  	}
+
+  	if (IoAdapter->DivaAdapterTestProc) {
+    	if ((*(IoAdapter->DivaAdapterTestProc))(IoAdapter)) {
+      	return (0);
+    	}
+  	}
+	} else if (diva_xdi_disable_hardware_selftest == 0) {
+		if ((diva_xdi_decode_fpga_rom_features (IoAdapter->ctlReg+0x20300) & (1U << 14)) != 0) {
+			volatile dword* testRegister = (dword*)&IoAdapter->ctlReg[DIVA_PASSIVE_TEST_REGISTER_OFFSET];
+			dword testPatterns[] = { 0U, 0xababababU, 0x1234abcd, 0U };
+			int i;
+
+			for (i = 0; i < sizeof(testPatterns)/sizeof(testPatterns[0]); i++) {
+				dword v;
+				const char* errorMsg = "hardware error, please replace";
+
+				*testRegister = 0;
+				*testRegister = testPatterns[i];
+
+				v = *testRegister;
+
+				if (v != testPatterns[i]) {
+					DBG_ERR(("Test pattern %08x failed (%08x)", testPatterns[i], v))
+					diva_log_info("%s %u %s", IoAdapter->Properties.Name, IoAdapter->serialNo, errorMsg);
+					return (0);
+				}
+
+				*testRegister = 0;
+				*testRegister = ~testPatterns[i];
+
+				v = *testRegister;
+
+				if (v != ~testPatterns[i]) {
+					DBG_ERR(("Test pattern %08x failed (%08x)", ~testPatterns[i], v))
+					diva_log_info("%s %u %s", IoAdapter->Properties.Name, IoAdapter->serialNo, errorMsg);
+					return (0);
+				}
+			}
+
+			*testRegister = 0;
+		} else {
+			const char* msg = "Datapath test register not supported, please use newer product version";
+			DBG_REG(("%s", msg))
+			diva_log_info("%s", msg);
+		}
+	}
 
 	return (1) ;
 }
 
 static void reset_pri_v3_hardware (PISDN_ADAPTER IoAdapter) {
-	volatile word  *Reset ;
 	volatile dword *Cntrl ;
 
-	Reset = (word volatile *)IoAdapter->prom ;
-	Cntrl = (dword volatile *)(&IoAdapter->ctlReg[MQ2_BREG_RISC]);
-	*Reset |= PLX9054_SOFT_RESET ;
-	diva_os_wait (1) ;
-	*Reset &= ~PLX9054_SOFT_RESET ;
-	diva_os_wait (1);
-	*Reset |= PLX9054_RELOAD_EEPROM ;
-	diva_os_wait (1) ;
-	*Reset &= ~PLX9054_RELOAD_EEPROM ;
-	diva_os_wait (1);
+	Cntrl = (IDI_PROP(IoAdapter->cardType,Card) != CARD_PASSIVEP) ? (dword volatile *)(&IoAdapter->ctlReg[MQ2_BREG_RISC]) : (dword volatile *)(&IoAdapter->ctlReg[DIVA_PASSIVE_RESET_REGISTER_OFFSET]);
 
-	*Cntrl = 0 ;
+	if (diva_xdi_disable_plx_reset == 0) {
+		volatile word  *Reset ;
 
-	DBG_TRC(("resetted board @ reset addr 0x%08lx", Reset))
+		Reset = (word volatile *)IoAdapter->prom ;
+
+		DBG_TRC(("resetted board @ reset addr 0x%08lx", Reset))
+
+		*Reset |= PLX9054_SOFT_RESET ;
+		diva_os_wait (1) ;
+		*Reset &= ~PLX9054_SOFT_RESET ;
+		diva_os_wait (1);
+		*Reset |= PLX9054_RELOAD_EEPROM ;
+		diva_os_wait (1) ;
+		*Reset &= ~PLX9054_RELOAD_EEPROM ;
+		diva_os_wait (1);
+	}
+
 	DBG_TRC(("resetted board @ cntrl addr 0x%08lx", Cntrl))
+	*Cntrl = 0 ;
 }
 
 /*
@@ -331,6 +387,31 @@ static void stop_pri_v3_hardware (PISDN_ADAPTER IoAdapter) {
 	diva_os_wait (20) ;
 }
 
+static void stop_pri_passive_v3_hardware (PISDN_ADAPTER IoAdapter) {
+	byte* reset = &IoAdapter->ctlReg[DIVA_PASSIVE_RESET_REGISTER_OFFSET];
+	byte *plx   = IoAdapter->reset;
+	volatile byte *dmacsr0 = (byte*)&plx[0xa8];
+	volatile byte *dmacsr1 = (byte*)&plx[0xa9];
+	byte state;
+
+	/*
+		Reset perepherial devices
+		*/
+	*(volatile dword*)reset = DIVA_PASSIVE_RESET_REGISTER_VALUE;
+
+	/*
+		Stop DMA
+		*/
+	*dmacsr0 = 0;
+	*dmacsr1 = 0;
+	state = *dmacsr0 | *dmacsr1;
+	*dmacsr0 = (1U << 2) | (1U << 3);
+	*dmacsr1 = (1U << 2) | (1U << 3);
+	state = *dmacsr0 | *dmacsr1;
+	*dmacsr0 = 0;
+	*dmacsr1 = 0;
+}
+
 static int pri_v3_ISR (struct _ISDN_ADAPTER* IoAdapter) {
 	if (!(*(volatile dword*)&IoAdapter->reset[PLX9054_INTCSR_DW] & PLX9054_L2PDBELL_INT_PENDING)) {
 		return (0);
@@ -346,15 +427,36 @@ static int pri_v3_ISR (struct _ISDN_ADAPTER* IoAdapter) {
 	return (1);
 }
 
+static int pri_passive_ISR (struct _ISDN_ADAPTER* IoAdapter) {
+	volatile dword* intCsr = (dword*)&IoAdapter->reset[PLX9054_INTCSR_DW];
+
+	if ((*intCsr & ((1U << 15) | (1U << 21) | (1U << 22) | PLX9054_L2PDBELL_INT_PENDING)) == 0)
+		return (0);
+
+	IoAdapter->chained_isr_proc (IoAdapter->chained_isr_proc_context);
+
+	return (1);
+}
+
 static void disable_pri_v3_interrupt (PISDN_ADAPTER IoAdapter) {
   *(volatile dword*)&IoAdapter->reset[PLX9054_INTCSR_DW] &= ~PLX9054_L2PDBELL_INT_ENABLE;
 	*(volatile dword*)&IoAdapter->reset[PLX9054_L2PDBELL]  = *(volatile dword*)&IoAdapter->reset[PLX9054_L2PDBELL];
 }
 
+static void disable_pri_passive_interrupt (PISDN_ADAPTER IoAdapter) {
+	volatile byte* intCsr = &IoAdapter->reset[PLX9054_INTCSR];
+
+	*(volatile dword*)&IoAdapter->reset[PLX9054_INTCSR_DW] &= ~PLX9054_L2PDBELL_INT_ENABLE;
+	*(volatile dword*)&IoAdapter->reset[PLX9054_L2PDBELL]  = *(volatile dword*)&IoAdapter->reset[PLX9054_L2PDBELL];
+	*intCsr = 0;
+}
+
 int diva_pri_v3_fpga_ready (PISDN_ADAPTER IoAdapter) {
 	int ret = 0;
 
-	if (IoAdapter->Initialized == 0) {
+	if (IDI_PROP(IoAdapter->cardType,Card) == CARD_PASSIVEP) {
+		ret = -1;
+	} else if (IoAdapter->Initialized == 0) {
 		int changes_detected = 0, loops = 800, state = 0;
 		int pci_interrupt_state = (*(volatile dword*)&IoAdapter->reset[PLX9054_INTCSR_DW] & (1U << 8)) != 0;
 
@@ -413,47 +515,48 @@ static int pri_v3_save_maint_buffer (PISDN_ADAPTER IoAdapter, const void* data, 
   ------------------------------------------------------------------------- */
 void prepare_pri_v3_functions (PISDN_ADAPTER IoAdapter) {
 	ADAPTER *a = &IoAdapter->a ;
+	int passive = (IDI_PROP(IoAdapter->cardType,Card) == CARD_PASSIVEP);
 
 	IoAdapter->MemorySize = MP2_MEMORY_SIZE;
 
-	a->ram_in           = mem_in ;
-	a->ram_inw          = mem_inw ;
-	a->ram_in_buffer    = mem_in_buffer ;
-	a->ram_look_ahead   = mem_look_ahead ;
-	a->ram_out          = mem_out ;
-	a->ram_outw         = mem_outw ;
-	a->ram_out_buffer   = mem_out_buffer ;
-	a->ram_inc          = mem_inc ;
-	a->ram_offset       = pri_v3_ram_offset ;
-	a->ram_out_dw       = mem_out_dw;
-	a->ram_in_dw        = mem_in_dw;
+	a->ram_in           = (passive == 0) ? mem_in : no_mem_in;
+	a->ram_inw          = (passive == 0) ? mem_inw : no_mem_inw;
+	a->ram_in_buffer    = (passive == 0) ? mem_in_buffer : no_mem_in_buffer;
+	a->ram_look_ahead   = (passive == 0) ? mem_look_ahead : no_mem_look_ahead;
+	a->ram_out          = (passive == 0) ? mem_out : no_mem_out;
+	a->ram_outw         = (passive == 0) ? mem_outw : no_mem_outw;
+	a->ram_out_buffer   = (passive == 0) ? mem_out_buffer : no_mem_out_buffer;
+	a->ram_inc          = (passive == 0) ? mem_inc : no_mem_inc;
+	a->ram_offset       = (passive == 0) ? pri_v3_ram_offset : no_ram_offset;
+	a->ram_out_dw       = (passive == 0) ? mem_out_dw : no_mem_out_dw;
+	a->ram_in_dw        = (passive == 0) ? mem_in_dw : no_mem_in_dw;
 
 
 	if (IoAdapter->host_vidi.vidi_active) {
-		IoAdapter->out      = vidi_host_pr_out;
-		IoAdapter->dpc      = vidi_host_pr_dpc;
-		IoAdapter->tst_irq  = vidi_host_test_int;
-		IoAdapter->clr_irq  = vidi_host_clear_int;
+		IoAdapter->out      = (passive == 0) ? vidi_host_pr_out : no_pr_out;
+		IoAdapter->dpc      = (passive == 0) ? vidi_host_pr_dpc : no_dpc;
+		IoAdapter->tst_irq  = (passive == 0) ? vidi_host_test_int : no_test_int;
+		IoAdapter->clr_irq  = (passive == 0) ? vidi_host_clear_int : no_clear_int;
 	} else {
-		IoAdapter->out      = pr_out ;
-		IoAdapter->dpc      = pr_dpc ;
-		IoAdapter->tst_irq  = scom_test_int ;
-		IoAdapter->clr_irq  = scom_clear_int ;
+		IoAdapter->out      = (passive == 0) ? pr_out : no_pr_out;
+		IoAdapter->dpc      = (passive == 0) ? pr_dpc : no_dpc;
+		IoAdapter->tst_irq  = (passive == 0) ? scom_test_int : no_test_int;
+		IoAdapter->clr_irq  = (passive == 0) ? scom_clear_int : no_clear_int;
 	}
 
 	IoAdapter->pcm      = (struct pc_maint *)(MIPS_MAINT_OFFS - MP_SHARED_RAM_OFFSET) ;
-	IoAdapter->stop     = stop_pri_v3_hardware ;
+	IoAdapter->stop     = (passive == 0) ? stop_pri_v3_hardware : stop_pri_passive_v3_hardware;
 
-	IoAdapter->load     = load_pri_v3_hardware ;
-	IoAdapter->disIrq   = disable_pri_v3_interrupt ;
+	IoAdapter->load     = (passive == 0) ? load_pri_v3_hardware : no_load;
+	IoAdapter->disIrq   = (passive == 0) ? disable_pri_v3_interrupt : disable_pri_passive_interrupt;
 	IoAdapter->rstFnc   = reset_pri_v3_hardware;
-	IoAdapter->trapFnc  = pri_v3_cpu_trapped ;
+	IoAdapter->trapFnc  = (passive == 0) ? pri_v3_cpu_trapped : no_cpu_trapped;
 
-	IoAdapter->diva_isr_handler = pri_v3_ISR;
-	IoAdapter->save_maint_buffer_proc = pri_v3_save_maint_buffer;
+	IoAdapter->diva_isr_handler = (passive == 0) ? pri_v3_ISR : pri_passive_ISR;
+	IoAdapter->save_maint_buffer_proc = (passive == 0) ? pri_v3_save_maint_buffer : 0;
 
 #ifdef DIVA_ADAPTER_TEST_SUPPORTED
-  IoAdapter->DivaAdapterTestProc = DivaAdapterTest;
+  IoAdapter->DivaAdapterTestProc = (passive == 0) ? DivaAdapterTest : 0;
 #endif
 	IoAdapter->DetectDsps = diva_pri_v3_detect_dsps;
 
@@ -621,6 +724,10 @@ static dword diva_pri_v3_detect_dsps (PISDN_ADAPTER IoAdapter) {
   if (!base || !IoAdapter->reset) {
     return (0);
   }
+
+	if (IDI_PROP(IoAdapter->cardType,Card) == CARD_PASSIVEP) {
+		return (0);
+	}
 
 	if (*reset & 0x0000ff80) {
 		*reset &= ~0x0000ff80; /* insert DSP reset */
@@ -811,6 +918,19 @@ static int load_pri_v3_hardware (PISDN_ADAPTER IoAdapter) {
 #else /* } { */
 
 static int load_pri_v3_hardware (PISDN_ADAPTER IoAdapter) {
+	return (0);
+}
+
+int diva_pri_passive_connect_interrupt (PISDN_ADAPTER IoAdapter, int (*isr_proc)(void*), void* isr_proc_context) {
+	volatile byte* intCsr = &IoAdapter->reset[PLX9054_INTCSR];
+
+	if (isr_proc != 0) {
+		IoAdapter->chained_isr_proc = isr_proc;
+		IoAdapter->chained_isr_proc_context = isr_proc_context;
+	} else {
+		*intCsr = 0;
+	}
+
 	return (0);
 }
 

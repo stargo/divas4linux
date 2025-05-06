@@ -55,11 +55,11 @@ config ISDN_DIVAS_MAINT
 	help
 	  Enable Divas Maintainance driver.
 
-config ISDN_DIVAS_HSI
-	tristate "DIVA HSI interface support"
-	depends on ISDN_DIVAS && m
-	help
-	  Enable Divas HSI interface driver.
+#config ISDN_DIVAS_HSI
+#	tristate "DIVA HSI interface support"
+#	depends on ISDN_DIVAS && m
+#	help
+#	  Enable Divas HSI interface driver.
 
 endmenu
 

@@ -1,11 +1,16 @@
+
 /*
  *
-  Copyright (c) Dialogic, 2007.
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
  *
   This source file is supplied for the use with
-  Dialogic range of DIVA Server Adapters.
+  Sangoma (formerly Dialogic) range of Adapters.
  *
-  Dialogic File Revision :    2.1
+  File Revision :    2.1
  *
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -22,6 +27,7 @@
   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  */
+
 #include "platform.h"
 #include "pc.h"
 #include "pr_pc.h"
@@ -30,6 +36,7 @@
 #include "io.h"
 #include "mi_pc.h"
 #include "pc_maint.h"
+#include "diva_dma_fragment.h"
 
 #define  DIVA_SYS_MSG_ID             0xff
 
@@ -47,6 +54,7 @@
 #define  DIVA_SYS_MSG_SYSTEM_WARNING     11
 
 static void cancel_rnr_on_remove(ADAPTER* a, ENTITY* e);
+static int diva_vidi_oob_get (PISDN_ADAPTER IoAdapter, byte* Id, byte* Ch);
 
 /*
   It initialize the structures in IoAdapter (there is one for buffers and one for Ids)
@@ -325,7 +333,9 @@ void vidi_host_pr_out (ADAPTER * a) {
        Allocation of the DMA descriptors does not need the syncronization:
        The allocation of the DMA descriptors by allocations is disabled for this adapter.
        */
-      int entry_nr = diva_alloc_dma_map_entry ((struct _diva_dma_map_entry*)IoAdapter->dma_map);
+      int entry_nr = diva_dma_fragment_map_alloc (IoAdapter->fragment_map,
+                                                  (struct _diva_dma_map_entry*)IoAdapter->dma_map,
+                                                  data_length, &IoAdapter->data_spin_lock);
       unsigned long dma_magic, dma_magic_hi;
       void* local_addr;
       if (entry_nr < 0) {
@@ -339,10 +349,12 @@ void vidi_host_pr_out (ADAPTER * a) {
         return;
       }
 
-      diva_get_dma_map_entry ((struct _diva_dma_map_entry*)IoAdapter->dma_map,
-                              entry_nr, &local_addr, &dma_magic);
-      diva_get_dma_map_entry_hi ((struct _diva_dma_map_entry*)IoAdapter->dma_map,
-                                 entry_nr, &dma_magic_hi);
+      diva_dma_fragment_map_get_dma_map_entry (IoAdapter->fragment_map,
+                                               (struct _diva_dma_map_entry*)IoAdapter->dma_map,
+                                               (word)entry_nr, &local_addr, &dma_magic);
+      diva_dma_fragment_map_get_dma_map_entry_hi (IoAdapter->fragment_map,
+                                                  (struct _diva_dma_map_entry*)IoAdapter->dma_map,
+                                                  (word)entry_nr, &dma_magic_hi);
       *req_ptr++ = e_req->Id;
       *req_ptr++ = e_req->Req;
       if ((e_req->Id & 0x1f) == 0) {
@@ -552,7 +564,7 @@ static void cancel_rnr_on_remove(ADAPTER* a, ENTITY* e) {
   }
 }
 
-static void diva_process_rnr_ind (ADAPTER* a) {
+static void diva_process_rnr_ind (ADAPTER* a, byte requestedId, byte requestedCh) {
   PISDN_ADAPTER IoAdapter = (PISDN_ADAPTER)a->io;
   diva_entity_queue_t q   = IoAdapter->host_vidi.used_rnr_q;
   diva_rnr_q_entry_hdr_t* hdr;
@@ -563,6 +575,11 @@ static void diva_process_rnr_ind (ADAPTER* a) {
     ENTITY* e_ind;
     byte e_no;
     diva_q_remove (&q, &hdr->link);
+
+    if (requestedId != 0 && (hdr->Id != requestedId || hdr->IndCh != requestedCh)) {
+      diva_q_add_tail (&IoAdapter->host_vidi.used_rnr_q, &hdr->link);
+      continue;
+    }
 
     if ((e_no = a->IdTable[hdr->Id]) == 0 || (e_ind = entity_ptr(a,e_no)) == 0) {
       DBG_ERR(("A(%d) failed to map rnrn ind Id:%02x Ind:%02x IndCh:%02x",
@@ -628,6 +645,15 @@ static void diva_process_rnr_ind (ADAPTER* a) {
   }
 }
 
+static void diva_vidi_process_oob (ADAPTER *a) {
+  PISDN_ADAPTER IoAdapter = (PISDN_ADAPTER)a->io;
+  byte Id, Ch;
+
+  while (diva_vidi_oob_get (IoAdapter, &Id, &Ch) == 0) {
+		diva_process_rnr_ind (a, Id, Ch);
+  }
+}
+
 /*
   Process one indication vidi
   */
@@ -660,7 +686,7 @@ static void vidi_dispatch_ind (ADAPTER* a) {
       } break;
 
       case DIVA_SYS_MSG_RNR_IND: /* Reply saved RNR indications */
-        diva_process_rnr_ind (a);
+        diva_process_rnr_ind (a, 0, 0);
         stop_rnr_timer (IoAdapter, 1);
         break;
 
@@ -702,8 +728,9 @@ static void vidi_dispatch_ind (ADAPTER* a) {
 
       case DIVA_SYS_MSG_CPU_STOP:
         if (msg_length >= 4 && msg[1] == 'T') {
-          DBG_ERR(("A(%d) stop due to thermal problem, T=%dC, %dC above max",
-                   IoAdapter->ANum, msg[2], msg[3]))
+          const char* msgFmt = "Stop Board %d due to thermal problem, T=%dC, %dC above max";
+          DBG_ERR(((char*)msgFmt, IoAdapter->ANum, msg[2], msg[3]))
+          diva_os_write_system_log_message (-1, "Thermal problem");
         } else {
           DBG_ERR(("A(%d) CPU stop message received", IoAdapter->ANum))
         }
@@ -720,14 +747,15 @@ static void vidi_dispatch_ind (ADAPTER* a) {
               warning_type = "Error, stop";
               break;
             case 'W':
-              warning_type = "Warning";
+              warning_type = "Warning for";
               break;
           }
           switch (msg[1]) {
-            case 'T':
-              DBG_ERR(("A(%d) %s due to thermal problem, T=%dC, %dC above max",
-                       IoAdapter->ANum, warning_type, msg[2], msg[3]))
-              break;
+            case 'T': {
+              const char* msgFmt = "%s Board %d due to thermal problem, T=%dC, %dC above max";
+              DBG_ERR(((char*)msgFmt, warning_type, IoAdapter->ANum, msg[2], msg[3]))
+              diva_os_write_system_log_message (msg[0] != 'W' ? -1 : 0, "Thermal problem");
+            } break;
             default:
               DBG_ERR(("A(%d) %s event, info=%02x %02x",
                        IoAdapter->ANum, warning_type, msg[2], msg[3]))
@@ -792,7 +820,9 @@ static void vidi_dispatch_ind (ADAPTER* a) {
         }
 
         if (extended_info_type != DIVA_RC_TYPE_OK_FC && e_rc->XOffset != 0xffff) {
-          diva_free_dma_map_entry ((struct _diva_dma_map_entry*)IoAdapter->dma_map, e_rc->XOffset);
+          diva_dma_fragment_map_free  (IoAdapter->fragment_map,
+                                       (struct _diva_dma_map_entry*)IoAdapter->dma_map,
+                                       e_rc->XOffset, &IoAdapter->data_spin_lock);
           e_rc->XOffset = 0xffff;
         }
 
@@ -818,7 +848,9 @@ static void vidi_dispatch_ind (ADAPTER* a) {
           e_rc->complete=0xff;
 
           if (e_rc->XOffset != 0xffff) {
-            diva_free_dma_map_entry ((struct _diva_dma_map_entry*)IoAdapter->dma_map, e_rc->XOffset);
+            diva_dma_fragment_map_free  (IoAdapter->fragment_map,
+                                         (struct _diva_dma_map_entry*)IoAdapter->dma_map,
+                                         e_rc->XOffset, &IoAdapter->data_spin_lock);
             e_rc->XOffset = 0xffff;
           }
 
@@ -941,6 +973,9 @@ byte vidi_host_pr_dpc(ADAPTER *a) {
   if (IoAdapter->host_vidi.cpu_stop_message_received != 0)
     return (1);
 
+  if (IoAdapter->oob_q.count != 0)
+    diva_vidi_process_oob (a);
+
   do { /* Check for new indications and process them */
     original_ind_count = IoAdapter->host_vidi.local_indication_counter;
 
@@ -1057,16 +1092,29 @@ int diva_init_vidi (PISDN_ADAPTER IoAdapter) {
 		/*
 			Allocate and send RX buffers to adapter
 			*/
-		{
-			int nr_dma_map_entries = get_nr_dma_map_entries (IoAdapter);
+    {
+      int nr_dma_map_entries = get_nr_dma_map_entries (IoAdapter);
       int i, nr_free_dma_entries = diva_nr_free_dma_entries((struct _diva_dma_map_entry*)IoAdapter->dma_map);
       int nr_rx_dma_entries;
       int nr_tx_dma_entries;
+      int bri_hardware = IoAdapter->Properties.Channels == 2 && !(IoAdapter->Properties.Card == CARD_POTS || IoAdapter->Properties.Card == CARD_POTSV);
 
-			if (nr_dma_map_entries == nr_free_dma_entries+2-(IoAdapter->dma_map2 != 0))
-				nr_free_dma_entries -= 32; /* Li */
+      if (nr_dma_map_entries == nr_free_dma_entries+2-(IoAdapter->dma_map2 != 0))
+        nr_free_dma_entries -= IoAdapter->Properties.nrExportXconnectDescriptors[0][IoAdapter->xconnectExportMode];
 
-      nr_rx_dma_entries = nr_free_dma_entries/3;
+      if (IoAdapter->fragment_map == 0) {
+      	nr_rx_dma_entries = nr_free_dma_entries/3;
+      } else {
+        if (bri_hardware == 0) {
+          if (nr_free_dma_entries > 32*2) {
+            nr_rx_dma_entries = MIN(60, (nr_free_dma_entries-32));
+          } else {
+            nr_rx_dma_entries = nr_free_dma_entries/2;
+          }
+        } else {
+          nr_rx_dma_entries = 7;
+        }
+      }
       nr_tx_dma_entries = nr_free_dma_entries - nr_rx_dma_entries;
 
       DBG_LOG(("A(%d) %d:%d free %d rx %d tx dma entries",
@@ -1123,6 +1171,32 @@ void diva_cleanup_vidi (PISDN_ADAPTER IoAdapter) {
   }
 
   memset (&IoAdapter->host_vidi, 0x00, sizeof(IoAdapter->host_vidi));
+}
+
+static int diva_vidi_oob_get (PISDN_ADAPTER IoAdapter, byte* Id, byte* Ch) {
+	diva_os_spin_lock_magic_t irql;
+	diva_oob_entity_queue_t* pQ;
+	int ret = -1;
+
+	diva_os_enter_spin_lock (&IoAdapter->data_spin_lock, &irql, "xon");
+
+	pQ = &IoAdapter->oob_q;
+
+	if (pQ->count != 0) {
+		*Id = pQ->Id[pQ->read];
+		*Ch = pQ->Ch[pQ->read];
+		pQ->read++;
+		if (pQ->read >= sizeof(pQ->Id)/sizeof(pQ->Id[0])) {
+			pQ->read = 0;
+		}
+		pQ->count--;
+
+		ret = 0;
+	}
+
+	diva_os_leave_spin_lock (&IoAdapter->data_spin_lock, &irql, "xon");
+
+	return (ret);
 }
 
 int vidi_pcm_req (PISDN_ADAPTER IoAdapter, ENTITY *e) {

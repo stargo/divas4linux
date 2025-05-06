@@ -1,14 +1,31 @@
-/* $Id: divasi.c,v 1.25 2003/09/09 06:46:29 schindler Exp $
+
+/*
  *
- * Driver for Dialogic DIVA Server ISDN cards.
- * User Mode IDI Interface 
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
  *
- * Copyright 2000-2009 by Armin Schindler (mac@melware.de)
- * Copyright 2000-2009 Cytronics & Melware (info@melware.de)
- * Copyright 2000-2007 Dialogic
+  This source file is supplied for the use with
+  Sangoma (formerly Dialogic) range of Adapters.
  *
- * This software may be used and distributed according to the terms
- * of the GNU General Public License, incorporated herein by reference.
+  File Revision :    2.1
+ *
+  This program is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; either version 2, or (at your option)
+  any later version.
+ *
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY OF ANY KIND WHATSOEVER INCLUDING ANY
+  implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+  See the GNU General Public License for more details.
+ *
+  You should have received a copy of the GNU General Public License
+  along with this program; if not, write to the Free Software
+  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *
  */
 
 #include <linux/version.h>
@@ -25,7 +42,9 @@
 #if defined(CONFIG_DEVFS_FS)
 #include <linux/devfs_fs_kernel.h>
 #endif
+#if LINUX_VERSION_CODE > KERNEL_VERSION(3,9,0)
 #include <linux/seq_file.h>
+#endif
 
 #include "platform.h"
 #include "di_defs.h"
@@ -37,9 +56,18 @@ static char *main_revision = "$Revision: 1.25 $";
 
 static int major;
 
-MODULE_DESCRIPTION("User IDI Interface for Dialogic DIVA cards");
-MODULE_AUTHOR("Cytronics & Melware, Dialogic");
+#ifdef MODULE_DESCRIPTION
+MODULE_DESCRIPTION("User IDI Interface for DIVA cards");
+#endif
+#ifdef MODULE_AUTHOR
+MODULE_AUTHOR("Cytronics & Melware, Sangoma");
+#endif
+#ifdef MODULE_SUPPORTED_DEVICE
+MODULE_SUPPORTED_DEVICE("DIVA card driver");
+#endif
+#ifdef MODULE_LICENSE
 MODULE_LICENSE("GPL");
+#endif
 
 typedef struct _diva_um_idi_os_context {
 	wait_queue_head_t read_wait;
@@ -49,10 +77,10 @@ typedef struct _diva_um_idi_os_context {
 	int adapter_nr;
 } diva_um_idi_os_context_t;
 
-static char *DRIVERNAME = "Dialogic DIVA - User IDI (http://www.melware.net)";
+static char *DRIVERNAME = "Sangoma DIVA - User IDI (http://www.melware.net)";
 static char *DRIVERLNAME = "diva_idi";
 static char *DEVNAME = "DivasIDI";
-char *DRIVERRELEASE_IDI = "3.1.6-109.75-1";
+char *DRIVERRELEASE_IDI = "9.6.8-124.26-1";
 
 extern int idifunc_init(void);
 extern void idifunc_finit(void);
@@ -85,50 +113,106 @@ static unsigned int um_idi_poll(struct file *file, poll_table * wait);
 static int um_idi_open(struct inode *inode, struct file *file);
 static int um_idi_release(struct inode *inode, struct file *file);
 static int remove_entity(void *entity);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,14,0)
+static void diva_um_timer_function(unsigned long data);
+#else
 static void diva_um_timer_function(struct timer_list *t);
+#endif
 
 /*
  * proc entry
  */
 extern struct proc_dir_entry *proc_net_eicon;
 static struct proc_dir_entry *um_idi_proc_entry = NULL;
-
-static int
-um_idi_proc_show(struct seq_file *m, void *v)
+int proc_cnt=0;
+#if LINUX_VERSION_CODE > KERNEL_VERSION(3,9,0)
+int eof[1];
+#define PROC_RETURN(x,y) { \
+   if (!x) { \
+       x=1; \
+       return(y); \
+   } else { \
+       x=0; \
+       return(0); \
+   } \
+}
+#define PRINT_BUF(m,b,l) { \
+           seq_printf(m, "%s", b); \
+           l = 0; \
+}
+static int um_idi_proc_read(struct seq_file *m, void *v)
+#else
+#define PROC_RETURN(x,y) return(y)
+#define PRINT_BUF(m,b,l) /* no op for older kernel */
+static int um_idi_proc_read(char *page, char **start, off_t off, int count, int *eof, void *data)
+#endif
 {
+	int len = 0;
 	char tmprev[32];
-
-	seq_printf(m, "%s\n", DRIVERNAME);
-	seq_printf(m, "name     : %s\n", DRIVERLNAME);
-	seq_printf(m, "release  : %s\n", DRIVERRELEASE_IDI);
+#if LINUX_VERSION_CODE > KERNEL_VERSION(3,9,0)
+	char page[100];
+#else
+	void *m;
+#endif
+	len += sprintf(page + len, "%s\n", DRIVERNAME); PRINT_BUF(m,page,len);
+	len += sprintf(page + len, "name     : %s\n", DRIVERLNAME); PRINT_BUF(m,page,len);
+	len += sprintf(page + len, "release  : %s\n", DRIVERRELEASE_IDI); PRINT_BUF(m,page,len);
 	strcpy(tmprev, main_revision);
-	seq_printf(m, "revision : %s\n", getrev(tmprev));
-	seq_printf(m, "build    : %s\n", DIVA_BUILD);
-	seq_printf(m, "major    : %d\n", major);
+	len += sprintf(page + len, "revision : %s\n", getrev(tmprev)); PRINT_BUF(m,page,len);
+	len += sprintf(page + len, "build    : %s\n", DIVA_BUILD); PRINT_BUF(m,page,len);
+	len += sprintf(page + len, "major    : %d\n", major); PRINT_BUF(m,page,len);
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,9,0)
+	if (off + count >= len)
+		*eof = 1;
+	if (len < off)
+		return 0;
+	*start = page + off;
+	PROC_RETURN(proc_cnt,((count < len-off) ? count : len-off));
+#else
 	return 0;
+#endif
 }
 
-static int um_idi_proc_open(struct inode *inode, struct file *file)
+#if LINUX_VERSION_CODE > KERNEL_VERSION(3,9,0)
+static int proc_open(struct inode *inode, struct file *file)
 {
-	return single_open(file, um_idi_proc_show, NULL);
+	return single_open(file, um_idi_proc_read, NULL);
 }
-
-static const struct proc_ops um_idi_proc_fops = {
-	.proc_open      = um_idi_proc_open,
-	.proc_read      = seq_read,
-	.proc_lseek     = seq_lseek,
-	.proc_release   = single_release,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,6,0)
+static const struct proc_ops proc_file_fops = {
+ .proc_open   = proc_open,
+ .proc_read   = seq_read,
+ .proc_lseek = seq_lseek,
+ .proc_release= single_release
 };
+#else
+static const struct file_operations proc_file_fops = {
+ .owner = THIS_MODULE,
+ .open   = proc_open,
+ .read   = seq_read,
+ .llseek = seq_lseek,
+ .release= single_release
+};
+#endif
+#endif
 
 static int DIVA_INIT_FUNCTION create_um_idi_proc(void)
 {
-	um_idi_proc_entry = proc_create(DRIVERLNAME, S_IRUGO, proc_net_eicon,
-					&um_idi_proc_fops);
-
+#if LINUX_VERSION_CODE > KERNEL_VERSION(3,9,0)
+	um_idi_proc_entry = proc_create(DRIVERLNAME, S_IFREG | S_IRUGO | S_IWUSR, proc_net_eicon, &proc_file_fops);
+	if (!um_idi_proc_entry)
+		return (0);
+#else
+	um_idi_proc_entry = create_proc_entry(DRIVERLNAME, S_IFREG | S_IRUGO | S_IWUSR, proc_net_eicon);
 	if (!um_idi_proc_entry)
 		return (0);
 
+	um_idi_proc_entry->read_proc = um_idi_proc_read;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,30)
+	um_idi_proc_entry->owner = THIS_MODULE;
+#endif
+#endif
 	return (1);
 }
 
@@ -184,9 +268,8 @@ static int DIVA_INIT_FUNCTION divasi_init(void)
 	int ret = 0;
 
 	printk(KERN_INFO "%s\n", DRIVERNAME);
-	printk(KERN_INFO "%s: Rel:%s  Rev:", DRIVERLNAME, DRIVERRELEASE_IDI);
 	strcpy(tmprev, main_revision);
-	printk("%s  Build: %s\n", getrev(tmprev), DIVA_BUILD);
+	printk(KERN_INFO "%s: Rel:%s  Rev: %s  Build: %s\n", DRIVERLNAME, DRIVERRELEASE_IDI, getrev(tmprev), DIVA_BUILD);
 
 	if (!divas_idi_register_chrdev()) {
 		ret = -EIO;
@@ -317,7 +400,13 @@ static int um_idi_open_adapter(struct file *file, int adapter_nr)
 	p_os = (diva_um_idi_os_context_t *) diva_um_id_get_os_context(e);
 	init_waitqueue_head(&p_os->read_wait);
 	init_waitqueue_head(&p_os->close_wait);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,14,0)
+	init_timer(&p_os->diva_timer_id);
+	p_os->diva_timer_id.function = (void *) diva_um_timer_function;
+	p_os->diva_timer_id.data = (unsigned long) p_os;
+#else
 	timer_setup(&p_os->diva_timer_id, diva_um_timer_function, 0);
+#endif
 	p_os->aborted = 0;
 	p_os->adapter_nr = adapter_nr;
 	return (1);
@@ -332,12 +421,18 @@ static int um_idi_create_proxy(struct file *file) {
 
 	p_os = (diva_um_idi_os_context_t *) diva_um_id_get_os_context(e);
 
-  p_os = (diva_um_idi_os_context_t *) diva_um_id_get_os_context(e);
-  init_waitqueue_head(&p_os->read_wait);
-  init_waitqueue_head(&p_os->close_wait);
-  timer_setup(&p_os->diva_timer_id, diva_um_timer_function, 0);
-  p_os->aborted = 0;
-  p_os->adapter_nr = -1;
+	p_os = (diva_um_idi_os_context_t *) diva_um_id_get_os_context(e);
+	init_waitqueue_head(&p_os->read_wait);
+	init_waitqueue_head(&p_os->close_wait);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,14,0)
+	init_timer(&p_os->diva_timer_id);
+	p_os->diva_timer_id.function = (void *) diva_um_timer_function;
+	p_os->diva_timer_id.data = (unsigned long) p_os;
+#else
+	timer_setup(&p_os->diva_timer_id, diva_um_timer_function, 0);
+#endif
+	p_os->aborted = 0;
+	p_os->adapter_nr = -1;
 
 	return (0);
 }
@@ -508,10 +603,16 @@ void diva_os_wakeup_close(void *os_context)
 	wake_up_interruptible(&p_os->close_wait);
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,14,0)
 static
+void diva_um_timer_function(unsigned long data)
+{
+	diva_um_idi_os_context_t *p_os = (diva_um_idi_os_context_t *) data;
+#else
 void diva_um_timer_function(struct timer_list *t)
 {
-	diva_um_idi_os_context_t *p_os = from_timer(p_os, t, diva_timer_id);
+	diva_um_idi_os_context_t *p_os = from_timer(p_os , t, diva_timer_id);
+#endif
 
 	p_os->aborted = 1;
 	divas_um_notify_timeout (p_os);

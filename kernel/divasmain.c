@@ -1,13 +1,31 @@
-/* $Id: divasmain.c,v 1.46 2003/10/10 12:28:14 armin Exp $
+
+/*
  *
- * Low level driver for Dialogic DIVA Server ISDN cards.
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
  *
- * Copyright 2000-2009 by Armin Schindler (mac@melware.de)
- * Copyright 2000-2009 Cytronics & Melware (info@melware.de)
- * Copyright 2007 Dialogic (www.eicon.com)
+  This source file is supplied for the use with
+  Sangoma (formerly Dialogic) range of Adapters.
  *
- * This software may be used and distributed according to the terms
- * of the GNU General Public License, incorporated herein by reference.
+  File Revision :    2.1
+ *
+  This program is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; either version 2, or (at your option)
+  any later version.
+ *
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY OF ANY KIND WHATSOEVER INCLUDING ANY
+  implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+  See the GNU General Public License for more details.
+ *
+  You should have received a copy of the GNU General Public License
+  along with this program; if not, write to the Free Software
+  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *
  */
 
 #include <linux/version.h>
@@ -33,10 +51,6 @@
 
 #include "platform.h"
 
-#ifndef DMA_64BIT_MASK 
-#define DMA_64BIT_MASK DMA_BIT_MASK(64)
-#endif
-
 #if (defined(CONFIG_PCIEAER) && defined(DIVA_XDI_AER_SUPPORT))
 #include <linux/aer.h>
 #endif
@@ -52,7 +66,16 @@
 #include "xdi_vers.h"
 #include "diva_dma.h"
 #include "diva_pci.h"
-
+#include "diva_autoconf.h"
+#include "fpga_rom_xdi.h"
+#ifndef VM_RESERVED
+#define VM_RESERVED (VM_DONTEXPAND | VM_DONTDUMP)
+#endif
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(3,7,10)
+#define DEVINIT __devinit
+#else
+#define DEVINIT
+#endif
 static char *main_revision = "$Revision: 1.46 $";
 
 static int major;
@@ -70,19 +93,60 @@ static unsigned int disabledac;
 module_param(disabledac, uint, 0);
 MODULE_PARM_DESC(disabledac, "disable DAC");
 
+static unsigned int xdi_features;
+module_param(xdi_features, uint, 0);
+MODULE_PARM_DESC(xdi_features, "XDI features bitmask. Bits: 0 - disable PLX reset, 1 - disable hardware selftest");
+
 #ifdef CONFIG_PCI_MSI
 static unsigned int no_msi;
 module_param(no_msi, uint, 0);
 MODULE_PARM_DESC(no_msi, "do not use MSI");
 #endif
 
+#if LINUX_VERSION_CODE > KERNEL_VERSION(2,6,31)
+#define DIVA_NO_MSI_DEACTIVATION_ON_EXIT 1
+#endif
+
+#if LINUX_VERSION_CODE > KERNEL_VERSION(2,6,36)
+#define DIVA_OS_DMA_64BIT_MASK DMA_BIT_MASK(64)
+#else
+#define DIVA_OS_DMA_64BIT_MASK DMA_64BIT_MASK
+#endif
+
+static unsigned int nr_li_exports;
+module_param(nr_li_exports, uint, 0);
+MODULE_PARM_DESC(nr_li_exports, "LI export descriptors: 0 - extended (default), 1 - disabled (single board only), 2 - standard");
+
+static int use_timer_irq;
+module_param(use_timer_irq, uint, 0);
+MODULE_PARM_DESC(use_timer_irq, "use timer for interrupts");
+
+static unsigned int hotplug_map[MAX_ADAPTER*2];
+static int hotplug_map_entries;
+#if LINUX_VERSION_CODE > KERNEL_VERSION(2,6,9)
+module_param_array(hotplug_map, int, &hotplug_map_entries, 0644);
+#else
+module_param_array(hotplug_map, int, hotplug_map_entries, 0644);
+#endif
+MODULE_PARM_DESC(hotplug_map, "list type,sn,type,sn,...");
+
+static int hotplug_ignore_sn;
+module_param(hotplug_ignore_sn, uint, 0644);
+MODULE_PARM_DESC(hotplug_ignore_sn, "ignore sn in hotplug_map");
+
+static int hotplug_autostart;
+module_param(hotplug_autostart, uint, 0644);
+MODULE_PARM_DESC(hotplug_autostart, "start hardware after insertion");
+
 static char *DRIVERNAME =
     "Dialogic DIVA Server driver (http://www.melware.net)";
 static char *DRIVERLNAME = "divas";
 static char *DEVNAME = "Divas";
-char *DRIVERRELEASE_DIVAS = "3.1.6-109.75-1";
+char *DRIVERRELEASE_DIVAS = "9.6.8-124.26-1";
 
 extern irqreturn_t diva_os_irq_wrapper (void *context);
+extern int diva_xdi_disable_plx_reset;
+extern int diva_xdi_disable_hardware_selftest;
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,19)
 static irqreturn_t __diva_os_irq_wrapper (int irq, void *context, struct pt_regs *regs) {
@@ -119,8 +183,16 @@ typedef struct _diva_os_usermode_proc {
 	struct semaphore user_mode_helper_lock;
 	dword request[4];
 	dword request_locked[4];
+	diva_entity_queue_t event_q;
 } diva_os_usermode_proc_t;
 static diva_os_usermode_proc_t diva_os_usermode_proc;
+
+typedef struct _diva_user_mode_event_context {
+	diva_entity_link_t link;
+	diva_user_mode_helper_event_t event;
+	dword cardType;
+	dword serialNumber;
+} diva_user_mode_event_context_t;
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
 typedef void* diva_work_queue_fn_parameter_t;
@@ -139,6 +211,10 @@ typedef struct work_struct* diva_work_queue_fn_parameter_t;
   class_mask	of the class are honored during the comparison.
   driver_data	Data private to the driver.
   */
+
+#ifndef PCI_VENDOR_ID_DIALOGIC
+#define PCI_VENDOR_ID_DIALOGIC 0x12c7
+#endif
 
 #if !defined(PCI_DEVICE_ID_EICON_MAESTRAP_2)
 #define PCI_DEVICE_ID_EICON_MAESTRAP_2       0xE015
@@ -231,6 +307,27 @@ typedef struct work_struct* diva_work_queue_fn_parameter_t;
 #if !defined(PCI_DEVICE_ID_EICON_4PRI_FS_PCIE)
 #define PCI_DEVICE_ID_EICON_4PRI_FS_PCIE    0xE03C
 #endif
+
+#if !defined(PCI_DEVICE_ID_DIVA_L_P_V10_PCIE)
+#define PCI_DEVICE_ID_DIVA_L_P_V10_PCIE     0xE03E
+#endif
+
+#ifndef PCI_DEVICE_ID_DIVA_L_1P_V10_PCIE
+#define PCI_DEVICE_ID_DIVA_L_1P_V10_PCIE    0xE046
+#endif
+
+#ifndef PCI_DEVICE_ID_DIVA_L_2P_V10_PCIE
+#define PCI_DEVICE_ID_DIVA_L_2P_V10_PCIE    0xE040
+#endif
+
+#ifndef PCI_DEVICE_ID_DIVA_L_4P_V10_PCIE
+#define PCI_DEVICE_ID_DIVA_L_4P_V10_PCIE    0xE042
+#endif
+
+#ifndef PCI_DEVICE_ID_DIVA_L_8P_V10_PCIE
+#define PCI_DEVICE_ID_DIVA_L_8P_V10_PCIE    0xE044
+#endif
+
 
 /*
   This table should be sorted by PCI device ID
@@ -325,6 +422,24 @@ static struct pci_device_id divas_pci_tbl[] = {
 	 PCI_VENDOR_ID_EICON, 0x3002, 0, 0, CARDTYPE_DIVASRV_V1P_V10H_PCIE},
 /* Dialogic Diva V-4PRI-120 PCIe v1 half size, PCI 0xE030 */
 	{PCI_VENDOR_ID_EICON, PCI_DEVICE_ID_2PRI_PCIE,
+	 PCI_VENDOR_ID_EICON, 0x3003, 0, 0, CARDTYPE_DIVASRV_V4P_V10H_PCIE},
+/* Diva V-2PRI-60 PCIe, PCI 0xE030 */
+	{PCI_VENDOR_ID_EICON, PCI_DEVICE_ID_2PRI_PCIE,
+	 PCI_VENDOR_ID_EICON, 0x3004, 0, 0, CARDTYPE_DIVASRV_V2P_V10H_PCIE},
+/* Diva V-1PRI-30 PCIe */
+	{PCI_VENDOR_ID_EICON, PCI_DEVICE_ID_2PRI_PCIE,
+	 PCI_VENDOR_ID_EICON, 0x3005, 0, 0, CARDTYPE_DIVASRV_V1P_V10H_PCIE},
+/* Diva M-4PRI PCIe HS Hypercom adapter */
+	{PCI_VENDOR_ID_EICON, PCI_DEVICE_ID_2PRI_PCIE,
+	 PCI_VENDOR_ID_EICON, 0x3006, 0, 0, CARDTYPE_DIVASRV_V4P_V10H_PCIE_HYPERCOM},
+/* Diva M-2PRI PCIe HS Hypercom adapter */
+	{PCI_VENDOR_ID_EICON, PCI_DEVICE_ID_2PRI_PCIE,
+	 PCI_VENDOR_ID_EICON, 0x3007, 0, 0, CARDTYPE_DIVASRV_V2P_V10H_PCIE_HYPERCOM},
+/* Diva M-1PRI PCIe HS Hypercom adapter */
+	{PCI_VENDOR_ID_EICON, PCI_DEVICE_ID_2PRI_PCIE,
+	 PCI_VENDOR_ID_EICON, 0x3008, 0, 0, CARDTYPE_DIVASRV_V1P_V10H_PCIE_HYPERCOM},
+/* Dialogic Diva V-4PRI-120 PCIe v1 half size, PCI 0xE030 */
+	{PCI_VENDOR_ID_EICON, PCI_DEVICE_ID_2PRI_PCIE,
 	 PCI_VENDOR_ID_EICON, 0xE030, 0, 0, CARDTYPE_DIVASRV_V4P_V10H_PCIE},
 
 /* Diva BRI-2 PCIe v1, PCI 0xE032 */
@@ -344,28 +459,69 @@ static struct pci_device_id divas_pci_tbl[] = {
 /* Diva Server V-Analog 2 Port PCIe adapter, PCI 0xE036 */
 	{PCI_VENDOR_ID_EICON, PCI_DEVICE_ID_EICON_ANALOG_2P_PCIE,
 	 PCI_VENDOR_ID_EICON, 0x3601, 0, 0, CARDTYPE_DIVASRV_V_ANALOG_2P_PCIE},
+/* Diva UM-Analog-2 PCIe Hypercom adapter, PCI 0xE036 */
+	{PCI_VENDOR_ID_EICON, PCI_DEVICE_ID_EICON_ANALOG_2P_PCIE,
+	 PCI_VENDOR_ID_EICON, 0x3602, 0, 0, CARDTYPE_DIVASRV_V_ANALOG_2P_PCIE_HYPERCOM},
 /* Diva Server Analog 2 Port PCIe adapter, PCI 0xE036 */
 	{PCI_VENDOR_ID_EICON, PCI_DEVICE_ID_EICON_ANALOG_2P_PCIE,
 	 PCI_VENDOR_ID_EICON, 0xE036, 0, 0, CARDTYPE_DIVASRV_ANALOG_2P_PCIE},
+
 /* Diva Server V-Analog 4 Port PCIe adapter, PCI 0xE038 */
 	{PCI_VENDOR_ID_EICON, PCI_DEVICE_ID_EICON_ANALOG_4P_PCIE,
 	 PCI_VENDOR_ID_EICON, 0x3801, 0, 0, CARDTYPE_DIVASRV_V_ANALOG_4P_PCIE},
+/* Diva UM-Analog-4 PCIe Hypercom adapter, PCI 0xE038 */
+	{PCI_VENDOR_ID_EICON, PCI_DEVICE_ID_EICON_ANALOG_4P_PCIE,
+	 PCI_VENDOR_ID_EICON, 0x3802, 0, 0, CARDTYPE_DIVASRV_V_ANALOG_4P_PCIE_HYPERCOM},
 /* Diva Server Analog 4 Port PCIe adapter, PCI 0xE038 */
 	{PCI_VENDOR_ID_EICON, PCI_DEVICE_ID_EICON_ANALOG_4P_PCIE,
 	 PCI_VENDOR_ID_EICON, 0xE038, 0, 0, CARDTYPE_DIVASRV_ANALOG_4P_PCIE},
+
 /* Diva Server V-Analog 8 Port PCIe adapter, PCI 0xE03A */
 	{PCI_VENDOR_ID_EICON, PCI_DEVICE_ID_EICON_ANALOG_8P_PCIE,
 	 PCI_VENDOR_ID_EICON, 0x3A01, 0, 0, CARDTYPE_DIVASRV_V_ANALOG_8P_PCIE},
+/* Diva UM-Analog-8 PCIe Hypercom adapter, PCI 0xE03A */
+	{PCI_VENDOR_ID_EICON, PCI_DEVICE_ID_EICON_ANALOG_8P_PCIE,
+	 PCI_VENDOR_ID_EICON, 0x3A02, 0, 0, CARDTYPE_DIVASRV_V_ANALOG_8P_PCIE_HYPERCOM},
 /* Diva Server Analog 8 Port PCIe adapter, PCI 0xE03A */
 	{PCI_VENDOR_ID_EICON, PCI_DEVICE_ID_EICON_ANALOG_8P_PCIE,
 	 PCI_VENDOR_ID_EICON, 0xE03A, 0, 0, CARDTYPE_DIVASRV_ANALOG_8P_PCIE},
-/* Diva V-8PRI PCIe FS v1, PCI 0xE03C */
+
+
+/* Diva V-8PRI PCIe FS v1, PCI 0xE03C, 0x3C01 */
 	{PCI_VENDOR_ID_EICON, PCI_DEVICE_ID_EICON_4PRI_FS_PCIE,
 	 PCI_VENDOR_ID_EICON, 0x3C01, 0, 0, CARDTYPE_DIVASRV_V8P_V10Z_PCIE},
-/* Diva V-4PRI PCIe FS v1, PCI 0xE03C */
+/* Diva M-4PRI PCIe FS Hypercom adapter */
+	{PCI_VENDOR_ID_EICON, PCI_DEVICE_ID_EICON_4PRI_FS_PCIE,
+	 PCI_VENDOR_ID_EICON, 0x3C04, 0, 0, CARDTYPE_DIVASRV_V4P_V10Z_PCIE_HYPERCOM},
+/* Diva M-8PRI PCIe FS Hypercom adapter */
+	{PCI_VENDOR_ID_EICON, PCI_DEVICE_ID_EICON_4PRI_FS_PCIE,
+	 PCI_VENDOR_ID_EICON, 0x3C05, 0, 0, CARDTYPE_DIVASRV_V8P_V10Z_PCIE_HYPERCOM},
+/* Diva M-4PRI PCIe FS v1, PCI 0xE03C, 0x3C08 */
+	{PCI_VENDOR_ID_EICON, PCI_DEVICE_ID_EICON_4PRI_FS_PCIE,
+	 PCI_VENDOR_ID_EICON, 0x3C08 , 0, 0, CARDTYPE_DIVASRV_M4P_V10Z_PCIE},
+/* Diva M-8PRI PCIe FS v1, PCI 0xE03C, 0x3C09 */
+	{PCI_VENDOR_ID_EICON, PCI_DEVICE_ID_EICON_4PRI_FS_PCIE,
+	 PCI_VENDOR_ID_EICON, 0x3C09 , 0, 0, CARDTYPE_DIVASRV_M8P_V10Z_PCIE},
+/* Diva V-4PRI PCIe FS v1, PCI 0xE03C, 0xE03C */
 	{PCI_VENDOR_ID_EICON, PCI_DEVICE_ID_EICON_4PRI_FS_PCIE,
 	 PCI_VENDOR_ID_EICON, 0xE03C, 0, 0, CARDTYPE_DIVASRV_V4P_V10Z_PCIE},
 
+/* Dialogic L-PRI/E1/T1 PCIe v1 */
+	{PCI_VENDOR_ID_EICON, PCI_DEVICE_ID_DIVA_L_P_V10_PCIE ,
+	 PCI_VENDOR_ID_EICON, PCI_DEVICE_ID_DIVA_L_P_V10_PCIE, 0, 0, CARDTYPE_DIVA_L_P_V10_PCIE},
+
+/* Dialogic Blue TwoSpan-48/60-H-HL Telephony Board */
+	{PCI_VENDOR_ID_DIALOGIC, PCI_DEVICE_ID_DIVA_L_2P_V10_PCIE ,
+	 PCI_VENDOR_ID_DIALOGIC, PCI_DEVICE_ID_DIVA_L_2P_V10_PCIE, 0, 0, CARDTYPE_DIVA_L_2P_V10_PCIE},
+/* Dialogic Blue FourSpan-96/120-H-HL Telephony Board */
+	{PCI_VENDOR_ID_DIALOGIC, PCI_DEVICE_ID_DIVA_L_4P_V10_PCIE ,
+	 PCI_VENDOR_ID_DIALOGIC, PCI_DEVICE_ID_DIVA_L_4P_V10_PCIE, 0, 0, CARDTYPE_DIVA_L_4P_V10_PCIE},
+/* Dialogic Blue EightSpan-192/240-H-HL Telephony Board */
+	{PCI_VENDOR_ID_DIALOGIC, PCI_DEVICE_ID_DIVA_L_8P_V10_PCIE ,
+	 PCI_VENDOR_ID_DIALOGIC, PCI_DEVICE_ID_DIVA_L_8P_V10_PCIE, 0, 0, CARDTYPE_DIVA_L_8P_V10_PCIE},
+/* Dialogic Blue OneSpan-24/30-H-HL Telephony Board with E/C */
+	{PCI_VENDOR_ID_DIALOGIC, PCI_DEVICE_ID_DIVA_L_1P_V10_PCIE ,
+	 PCI_VENDOR_ID_DIALOGIC, PCI_DEVICE_ID_DIVA_L_1P_V10_PCIE, 0, 0, CARDTYPE_DIVA_L_1P_V10_PCIE},
 	{0,}			/* 0 terminated list. */
 };
 MODULE_DEVICE_TABLE(pci, divas_pci_tbl);
@@ -387,7 +543,25 @@ typedef struct _diva_allocated_dma_descriptors {
 	struct semaphore    lock;
 	int                 opened;
 } diva_allocated_dma_descriptors_t;
+
+typedef struct _diva_timer_irq_entry {
+	diva_entity_link_t link;
+	void* context;
+	int  irq;
+} diva_timer_irq_entry_t;
+
+typedef struct _diva_timer_irq {
+	struct timer_list t;
+	spinlock_t irq_lock;
+	diva_entity_queue_t irq_q;
+	atomic_t stop;
+} diva_timer_irq_t;
+
+static diva_timer_irq_t diva_timer_irq;
+static int automatic_hotplug_events_enabled;
+
 static diva_allocated_dma_descriptors_t diva_allocated_dma_descriptors;
+static int diva_direct_access_ifc;
 static struct device *divas_device = NULL;
 static struct class *divas_class = NULL;
 
@@ -442,6 +616,14 @@ void diva_log_info(unsigned char *format, ...)
 	va_end(args);
 
 	printk(KERN_INFO "%s: %s\n", DRIVERLNAME, line);
+}
+
+void diva_os_write_system_log_message (int type, const char* message) {
+	if (type >= 0) {
+		printk(KERN_INFO "%s: %s\n", DRIVERLNAME, message);
+	} else {
+		printk(KERN_ERR "%s: %s\n",  DRIVERLNAME, message);
+	}
 }
 
 void divas_get_version(char *p)
@@ -508,6 +690,17 @@ unsigned long divasa_get_pci_bar(unsigned char bus, unsigned char func,
 	}
 
 	return (ret);
+}
+
+int diva_os_get_pci_revision_id(const void* pci_dev_handle, byte* prevId)
+{
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,23)
+  *prevId = ((const struct pci_dev*) pci_dev_handle)->revision;
+  return 0;
+#else
+  return pci_read_config_byte((struct pci_dev*) pci_dev_handle, PCI_REVISION_ID,
+                              prevId);
+#endif
 }
 
 void PCIwrite(byte bus, byte func, int offset, void *data, int length,
@@ -610,6 +803,25 @@ static void *diva_pci_alloc_consistent(struct pci_dev *hwdev,
 	*addr_handle = addr;
 
 	return (addr);
+}
+
+void* diva_hw_ifc_alloc_dma_page (void* hdev, dword* lo, dword* hi) {
+	struct pci_dev *pdev = (struct pci_dev *) hdev;
+	dma_addr_t dma_handle;
+	void* tmp;
+	void* addr = diva_pci_alloc_consistent(pdev, PAGE_SIZE, &dma_handle, &tmp);
+
+	*lo = (dword)dma_handle;
+	*hi = (dword)(((qword)dma_handle) >> 32);
+
+	return (addr);
+}
+
+void diva_hw_ifc_free_dma_page (void* hdev, void* addr, dword lo, dword hi) {
+	struct pci_dev *pdev = (struct pci_dev *) hdev;
+	dma_addr_t dma_handle = (dma_addr_t)(((qword)lo) | (((qword)hi) << 32));
+
+	dma_free_coherent(pdev == NULL ? NULL : &pdev->dev, PAGE_SIZE, addr, dma_handle);
 }
 
 void diva_init_dma_map_pages(void *hdev,
@@ -829,18 +1041,79 @@ void __inline__ outpp(void *addr, word p)
    -------------------------------------------------------------------------- */
 int diva_os_register_irq(void *context, unsigned int irq, const char *name, int msi)
 {
+	if (use_timer_irq == 0) {
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
-	int result = request_irq (irq, __diva_os_irq_wrapper, SA_SHIRQ, name, context);
+		int result = request_irq (irq, __diva_os_irq_wrapper, SA_SHIRQ, name, context);
 #else
-	int result = request_irq (irq, __diva_os_irq_wrapper, (msi == 0) ? IRQF_SHARED : 0, name, context);
+		int result = request_irq (irq, __diva_os_irq_wrapper, (msi == 0) ? IRQF_SHARED : 0, name, context);
 #endif
+		return (result);
+	} else {
+		diva_timer_irq_entry_t* t = diva_os_malloc (0, sizeof(*t));
+		unsigned long flags;
 
-	return (result);
+		if (t != 0) {
+			t->context = context;
+			t->irq     = irq;
+			spin_lock_irqsave (&diva_timer_irq.irq_lock, flags);
+			diva_q_add_tail (&diva_timer_irq.irq_q, &t->link);
+			spin_unlock_irqrestore (&diva_timer_irq.irq_lock, flags);
+		}
+
+		return (t != 0 ? 0 : -1);
+	}
 }
 
 void diva_os_remove_irq (void *context, unsigned int irq)
 {
-	free_irq (irq, context);
+	if (use_timer_irq == 0) {
+		free_irq (irq, context);
+	} else {
+		diva_entity_link_t* link;
+		unsigned long flags;
+
+		spin_lock_irqsave (&diva_timer_irq.irq_lock, flags);
+		link = diva_q_get_head (&diva_timer_irq.irq_q);
+		while (link != 0) {
+			if (((diva_timer_irq_entry_t*)link)->context == context) {
+				diva_q_remove (&diva_timer_irq.irq_q, link);
+				break;
+			}
+			link = diva_q_get_next (link);
+		}
+		spin_unlock_irqrestore (&diva_timer_irq.irq_lock, flags);
+
+		if (link != 0)
+			diva_os_free (0, link);
+  }
+}
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,14,0)
+static void diva_os_timer_irq_wrapper (unsigned long data)
+{
+	diva_timer_irq_t *p_irq = (diva_timer_irq_t *)data;
+#else
+static void diva_os_timer_irq_wrapper (struct timer_list *t)
+{
+	diva_timer_irq_t *p_irq = from_timer(p_irq, t, t);
+#endif
+	if (atomic_read (&p_irq->stop) == 0) {
+		diva_entity_link_t* link;
+		unsigned long flags;
+
+		spin_lock_irqsave (&p_irq->irq_lock, flags);
+		link = diva_q_get_head (&p_irq->irq_q);
+		while (link != 0) {
+			diva_os_irq_wrapper (((diva_timer_irq_entry_t*)link)->context);
+			link = diva_q_get_next (link);
+		}
+		spin_unlock_irqrestore (&p_irq->irq_lock, flags);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,14,0)
+		mod_timer (&p_irq->t, jiffies + 1);
+#else
+		mod_timer (t, jiffies + 1);
+#endif
+	}
 }
 
 /* --------------------------------------------------------------------------
@@ -928,11 +1201,19 @@ int diva_os_cancel_soft_isr(diva_os_soft_isr_t * psoft_isr)
 		diva_os_thread_dpc_t *pdpc =
 		    (diva_os_thread_dpc_t *) psoft_isr->object;
 		tasklet_disable(&pdpc->divas_tasklet);
+#if !(LINUX_VERSION_CODE >= KERNEL_VERSION(6,0,0)) && \
+	!(defined(RHEL_RELEASE_CODE) && LINUX_VERSION_CODE >= KERNEL_VERSION(5,14,0))
 		flush_scheduled_work();
+#endif
 		tasklet_enable(&pdpc->divas_tasklet);
 	}
 #else
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6,0,0) || \
+	(defined(RHEL_RELEASE_CODE) && LINUX_VERSION_CODE >= KERNEL_VERSION(5,14,0))
+	cancel_work_sync(&(pdpc->divas_task));
+#else
 	flush_scheduled_work();
+#endif
 #endif
 	return (0);
 }
@@ -944,10 +1225,17 @@ void diva_os_remove_soft_isr(diva_os_soft_isr_t * psoft_isr)
 		    (diva_os_thread_dpc_t *) psoft_isr->object;
 #if defined(DIVA_XDI_USES_TASKLETS)
 		tasklet_kill(&pdpc->divas_tasklet);
+#if !(LINUX_VERSION_CODE >= KERNEL_VERSION(6,0,0)) && \
+	!(defined(RHEL_RELEASE_CODE) && LINUX_VERSION_CODE >= KERNEL_VERSION(5,14,0))
+		flush_scheduled_work();
+#endif
 #else
     atomic_set (&(pdpc->soft_isr_disabled), 1);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6,0,0) || \
+	(defined(RHEL_RELEASE_CODE) && LINUX_VERSION_CODE >= KERNEL_VERSION(5,14,0))
+	cancel_work_sync(&(pdpc->divas_task));
 #endif
-		flush_scheduled_work();
+#endif
 		diva_os_free(0, pdpc);
 	}
 }
@@ -977,6 +1265,17 @@ static dword get_usermode_request (void) {
 	return (0xffffffff);
 }
 
+static diva_user_mode_event_context_t* get_usermode_event(void) {
+	diva_os_spin_lock_magic_t irql;
+	diva_entity_link_t* link;
+
+	diva_os_enter_spin_lock (&diva_os_usermode_proc.request_lock, &irql, "user mode event");
+	link = diva_q_get_head(&diva_os_usermode_proc.event_q);
+	diva_os_leave_spin_lock (&diva_os_usermode_proc.request_lock, &irql, "user mode event");
+
+	return (DIVAS_CONTAINING_RECORD_SAFE(link, diva_user_mode_event_context_t, link));
+}
+
 static void free_usermode_request (dword adapter_nr) {
 	diva_os_spin_lock_magic_t irql;
 	dword index = adapter_nr/32;
@@ -987,36 +1286,80 @@ static void free_usermode_request (dword adapter_nr) {
 	diva_os_leave_spin_lock (&diva_os_usermode_proc.request_lock, &irql, "user mode event");
 }
 
+static void free_usermode_event (diva_user_mode_event_context_t* pEvent) {
+	diva_os_spin_lock_magic_t irql;
+
+	diva_os_enter_spin_lock (&diva_os_usermode_proc.request_lock, &irql, "user mode event");
+	diva_q_remove(&diva_os_usermode_proc.event_q, &pEvent->link);
+	diva_os_leave_spin_lock (&diva_os_usermode_proc.request_lock, &irql, "user mode event");
+
+	diva_os_free (0, pEvent);
+}
+
+static void diva_usermodehelper (char* command,
+																 char* p1,
+																 char* p2,
+																 char* p3) {
+	int ret;
+	char *argv[] = { command, NULL };
+	char *envp[] = {	"HOME=/",
+													"PATH=/sbin:/bin:/usr/sbin:/usr/bin",
+													p1, p2, p3, NULL };
+
+	if ((ret = call_usermodehelper(argv[0], argv, envp, 1)) != 0) {
+		DBG_ERR(("Call to %s %s %s failed (%d)", argv[0], envp[2], envp[3], ret))
+	}
+}
+
 static void diva_os_process_usermode_request (diva_work_queue_fn_parameter_t context) {
 	dword adapter_nr;
 
 	if (down_trylock(&diva_os_usermode_proc.user_mode_helper_lock) == 0) {
-		while ((adapter_nr = get_usermode_request ()) != 0xffffffff) {
-			char *argv[2] = { NULL, NULL };
-			char *envp[5] = { NULL, NULL, NULL, NULL, NULL};
-			char data[]   = "DIVA_ADAPTER=    ";
-			int ret;
+		diva_user_mode_event_context_t* pEvent;
+		int one_processed;
 
-			sprintf (strchr(data, ' '), "%d", adapter_nr);
+		do {
+			one_processed = 0;
 
-			argv[0] = "/usr/lib/eicon/divas/divas_usermode_helper";
+			while ((adapter_nr = get_usermode_request ()) != 0xffffffff) {
+				char data[]   = "DIVA_ADAPTER=    ";
 
-			envp[0] = "HOME=/";
-			envp[1] = "PATH=/sbin:/bin:/usr/sbin:/usr/bin";
-			envp[2] = data;
-			envp[3] = "DIVA_ADAPTER_COMMAND=debug";
+				one_processed = 1;
+				sprintf (strchr(data, ' '), "%d", adapter_nr);
 
-			if ((ret = call_usermodehelper(argv[0], argv, envp, 1)) != 0) {
-				DBG_ERR(("Call to %s %s %s failed (%d)", argv[0], envp[2], envp[3], ret))
+				diva_usermodehelper ("/usr/lib/eicon/divas/divas_usermode_helper",
+															data, "DIVA_ADAPTER_COMMAND=debug", NULL);
+
+				free_usermode_request (adapter_nr);
 			}
 
-			free_usermode_request (adapter_nr);
-		}
+			while ((pEvent = get_usermode_event()) != NULL) {
+				char event[32];
+				char type[32];
+				char serial[32];
+
+				diva_snprintf (event, sizeof(event), "V1=%u", (dword)pEvent->event);
+				event[sizeof(event)-1] = 0;
+				diva_snprintf (type, sizeof(type), "V2=%u", pEvent->cardType);
+				type[sizeof(type)-1] = 0;
+				diva_snprintf (serial, sizeof(serial), "V3=%u", pEvent->serialNumber);
+				serial[sizeof(serial)-1] = 0;
+
+				diva_usermodehelper ("/usr/lib/eicon/divas/divas_hotplug_helper", event, type, serial);
+
+				one_processed = 1;
+				free_usermode_event (pEvent);
+			}
+		} while (one_processed != 0);
+
 		up(&diva_os_usermode_proc.user_mode_helper_lock);
 	}
 }
 
-void diva_os_shedule_user_mode_event (dword adapter_nr, diva_user_mode_event_type_t event_type) {
+/*
+ * Called from software interrupt
+ */
+void diva_os_shedule_user_mode_event (dword adapter_nr) {
 	dword index = adapter_nr/32;
 	dword bit   = adapter_nr%32;
 
@@ -1027,6 +1370,33 @@ void diva_os_shedule_user_mode_event (dword adapter_nr, diva_user_mode_event_typ
 		if ((diva_os_usermode_proc.request_locked[index] & (1U << bit)) == 0) {
 			diva_os_usermode_proc.request[index] |= (1U << bit);
 		}
+		diva_os_leave_spin_lock (&diva_os_usermode_proc.request_lock, &irql, "user mode event");
+		schedule_work (&diva_os_usermode_proc.divas_task);
+	}
+}
+
+/*
+ * Called from thread context
+ */
+void diva_os_notify_user_mode_helper (diva_user_mode_helper_event_t event, dword cardType, dword serialNumber) {
+	diva_user_mode_event_context_t* pEvent;
+	diva_os_spin_lock_magic_t irql;
+
+	switch (event) {
+		case DivaUserModeHelperEventAdapterInserted:
+		case DivaUserModeHelperEventAdapterInsertedNoCfg:
+			if (hotplug_autostart == 0 || automatic_hotplug_events_enabled == 0)
+				return;
+			break;
+	}
+
+	pEvent = (diva_user_mode_event_context_t*)diva_os_malloc (0, sizeof(*pEvent));
+	if (pEvent != 0) {
+		pEvent->event = event;
+		pEvent->cardType = cardType;
+		pEvent->serialNumber = serialNumber;
+		diva_os_enter_spin_lock (&diva_os_usermode_proc.request_lock, &irql, "user mode event");
+		diva_q_add_tail(& diva_os_usermode_proc.event_q, &pEvent->link);
 		diva_os_leave_spin_lock (&diva_os_usermode_proc.request_lock, &irql, "user mode event");
 		schedule_work (&diva_os_usermode_proc.divas_task);
 	}
@@ -1079,6 +1449,11 @@ static int divas_open(struct inode *inode, struct file *file)
 			ret = -EBUSY;
 		}
 		up (&diva_allocated_dma_descriptors.lock);
+	} else if (minor == 2) {
+		file->private_data = 0;
+		diva_restart_hotplug_wait_q ();
+	} else if (minor == 3) {
+		file->private_data = &diva_direct_access_ifc;
 	}
 
 	return (ret);
@@ -1086,7 +1461,9 @@ static int divas_open(struct inode *inode, struct file *file)
 
 static int divas_release(struct inode *inode, struct file *file)
 {
-	if (file->private_data == &diva_allocated_dma_descriptors) {
+	if (file->private_data == &diva_direct_access_ifc) {
+		file->private_data = 0;
+	} else if (file->private_data == &diva_allocated_dma_descriptors) {
 		/*
 			Do not free allocated by application DMA descriptors. This is still
 			possible that Diva adapter still descriptors.
@@ -1102,15 +1479,90 @@ static int divas_release(struct inode *inode, struct file *file)
 	} else if (file->private_data != 0) {
 		diva_xdi_close_adapter(file->private_data, file);
 	}
+	file->private_data = 0;
 	return (0);
 }
+
+#if LINUX_VERSION_CODE > KERNEL_VERSION(2,6,8)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,11,0)
+#if LINUX_VERSION_CODE > KERNEL_VERSION(4,16,0)
+static vm_fault_t diva_region_pagefault (struct vm_fault *vmf) {
+#else
+static int diva_region_pagefault (struct vm_fault *vmf) {
+#endif
+	pgoff_t offset = vmf->pgoff << PAGE_SHIFT;
+	void* addr = phys_to_virt (offset);
+	struct page *page = virt_to_page(addr);
+
+	vmf->page = page;
+	get_page(page);
+
+  return 0;
+}
+
+#elif LINUX_VERSION_CODE > KERNEL_VERSION(2,6,24)
+static int diva_region_pagefault (struct vm_area_struct *vma, struct vm_fault *vmf) {
+	unsigned long offset = vma->vm_pgoff << PAGE_SHIFT;
+	void* addr = phys_to_virt (offset);
+	struct page *page = virt_to_page(addr);
+
+	vmf->page = page;
+	get_page(page);
+
+  return 0;
+}
+
+#else
+static struct page *diva_region_nopage (struct vm_area_struct *vma, unsigned long address, int *type) {
+	unsigned long offset = vma->vm_pgoff << PAGE_SHIFT;
+	void* addr = phys_to_virt (offset);
+	struct page *page = virt_to_page(addr);
+
+	if (type != 0)
+		*type = VM_FAULT_MINOR;
+
+	get_page (page);
+
+	return (page);
+}
+
+static struct vm_operations_struct diva_region_vm_ops = {
+	.nopage = diva_region_nopage,
+};
+#endif
+#if LINUX_VERSION_CODE > KERNEL_VERSION(2,6,24)
+static struct vm_operations_struct diva_region_vm_ops = {
+  .fault = diva_region_pagefault,
+};
+#endif
+static int divas_mmap (struct file * file, struct vm_area_struct * vma) {
+	size_t size = vma->vm_end - vma->vm_start;
+
+	if (size != PAGE_SIZE)
+		return -EINVAL;
+
+	vma->vm_ops = &diva_region_vm_ops;
+	vma->vm_private_data = 0;
+	vma->vm_file = file;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6,3,0) || \
+	(defined(__RHEL_9_5_EXTRAVERSION__) && LINUX_VERSION_CODE >= KERNEL_VERSION(5,14,0) && \
+	__RHEL_9_5_EXTRAVERSION__ >= 503)
+	vm_flags_set(vma, VM_RESERVED);
+#else
+	vma->vm_flags |= VM_RESERVED;
+#endif
+	return (0);
+}
+#endif
 
 static ssize_t divas_write(struct file *file, const char *buf,
 			   size_t count, loff_t * ppos)
 {
 	int ret = -EINVAL;
 
-	if (file->private_data == &diva_allocated_dma_descriptors) {
+	if (file->private_data == &diva_direct_access_ifc) {
+		return (diva_xdi_write_direct (file, buf, count, xdi_copy_from_user));
+	} else if (file->private_data == &diva_allocated_dma_descriptors) {
 		diva_allocated_dma_descriptors_t* dma = &diva_allocated_dma_descriptors;
 
 		down (&dma->lock);
@@ -1172,7 +1624,9 @@ static ssize_t divas_read(struct file *file, char *buf,
 {
 	int ret = -EINVAL;
 
-	if (file->private_data == &diva_allocated_dma_descriptors) {
+	if (file->private_data == &diva_direct_access_ifc) {
+		return (-EIO);
+	} else if (file->private_data == &diva_allocated_dma_descriptors) {
 		diva_allocated_dma_descriptors_t* dma = &diva_allocated_dma_descriptors;
 
 		down (&dma->lock);
@@ -1262,6 +1716,9 @@ static struct file_operations divas_fops = {
 #endif
 	.read    = divas_read,
 	.write   = divas_write,
+#if LINUX_VERSION_CODE > KERNEL_VERSION(2,6,8)
+	.mmap    = divas_mmap,
+#endif
 	.poll    = divas_poll,
 	.open    = divas_open,
 	.release = divas_release
@@ -1276,13 +1733,22 @@ static void divas_unregister_chrdev(void)
 }
 
 void diva_os_get_time(dword * sec, dword * usec) {
-	ktime_t tv;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,20,0)
+	struct timespec64 now;
 
-	tv = ktime_get_real();
+	ktime_get_real_ts64(&now);
 
-	*sec  = tv / 1000000000;
-	*usec = tv / 1000;
-	*usec = (*sec * 1000000) - *usec;
+	*sec  = (dword)now.tv_sec;
+	*usec = (dword)now.tv_nsec/1000;
+#else
+	struct timeval tv;
+
+	do_gettimeofday(&tv);
+
+
+	*sec  = (dword)tv.tv_sec;
+	*usec = (dword)tv.tv_usec;
+#endif
 }
 
 static int DIVA_INIT_FUNCTION divas_register_chrdev(void)
@@ -1303,10 +1769,31 @@ static int DIVA_INIT_FUNCTION divas_register_chrdev(void)
 /* --------------------------------------------------------------------------
     PCI driver section
    -------------------------------------------------------------------------- */
-#ifndef __devinit
-#define __devinit
-#endif
-static int __devinit divas_init_one(struct pci_dev *pdev,
+static int DEVINIT divas_check_dac_support (struct pci_dev *bridge_device) {
+	word data;
+	dword pref_base, pref_limit, pref_type;
+
+	data = 0;
+	pci_read_config_word(bridge_device, PCI_PREF_MEMORY_BASE, &data);
+	pref_base = data;
+	data = 0;
+	pci_read_config_word(bridge_device, PCI_PREF_MEMORY_LIMIT, &data);
+	pref_limit = data;
+	pref_type = pref_base & PCI_PREF_RANGE_TYPE_MASK;
+
+	if (pref_type != (pref_limit & PCI_PREF_RANGE_TYPE_MASK) ||
+			(pref_type != PCI_PREF_RANGE_TYPE_32 && pref_type != PCI_PREF_RANGE_TYPE_64)) {
+		DBG_LOG(("verify dac: off, unknown pref type %02x", pref_type))
+		return (0);
+	}
+
+	pref_base = (pref_base & PCI_PREF_RANGE_MASK) << 16;
+	pref_limit = (pref_limit & PCI_PREF_RANGE_MASK) << 16;
+	DBG_LOG(("verify dac: %s, pref type %02x", pref_type == PCI_PREF_RANGE_TYPE_64 ? "on" : "off", pref_type))
+	return (pref_type == PCI_PREF_RANGE_TYPE_64);
+}
+
+static int DEVINIT divas_init_one(struct pci_dev *pdev,
 				    const struct pci_device_id *ent)
 {
 	void *pdiva = 0;
@@ -1314,6 +1801,7 @@ static int __devinit divas_init_one(struct pci_dev *pdev,
 	u8 new_latency = 32;
 	u16 pci_status = 0;
 	int msi = 0;
+	int dac_disabled = 0;
 
 	DBG_TRC(("%s bus: %08x fn: %08x insertion",
 		 CardProperties[ent->driver_data].Name,
@@ -1338,7 +1826,7 @@ static int __devinit divas_init_one(struct pci_dev *pdev,
 
 #if LINUX_VERSION_CODE > KERNEL_VERSION(2,6,19)
 	if (sizeof(dma_addr_t) == sizeof(qword) && disabledac == 0) {
-		int use_dac = 0;
+		int use_dac = 0, verify_dac = 1;
 
 		if (ent->driver_data == CARDTYPE_DIVASRV_P_30M_V30_PCI) {
 			dword data[64];
@@ -1347,20 +1835,46 @@ static int __devinit divas_init_one(struct pci_dev *pdev,
 				if (((byte)data[62]) != 0xff) {
 					use_dac = (((data[62] >> 8) & 0x01) == 0);
 					if (use_dac == 0) {
-						DBG_LOG(("Please update adapter NVRAM to activate support for 64Bit PCIe addressing"))
+						const char* updateMessage = "Please update adapter NVRAM to activate support for 64Bit PCIe addressing";
+						DBG_LOG(("%s", updateMessage))
+						diva_os_write_system_log_message (0, updateMessage);
+						dac_disabled = 1;
+					} else {
+						verify_dac = 0;
 					}
 				} else {
 					use_dac =
 						(CardProperties[ent->driver_data].HardwareFeatures & DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC) != 0;
 				}
 			}
+		} else if ((IDI_PROP(ent->driver_data,HardwareFeatures) & DIVA_CARDTYPE_HARDWARE_PROPERTY_CUSTOM_PCIE) != 0) {
+			/* Temporary map bar, check features and unmap bar */
+			unsigned long bar2 = pdev->resource[2].start & PCI_BASE_ADDRESS_MEM_MASK;
+
+			if (bar2 != 0 && bar2 != (((unsigned long)-1) & PCI_BASE_ADDRESS_MEM_MASK)) {
+				byte* addr2 = (void *)ioremap(bar2, 256*1024);
+				if (addr2 != 0) {
+					use_dac = (diva_xdi_decode_fpga_rom_features (addr2+0x9000) & (1U << (12+1))) != 0;
+					iounmap(addr2);
+				}
+			}
+
+			if (use_dac == 0) {
+				const char* updateMessage = "Please update adapter FPGA code to activate support for 64Bit PCIe addressing";
+				DBG_LOG(("%s", updateMessage))
+				diva_os_write_system_log_message (0, updateMessage);
+			}
 		} else {
 			use_dac = (CardProperties[ent->driver_data].HardwareFeatures & DIVA_CARDTYPE_HARDWARE_PROPERTY_DAC) != 0;
+		}
+		if (use_dac != 0 && verify_dac != 0 && CardProperties[ent->driver_data].Bus == BUS_PCI && pdev->bus != 0 && pdev->bus->self != 0) {
+			use_dac = divas_check_dac_support (pdev->bus->self);
+			dac_disabled = (use_dac == 0);
 		}
 
 		if (use_dac != 0) {
 			DBG_LOG(("bus: %08x fn: %08x set dma mask to %s", pdev->bus->number, pdev->devfn, "DMA_64BIT_MASK"))
-			if (dma_set_mask_and_coherent(&pdev->dev, DMA_64BIT_MASK) != 0) {
+			if (dma_set_mask_and_coherent(&pdev->dev, DIVA_OS_DMA_64BIT_MASK) != 0) {
 				DBG_ERR(("bus: %08x fn: %08x failed to set dma mask to %s",
 					pdev->bus->number, pdev->devfn, "DMA_64BIT_MASK"))
 			}
@@ -1386,7 +1900,8 @@ static int __devinit divas_init_one(struct pci_dev *pdev,
 #endif
 
   if ((CardProperties[ent->driver_data].HardwareFeatures &
-      (DIVA_CARDTYPE_HARDWARE_PROPERTY_SEAVILLE | DIVA_CARDTYPE_HARDWARE_PROPERTY_CUSTOM_PCIE)) == 0) {
+      (DIVA_CARDTYPE_HARDWARE_PROPERTY_SEAVILLE | DIVA_CARDTYPE_HARDWARE_PROPERTY_CUSTOM_PCIE)) == 0 &&
+			CardProperties[ent->driver_data].Bus != BUS_PCIE) {
 		pci_read_config_byte(pdev, PCI_LATENCY_TIMER, &pci_latency);
 		if (!pci_latency) {
 			DBG_TRC(("%s: bus: %08x fn: %08x fix latency.\n",
@@ -1399,10 +1914,36 @@ static int __devinit divas_init_one(struct pci_dev *pdev,
   }
 
 #ifdef CONFIG_PCI_MSI
-	msi = ((no_msi == 0) && (pci_enable_msi (pdev) == 0));
+	if ((CardProperties[ent->driver_data].HardwareFeatures & DIVA_CARDTYPE_HARDWARE_PROPERTY_CUSTOM_PCIE) == 0 &&
+			CardProperties[ent->driver_data].Card != CARD_PASSIVEP /* IPY00048265, IPY00048266 */) {
+#ifdef DIVA_NO_MSI_DEACTIVATION_ON_EXIT
+		if (pdev->msi_enabled == 0) {
+			msi = ((no_msi == 0) && (pci_enable_msi (pdev) == 0));
+		} else {
+			if (no_msi == 0) {
+				msi = 1;
+			} else {
+				pci_disable_msi(pdev);
+				msi = 0;
+			}
+		}
+#else
+		msi = ((no_msi == 0) && (pci_enable_msi (pdev) == 0));
+#endif
+	} else {
+#ifdef DIVA_NO_MSI_DEACTIVATION_ON_EXIT
+		if (pdev->msi_enabled != 0) {
+			pci_disable_msi(pdev);
+		}
+#endif
+		msi = 0;
+	}
+#ifdef DIVA_NO_MSI_DEACTIVATION_ON_EXIT
+	pci_intx(pdev, !msi);
+#endif
 #endif
 
-	if (!(pdiva = diva_driver_add_card(pdev, ent->driver_data, msi))) {
+	if (!(pdiva = diva_driver_add_card(pdev, ent->driver_data, msi, dac_disabled))) {
 		DBG_TRC(("%s: %s bus: %08x fn: %08x card init failed.\n",
 			 DRIVERLNAME,
 			 CardProperties[ent->driver_data].Name,
@@ -1415,9 +1956,11 @@ static int __devinit divas_init_one(struct pci_dev *pdev,
 			Name, pdev->bus->number,
 			pdev->devfn);
 #ifdef CONFIG_PCI_MSI
+#ifndef DIVA_NO_MSI_DEACTIVATION_ON_EXIT
 		if (msi != 0) {
 			pci_disable_msi (pdev);
 		}
+#endif
 #endif
 		return (-EIO);
 	}
@@ -1425,6 +1968,19 @@ static int __devinit divas_init_one(struct pci_dev *pdev,
 	pci_set_drvdata(pdev, pdiva);
 
 	return (0);
+}
+
+int diva_os_get_nr_li_exports (void* device) {
+	return (nr_li_exports);
+}
+
+const unsigned int* diva_os_get_hotplug_map (int* nr, int* ignoreSn) {
+	if (nr != NULL)
+		*nr = hotplug_map_entries;
+	if (ignoreSn != NULL)
+		*ignoreSn = hotplug_ignore_sn;
+
+	return (hotplug_map);
 }
 
 #if (defined(CONFIG_PCIEAER) && defined(DIVA_XDI_AER_SUPPORT))
@@ -1480,7 +2036,12 @@ static pci_ers_result_t diva_io_slot_reset (struct pci_dev *pdev /**< Pointer to
 
 #ifdef CONFIG_PCI_MSI
 	if (no_msi == 0) {
+#ifdef DIVA_NO_MSI_DEACTIVATION_ON_EXIT
+		int msi = pci_enable_msi (pdev) == 0;
+		pci_intx(pdev, !msi);
+#else
 		pci_enable_msi (pdev);
+#endif
 	}
 #endif
 
@@ -1505,10 +2066,7 @@ static void diva_io_resume(struct pci_dev *pdev /**< Pointer to PCI device */) {
 }
 #endif
 
-#ifndef __devexit
-#define __devexit
-#endif
-static void __devexit divas_remove_one(struct pci_dev *pdev)
+static void DEVINIT divas_remove_one(struct pci_dev *pdev)
 {
 	void *pdiva = pci_get_drvdata(pdev);
 
@@ -1519,15 +2077,21 @@ static void __devexit divas_remove_one(struct pci_dev *pdev)
 		diva_driver_remove_card(pdiva, &msi);
 
 #ifdef CONFIG_PCI_MSI
+#ifdef DIVA_NO_MSI_DEACTIVATION_ON_EXIT
+		if ((pdev->msi_enabled != 0) && (msi != 0)) {
+			pci_disable_msi(pdev);
+		}
+#else
 		if (msi != 0) {
 			pci_disable_msi (pdev);
 		}
 #endif
+#endif
 
 		DBG_TRC(("bus: %08x fn: %08x msi:%d removal.\n",
 						pdev->bus->number, pdev->devfn, msi))
-		printk(KERN_INFO "%s: bus: %08x fn: %08x msi:%d removal.\n",
-					 DRIVERLNAME, pdev->bus->number, pdev->devfn, msi);
+		printk(KERN_INFO "%s: bus: %08x fn: %08x removal - msi: %s.\n",
+					 DRIVERLNAME, pdev->bus->number, pdev->devfn, (msi!=0)? "disabled":"none");
 	} else {
 		DBG_ERR(("bus: %08x fn: %08x msi:%d removal.\n",
 						pdev->bus->number, pdev->devfn, -1))
@@ -1544,21 +2108,26 @@ static int DIVA_INIT_FUNCTION divas_init(void)
 {
 	char tmprev[50];
 	int ret = 0;
-	int destroy_spin_lock = 0;
+	int destroy_spin_lock = 0, destroy_t_lock = 0;
+
+	if (xdi_features & 0x1U) {
+		diva_xdi_disable_plx_reset = 1;
+	}
+	if (xdi_features & 0x2U) {
+		diva_xdi_disable_hardware_selftest = 1;
+	}
 
 	printk(KERN_INFO "%s\n", DRIVERNAME);
-	printk(KERN_INFO "%s: Rel:%s  Rev:", DRIVERLNAME, DRIVERRELEASE_DIVAS);
 	strcpy(tmprev, main_revision);
-	printk("%s  Build: %s(%s)\n", getrev(tmprev),
-	       diva_xdi_common_code_build, DIVA_BUILD);
-	printk(KERN_INFO "%s: support for: ", DRIVERLNAME);
+	printk(KERN_INFO "%s: Rel:%s  Rev: %s  Build: %s(%s)\n", DRIVERLNAME, DRIVERRELEASE_DIVAS, getrev(tmprev), diva_xdi_common_code_build, DIVA_BUILD);
+	printk(KERN_INFO "%s: support for: "
 #ifdef CONFIG_ISDN_DIVAS_BRIPCI
-	printk("BRI/PCI ");
+	"BRI/PCI "
 #endif
 #ifdef CONFIG_ISDN_DIVAS_PRIPCI
-	printk("PRI/PCI ");
+	"PRI/PCI "
 #endif
-	printk("adapters\n");
+	"adapters\n", DRIVERLNAME);
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(6,3,0)
 	divas_class = class_create(THIS_MODULE, "divas");
@@ -1584,18 +2153,35 @@ static int DIVA_INIT_FUNCTION divas_init(void)
 		goto out;
 	}
 
+
+	if (use_timer_irq != 0) {
+		if (diva_os_initialize_spin_lock (&diva_timer_irq.irq_lock, "init")) {
+			printk(KERN_ERR "%s: failed to connect initialize spin lock.\n",
+							DRIVERLNAME);
+			destroy_t_lock = 1;
+			ret = -EIO;
+			goto out;
+		}
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,14,0)
+		init_timer(&diva_timer_irq.t);
+		diva_timer_irq.t.function = (void*)diva_os_timer_irq_wrapper;
+		diva_timer_irq.t.data = (unsigned long)&diva_timer_irq;
+#else
+		timer_setup(&diva_timer_irq.t, diva_os_timer_irq_wrapper, 0);
+#endif
+		atomic_set (&diva_timer_irq.stop, 0);
+		mod_timer (&diva_timer_irq.t, jiffies + 1);
+	}
+
 	if (diva_os_initialize_spin_lock (&diva_os_usermode_proc.request_lock, "init")) {
-		destroy_spin_lock = 1;
 		printk(KERN_ERR "%s: failed to connect initialize spin lock.\n",
 		       DRIVERLNAME);
+		destroy_spin_lock = 1;
 		ret = -EIO;
 		goto out;
 	}
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,37)
 	init_MUTEX(&diva_os_usermode_proc.user_mode_helper_lock);
-#else
-	sema_init(&diva_os_usermode_proc.user_mode_helper_lock, 1);
-#endif
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
 	INIT_WORK(&diva_os_usermode_proc.divas_task,
 						diva_os_process_usermode_request,
@@ -1646,18 +2232,21 @@ static int DIVA_INIT_FUNCTION divas_init(void)
 		goto out;
 	}
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,37)
 	init_MUTEX(&diva_allocated_dma_descriptors.lock);
-#else
-	sema_init(&diva_allocated_dma_descriptors.lock, 1);
-#endif
 
 	printk(KERN_INFO "%s: started with major %d\n", DRIVERLNAME, major);
+
+	automatic_hotplug_events_enabled = 1;
 
 out:
 
 	if (destroy_spin_lock != 0) {
 		diva_os_destroy_spin_lock (&diva_os_usermode_proc.request_lock, "init");
+	}
+	if (destroy_t_lock != 0) {
+		atomic_set (&diva_timer_irq.stop, 1);
+		del_timer_sync (&diva_timer_irq.t);
+		diva_os_destroy_spin_lock (&diva_timer_irq.irq_lock, "init");
 	}
 
 	return (ret);
@@ -1668,13 +2257,24 @@ out:
    -------------------------------------------------------------------------- */
 static void DIVA_EXIT_FUNCTION divas_exit(void)
 {
+	automatic_hotplug_events_enabled = 0;
 	pci_unregister_driver(&diva_pci_driver);
 	remove_divas_proc();
 	divas_unregister_chrdev();
 	divasfunc_exit();
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6,0,0) || \
+	(defined(RHEL_RELEASE_CODE) && LINUX_VERSION_CODE >= KERNEL_VERSION(5,14,0))
+	cancel_work_sync(&diva_os_usermode_proc.divas_task);
+#else
 	flush_scheduled_work();
+#endif
 	diva_os_destroy_spin_lock (&diva_os_usermode_proc.request_lock, "init");
+	if (use_timer_irq != 0) {
+		atomic_set (&diva_timer_irq.stop, 1);
+		del_timer_sync (&diva_timer_irq.t);
+		diva_os_destroy_spin_lock (&diva_timer_irq.irq_lock, "init");
+	}
 
 	/*
 		Diva server adapters are stopped now and user mode SoftIP driver

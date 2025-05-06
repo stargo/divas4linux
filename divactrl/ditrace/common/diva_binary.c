@@ -1,39 +1,41 @@
-/*------------------------------------------------------------------------------
- *
- * (c) COPYRIGHT 1999-2007       Dialogic Corporation
- *
- * ALL RIGHTS RESERVED
- *
- * This software is the property of Dialogic Corporation and/or its
- * subsidiaries ("Dialogic"). This copyright notice may not be removed,
- * modified or obliterated without the prior written permission of
- * Dialogic.
- *
- * This software is a Trade Secret of Dialogic and may not be
- * copied, transmitted, provided to or otherwise made available to any company,
- * corporation or other person or entity without written permission of
- * Dialogic.
- *
- * No right, title, ownership or other interest in the software is hereby
- * granted or transferred. The information contained herein is subject
- * to change without notice and should not be construed as a commitment of
- * Dialogic.
- *
- *------------------------------------------------------------------------------*/
 
-#define __DIVA_INCLUDE_DITRACE_PARAMETERS__
+/*
+ *
+  Copyright (c) Sangoma Technologies, 2018-2022
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
+ *
+  This source file is supplied for the use with
+  Sangoma (formerly Dialogic) range of Adapters.
+ *
+  File Revision :    2.1
+ *
+  This program is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; either version 2, or (at your option)
+  any later version.
+ *
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY OF ANY KIND WHATSOEVER INCLUDING ANY
+  implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+  See the GNU General Public License for more details.
+ *
+  You should have received a copy of the GNU General Public License
+  along with this program; if not, write to the Free Software
+  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *
+ */
+
 #include <stdarg.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#include <unistd.h>
-#include <sys/mman.h>
-#include <poll.h>
 #include <errno.h>
 #define __NO_STANDALONE_DBG_INC__
-#include "platform.h"
 #include "memorymap.h"
 #include "platform.h"
 #include "debuglib.h"
@@ -115,8 +117,8 @@ static const char* selective_trace_pattern = "Selective Trace ON (2048) for Ch="
 static int selective_trace_pattern_length;
 static const char* selective_trace_off_pattern = "Selective Trace OFF for Ch=";
 static int selective_trace_off_pattern_length;
-static const char* trace_lencth_cmd_pattern = "*** MAINT TRACELENGTH";
-static int trace_lencth_cmd_pattern_length;
+static const char* trace_length_cmd_pattern = "*** MAINT TRACELENGTH";
+static int trace_length_cmd_pattern_length;
 static int DilogFormat = 0;
 int term_signal = 0;
 
@@ -158,6 +160,7 @@ int diva_decode_message (diva_dbg_entry_head_t* pmsg, int length) {
   DbgMessage* dbg_msg;
   char msg_data [4*MSG_FRAME_MAX_SIZE+sizeof(*dbg_msg)+1];
 	int message_too_long = 0;
+	word adjust_maxout = 0, maxout_save;
 
   dbg_msg = (DbgMessage*)msg_data;
   DLI_name = DLI_NAME(pmsg->dli) ;	/* numeric debug level	*/
@@ -281,6 +284,16 @@ int diva_decode_message (diva_dbg_entry_head_t* pmsg, int length) {
 			return (0);
 		}
 
+		switch ((byte)message_code) {
+			case 1: /* B-X */
+			case 2: /* B-R */
+			case 3: /* D-X */
+			case 4: /* D-R */
+				if (pmsg->data_length > 10+maxout)
+					adjust_maxout = (word)(pmsg->data_length - 10);
+				break;
+		}
+
 		if (b_channel_mask != 0) {
 			switch ((byte)message_code) {
 				case 1: /* B-X */
@@ -309,7 +322,12 @@ int diva_decode_message (diva_dbg_entry_head_t* pmsg, int length) {
     fprintf (OutStream, "%c %X ", '-', (int)pmsg->drv_id) ;
 
     tmp_xlog_buffer[0] = 0;
+		maxout_save = maxout;
+		if (adjust_maxout != 0) {
+			maxout = adjust_maxout;
+		}
     tmp_xlog_pos = xlog(&tmp_xlog_buffer[0], (void*)&TrcData->code);
+    maxout = maxout_save;
     tmp_xlog_buffer[tmp_xlog_pos] = 0;
     fprintf (OutStream, "%s", &tmp_xlog_buffer[0]);
     fflush (OutStream);
@@ -400,18 +418,27 @@ int diva_decode_message (diva_dbg_entry_head_t* pmsg, int length) {
             maxout = 30;
           }
         }
-        if (trace_lencth_cmd_pattern_length < (int)dbg_msg->size) {
+        if (trace_length_cmd_pattern_length < (int)dbg_msg->size) {
           if (memcmp(&dbg_msg->data[0],
-                     trace_lencth_cmd_pattern,
-                     trace_lencth_cmd_pattern_length) == 0) {
-						word new_length = atoi((char*)&dbg_msg->data[trace_lencth_cmd_pattern_length]);
-						if (new_length <= 3000 && new_length >= 4) {
-							maxout = new_length;
-						} else {
-							maxout = 30;
-						}
+                     trace_length_cmd_pattern,
+                     trace_length_cmd_pattern_length) == 0) {
+            word i, new_length;
+
+            new_length = 0;
+            i = trace_length_cmd_pattern_length;
+            while ((i < dbg_msg->size)
+              && (dbg_msg->data[i] >= '0') && (dbg_msg->data[i] <= '9'))
+            {
+              new_length = 10 * new_length + (dbg_msg->data[i] - '0');
+              i++;
+            }
+            if (new_length <= 3000 && new_length >= 4) {
+              maxout = new_length;
+            } else {
+              maxout = 30;
+            }
           }
-				}
+        }
 
         tapiFilter (OutStream, dbg_msg) ;
         break;
@@ -957,12 +984,9 @@ static int check_id (int id) {
 
 
 int diva_trace_init () {
- 	char *unused;
- 	unused = (char *)ditrace_parameters;
- 	unused = (char *)ditrace_options;
   selective_trace_pattern_length = strlen (selective_trace_pattern);
   selective_trace_off_pattern_length = strlen (selective_trace_off_pattern);
-	trace_lencth_cmd_pattern_length = strlen (trace_lencth_cmd_pattern);
+	trace_length_cmd_pattern_length = strlen (trace_length_cmd_pattern);
 
 	return (0);
 }

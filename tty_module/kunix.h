@@ -1,12 +1,13 @@
 
 /*
  *
-  Copyright (c) Dialogic(R), 2009.
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2009-2014.
  *
   This source file is supplied for the use with
-  Dialogic range of DIVA Server Adapters.
+  Sangoma (formerly Dialogic) range of DIVA Server Adapters.
  *
-  Dialogic(R) File Revision :    2.1
+  File Revision :    2.1
  *
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -32,7 +33,16 @@
 #define seterror(x)
 #endif
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,14,0)
 #include <linux/stdarg.h>
+#else
+#include <stdarg.h>
+#endif
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6,1,0) || \
+	(LINUX_VERSION_CODE >= KERNEL_VERSION(5,14,0) && defined(__RHEL_EXTRAVERSION__) && \
+	__RHEL_EXTRAVERSION__ >= 503)
+#include <linux/termios_internal.h>
+#endif
 
 /* include a standard set of header files for Unix drivers */
 
@@ -72,7 +82,6 @@
 #include <svc/memory.h>
 #include <io/stropts.h>
 #include <io/poll.h>
-
 #include <io/termio.h>
 #include <io/termios.h>
 #include <io/strtty.h>

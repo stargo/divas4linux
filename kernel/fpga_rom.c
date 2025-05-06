@@ -1,12 +1,16 @@
 
 /*
  *
-  Copyright (c) Dialogic, 2008.
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
  *
   This source file is supplied for the use with
-  Dialogic range of DIVA Server Adapters.
+  Sangoma (formerly Dialogic) range of Adapters.
  *
-  Dialogic File Revision :    2.1
+  File Revision :    2.1
  *
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -23,6 +27,7 @@
   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  */
+
 #include "platform.h"
 #include "fpga_rom.h"
 
@@ -44,6 +49,9 @@ typedef struct _diva_fpga_feature_description {
 	void (*decode_proc)(dword feature, dword* hardware_features, dword* fpga_features, word (*dprintf_proc)(char *, ...));
 	dword bits;
 } diva_fpga_feature_description_t;
+
+
+dword diva_fpga_major_version;
 
 
 static void telecom_interface_decode_proc (dword feature, dword* hardware_features, dword* fpga_features, word (*dprintf_proc)(char *, ...));
@@ -166,6 +174,9 @@ static void local_interface_frequency_decode_proc (dword feature, dword* hardwar
 
 static void version_number_decode_proc (dword feature, dword* hardware_features, dword* fpga_features,
                                         word (*dprintf_proc)(char *, ...)) {
+
+  diva_fpga_major_version = feature;
+
 }
 
 static void test_version_number_decode_proc (dword feature, dword* hardware_features, dword* fpga_features,
@@ -275,7 +286,18 @@ static void supported_fpga_features_decode_proc (dword feature, dword* hardware_
 		}
 		features[i++] = "PLL"; /* PLL Programming Support */
 	}
-
+	if ((feature & (1U << (12+1))) != 0) {
+		if (i != 0) {
+			features[i++] = ", ";
+		}
+		features[i++] = "64Bit"; /* FPGA supports 64Bit PCIPCIe addresses, vx5 */
+	}
+	if ((feature & (1U << 14)) != 0) {
+		if (i != 0) {
+			features[i++] = ", ";
+		}
+		features[i++] = "Datapath debug"; /* FPGA supports data test path, BL PCIe low profile */
+	}
 
 	(*dprintf_proc) ("  %s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s",
            features[0],

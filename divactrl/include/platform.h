@@ -1,28 +1,32 @@
+
 /*
  *
- * platform.h
- * 
+  Copyright (c) Sangoma Technologies, 2018-2022
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
  *
- * Copyright 2000  by Armin Schindler (mac@melware.de)
- * Copyright 2000  Eicon Networks 
- * Copyright 2008  Dialogic Corporation
+  This source file is supplied for the use with
+  Sangoma (formerly Dialogic) range of Adapters.
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2, or (at your option)
- * any later version.
+  File Revision :    2.1
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+  This program is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; either version 2, or (at your option)
+  any later version.
  *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY OF ANY KIND WHATSOEVER INCLUDING ANY
+  implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+  See the GNU General Public License for more details.
+ *
+  You should have received a copy of the GNU General Public License
+  along with this program; if not, write to the Free Software
+  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  */
-
 
 #ifndef	__PLATFORM_H__
 #define	__PLATFORM_H__
@@ -32,10 +36,9 @@
 
 #define OSCONST
 #include "cardtype.h"
+#include <stdint.h>
 
-#ifndef __inline
 #define __inline inline
-#endif
 
 typedef struct {  
 unsigned long LowPart;  
@@ -68,6 +71,10 @@ long HighPart;
 
 #ifndef	dword
 #define	dword  unsigned int
+#endif
+
+#ifndef int32
+#define int32  int
 #endif
 
 typedef const byte* pcbyte;
@@ -121,10 +128,10 @@ typedef struct _ISDN_ADAPTER   ISDN_ADAPTER;
 typedef struct _ISDN_ADAPTER* PISDN_ADAPTER;
 
 typedef void (* DIVA_DI_PRINTF) (char *, ...);
-extern DIVA_DI_PRINTF diva_dprintf;
+extern DIVA_DI_PRINTF __diva_dprintf;
 
 #ifndef __NO_STANDALONE_DBG_INC__
-#define DBG_TEST(func,args) diva_dprintf args ;
+#define DBG_TEST(func,args) __diva_dprintf args ;
 
 #define DBG_LOG(args)  DBG_TEST(LOG, args)
 #define DBG_FTL(args)  DBG_TEST(FTL, args)
@@ -296,6 +303,10 @@ void diva_os_read_descriptor_array (void *, int);
 */
 static void inline PCIwrite (byte bus, byte func, int offset, void* data, int length, void* pci_dev_handle) {}
 static void inline PCIread (byte bus, byte func, int offset, void* data, int length, void* pci_dev_handle)  {}
+static inline uint16_t ioread16(const volatile void *addr) { return 0; }
+static inline uint32_t ioread32(const volatile void *addr) { return 0;}
+static inline void iowrite16(uint16_t value, volatile void *addr) {}
+static inline void iowrite32(uint32_t value, volatile void *addr) {}
 
 #endif	/* __PLATFORM_H__ */
 

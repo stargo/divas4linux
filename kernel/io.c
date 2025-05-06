@@ -1,12 +1,16 @@
 
 /*
  *
-  Copyright (c) Dialogic, 2008.
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
  *
   This source file is supplied for the use with
-  Dialogic range of DIVA Server Adapters.
+  Sangoma (formerly Dialogic) range of Adapters.
  *
-  Dialogic File Revision :    2.1
+  File Revision :    2.1
  *
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -23,6 +27,7 @@
   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  */
+
 #include "platform.h"
 #include "di_defs.h"
 #include "pc.h"
@@ -34,6 +39,8 @@
 #include "mi_pc.h"
 #include "io.h"
 #include "vidi_di.h"
+#include "dsrv_4prie.h"
+
 extern ADAPTER * adapter[MAX_ADAPTER];
 extern PISDN_ADAPTER IoAdapters[MAX_ADAPTER];
 void request (PISDN_ADAPTER, ENTITY *);
@@ -86,6 +93,8 @@ IDI_CALL Requests[MAX_ADAPTER] =
  &Request24, &Request25, &Request26, &Request27,
  &Request28, &Request29, &Request30, &Request31
 };
+static void diva_oob_put (PISDN_ADAPTER IoAdapter, ENTITY* e);
+static void diva_process_streaming_mapping (PISDN_ADAPTER IoAdapter, IDI_SYNC_REQ *syncReq);
 /*****************************************************************************/
 /*
   This array should indicate all new services, that this version of XDI
@@ -101,7 +110,8 @@ static byte extended_xdi_features[DIVA_XDI_EXTENDED_FEATURES_MAX_SZ+1] = {
   DIVA_XDI_EXTENDED_FEATURE_MANAGEMENT_DMA |
 #endif
   DIVA_XDI_EXTENDED_FEATURE_NO_CANCEL_RC),
-  (DIVA_XDI_EXTENDED_FEATURE_FC_OK_LABEL),
+  (DIVA_XDI_EXTENDED_FEATURE_FC_OK_LABEL
+   | DIVA_XDI_EXTENDED_FEATURE_XON_OOB_REQ),
  0
 };
 /*****************************************************************************/
@@ -245,6 +255,10 @@ void request(PISDN_ADAPTER IoAdapter, ENTITY * e)
   switch (e->Rc)
   {
 #if defined(DIVA_IDI_RX_DMA)
+    case IDI_SYNC_REQ_XON:
+      diva_oob_put (IoAdapter, e);
+      return;
+
     case IDI_SYNC_REQ_DMA_DESCRIPTOR_OPERATION: {
       diva_xdi_dma_descriptor_operation_t* pI = \
                                    &syncReq->xdi_dma_descriptor_operation.info;
@@ -302,18 +316,19 @@ void request(PISDN_ADAPTER IoAdapter, ENTITY * e)
       diva_os_leave_spin_lock (&IoAdapter->data_spin_lock, &irql, "dma_op");
     } return;
     case IDI_SYNC_REQ_XDI_MAP_ADDRESS:
-      if (IoAdapter->dma_map != 0 && syncReq->xdi_map_address.info.bus_addr_hi == 0 &&
+      if (IoAdapter->dma_map != 0 && /* syncReq->xdi_map_address.info.bus_addr_hi == 0 && */
           IoAdapter->ANum == syncReq->xdi_map_address.info.logical_adapter_number   &&
           syncReq->xdi_map_address.info.info >= sizeof(syncReq->xdi_map_address.info)) {
         unsigned long phys, bus_addr_hi;
         dword bus_addr = syncReq->xdi_map_address.info.bus_addr_lo;
+				dword requested_bus_addr_hi = syncReq->xdi_map_address.info.bus_addr_hi;
         void* virt;
         int ii = 0;
         do {
           virt = 0;
           diva_get_dma_map_entry (IoAdapter->dma_map,    ii, &virt, &phys);
           diva_get_dma_map_entry_hi (IoAdapter->dma_map, ii, &bus_addr_hi);
-          if (virt != 0 && bus_addr_hi == 0 && phys <= bus_addr && bus_addr < phys+4*1024) {
+          if (virt != 0 && bus_addr_hi == requested_bus_addr_hi && phys <= bus_addr && bus_addr < phys+4*1024) {
               syncReq->xdi_map_address.info.info   = sizeof(syncReq->xdi_map_address.info);
               syncReq->xdi_map_address.info.addr   = virt;
               syncReq->xdi_map_address.info.handle = ii;
@@ -325,6 +340,21 @@ void request(PISDN_ADAPTER IoAdapter, ENTITY * e)
         } while (virt != 0);
       }
       return;
+
+
+    case IDI_SYNC_REQ_PROCESS_STREAMING_MAPPING:
+			if (IoAdapter->dma_map != 0) {
+				diva_process_streaming_mapping (IoAdapter, syncReq);
+			}
+      return;
+
+    case IDI_SYNC_REQ_HW_ACCESS:
+      if (IoAdapter->get_hw_ifc != 0) {
+        IoAdapter->get_hw_ifc (IoAdapter, &syncReq->diva_xdi_hw_access.info);
+      }
+      return;
+
+
 #endif
     case IDI_SYNC_REQ_XDI_ADAPTER_REMOVED_NOT_AVAILABLE:
       DBG_ERR(("A(%d) received stop adapter command", IoAdapter->ANum))
@@ -333,13 +363,15 @@ void request(PISDN_ADAPTER IoAdapter, ENTITY * e)
         (*(IoAdapter->os_trap_nfy_Fnc))(IoAdapter, IoAdapter->ANum);
       }
       return;
-    case IDI_SYNC_REQ_XDI_GET_LOGICAL_ADAPTER_NUMBER: {
-      diva_xdi_get_logical_adapter_number_s_t *pI = \
+    case IDI_SYNC_REQ_XDI_GET_LOGICAL_ADAPTER_NUMBER:
+      if (IoAdapter->get_hw_ifc == 0) {
+        diva_xdi_get_logical_adapter_number_s_t *pI = \
                                      &syncReq->xdi_logical_adapter_number.info;
-      pI->logical_adapter_number = IoAdapter->ANum;
-      pI->controller = IoAdapter->ControllerNumber;
-      pI->total_controllers = IoAdapter->Properties.Adapters;
-    } return;
+        pI->logical_adapter_number = IoAdapter->ANum;
+        pI->controller = IoAdapter->ControllerNumber;
+        pI->total_controllers = IoAdapter->Properties.Adapters;
+      }
+      return;
     case IDI_SYNC_REQ_XDI_GET_CAPI_PARAMS: {
        diva_xdi_get_capi_parameters_t prms, *pI = &syncReq->xdi_capi_prms.info;
        memset (&prms, 0x00, sizeof(prms));
@@ -577,6 +609,22 @@ void DIDpcRoutine (struct _diva_os_soft_isr* psoft_isr, void* Context) {
      IoAdapter->out (a) ;
    }
   } while (diva_os_atomic_decrement (pin_dpc) > 0);
+
+	{
+		diva_os_spin_lock_magic_t irql;
+		void (*shedule_stream_proc)(const void*);
+		const void*               shedule_stream_proc_context;
+
+		diva_os_enter_spin_lock (&IoAdapter->data_spin_lock, &irql, "stream_dma_op");
+		shedule_stream_proc = IoAdapter->shedule_stream_proc;
+		shedule_stream_proc_context = IoAdapter->shedule_stream_proc_context;
+		diva_os_leave_spin_lock (&IoAdapter->data_spin_lock, &irql, "stream_dma_op");
+
+		if (likely(shedule_stream_proc != 0 && shedule_stream_proc_context != 0)) {
+			(*shedule_stream_proc)(shedule_stream_proc_context);
+		}
+	}
+
   /* ----------------------------------------------------------------
     Look for XLOG request (cards with indirect addressing)
     ---------------------------------------------------------------- */
@@ -957,6 +1005,77 @@ void inp_words_to_buffer (word* adr, byte* P, dword len)
     P[i++] = (byte)(w>>8);
   }
 }
+
+static void diva_reset_custom_device (volatile byte* device_address, int init, dword* device_control) {
+	*device_control = DIVA_CUSTOM_DEVICE_RST_N |
+										DIVA_CUSTOM_DEVICE_CS_N  |
+										DIVA_CUSTOM_DEVICE_ADV_N |
+										DIVA_CUSTOM_DEVICE_WR_N  |
+										DIVA_CUSTOM_DEVICE_OE_N;
+
+	diva_os_sleep(1);
+	*(volatile dword*)&device_address[DIVA_CUSTOM_CONTROL_REGISTER_OFFSET] = device_control[0];
+	diva_os_sleep (1);
+	*(volatile dword*)&device_address[DIVA_CUSTOM_CONTROL_REGISTER_OFFSET] = device_control[0] & ~DIVA_CUSTOM_DEVICE_RST_N;
+	diva_os_sleep (1);
+	if (init != 0)
+		device_control[0] &= ~DIVA_CUSTOM_DEVICE_CS_N;
+	*(volatile dword*)&device_address[DIVA_CUSTOM_CONTROL_REGISTER_OFFSET] = device_control[0];
+	diva_os_sleep (1);
+}
+
+static word diva_read_custom_device_word (volatile byte* device_address, dword address, dword device_control) {
+  dword ret;
+
+	*(volatile dword*)&device_address[DIVA_CUSTOM_LOW_ADDRESS_REGISTER] = (word)address;
+	*(volatile dword*)&device_address[DIVA_CUSTOM_HI_ADDRESS_REGISTER] = (word)(address >> 16);
+	*(volatile dword*)&device_address[DIVA_CUSTOM_CONTROL_REGISTER_OFFSET] = device_control & ~DIVA_CUSTOM_DEVICE_ADV_N;
+	*(volatile dword*)&device_address[DIVA_CUSTOM_CONTROL_REGISTER_OFFSET] =
+													device_control & ~(DIVA_CUSTOM_DEVICE_ADV_N|DIVA_CUSTOM_DEVICE_CS_N|DIVA_CUSTOM_DEVICE_OE_N);
+	*(volatile dword*)&device_address[DIVA_CUSTOM_CONTROL_REGISTER_OFFSET] = device_control & ~(DIVA_CUSTOM_DEVICE_CS_N|DIVA_CUSTOM_DEVICE_OE_N);
+	ret = *(volatile dword*)&device_address[DIVA_CUSTOM_READ_DATA_REGISTER];
+	*(volatile dword*)&device_address[DIVA_CUSTOM_CONTROL_REGISTER_OFFSET] = device_control;
+
+  return ((word)ret);
+}
+
+static void diva_write_custom_device_word (volatile byte* device_address, dword address, dword device_control, word data) {
+	*(volatile dword*)&device_address[DIVA_CUSTOM_LOW_ADDRESS_REGISTER] = (word)address;
+	*(volatile dword*)&device_address[DIVA_CUSTOM_HI_ADDRESS_REGISTER] = (word)(address >> 16);
+	*(volatile dword*)&device_address[DIVA_CUSTOM_CONTROL_REGISTER_OFFSET] = device_control & ~DIVA_CUSTOM_DEVICE_ADV_N;
+	*(volatile dword*)&device_address[DIVA_CUSTOM_CONTROL_REGISTER_OFFSET] = device_control & ~(DIVA_CUSTOM_DEVICE_ADV_N|DIVA_CUSTOM_DEVICE_CS_N);
+	*(volatile dword*)&device_address[DIVA_CUSTOM_CONTROL_REGISTER_OFFSET] = device_control & ~(DIVA_CUSTOM_DEVICE_CS_N);
+	*(volatile dword*)&device_address[DIVA_CUSTOM_WRITE_DATA_REGISTER] = (dword)data;
+	*(volatile dword*)&device_address[DIVA_CUSTOM_CONTROL_REGISTER_OFFSET] = device_control & ~(DIVA_CUSTOM_DEVICE_CS_N|DIVA_CUSTOM_DEVICE_WR_N);
+	*(volatile dword*)&device_address[DIVA_CUSTOM_CONTROL_REGISTER_OFFSET] = device_control & ~(DIVA_CUSTOM_DEVICE_CS_N);
+	*(volatile dword*)&device_address[DIVA_CUSTOM_CONTROL_REGISTER_OFFSET] = device_control;
+}
+
+static dword diva_get_custom_serial_number (PISDN_ADAPTER IoAdapter) {
+	dword device_control;
+	dword sn_lo, sn_hi;
+
+	diva_reset_custom_device (IoAdapter->reset, 1, &device_control);
+
+	diva_write_custom_device_word (IoAdapter->reset, 0, device_control, 0x90);
+	sn_lo = diva_read_custom_device_word (IoAdapter->reset, 0x85, device_control);
+	sn_hi = diva_read_custom_device_word (IoAdapter->reset, 0x85+1, device_control);
+	diva_write_custom_device_word (IoAdapter->reset, 0, device_control, 0xff);
+
+	diva_reset_custom_device (IoAdapter->reset, 0, &device_control);
+
+	if ((sn_lo == 0xffff && sn_hi == 0xffff) || (sn_lo == 0 && sn_hi == 0)) {
+		DBG_ERR(("A(%d) set serial number to 1", IoAdapter->ANum))
+		sn_lo = 1;
+		sn_hi = 0;
+	}
+
+	IoAdapter->csid       = 0;
+	IoAdapter->hw_info[0] = 0;
+
+	return (sn_lo | (sn_hi << 16));
+}
+
 /*
  Get serial number and extended info
  Only valid for PLX chip (PCI9054,...) based cards!
@@ -970,6 +1089,15 @@ dword diva_get_serial_number (PISDN_ADAPTER IoAdapter) {
   byte Slot  = (byte)IoAdapter->slotNumber;
   int pcie =
     ((IDI_PROP_SAFE(IoAdapter->cardType,HardwareFeatures) & DIVA_CARDTYPE_HARDWARE_PROPERTY_SEAVILLE) != 0);
+
+	if ((IDI_PROP_SAFE(IoAdapter->cardType,HardwareFeatures) & DIVA_CARDTYPE_HARDWARE_PROPERTY_CUSTOM_PCIE) != 0) {
+		serNo = diva_get_custom_serial_number (IoAdapter);
+
+		IoAdapter->serialNo = serNo;
+		DBG_REG(("Serial No.          : %ld", IoAdapter->serialNo))
+
+		return (0);
+	}
 
 	if (diva_get_feature_bytes (data,
 															sizeof(data),
@@ -1023,39 +1151,76 @@ dword diva_get_serial_number (PISDN_ADAPTER IoAdapter) {
 }
 
 int diva_get_feature_bytes (dword* data, dword data_length, byte Bus, byte Slot, void* hdev, int pcie) {
-	word addr, status = 0, i, j ;
-	byte addr_reg_offset = (pcie == 0) ? 0x4E : 0x82;
-	byte data_reg_offset = (pcie == 0) ? 0x50 : 0x84;
+        word addr, status = 0, i, j ;
+        word VPDCAP  = 0x82;
+        word VPDDATA = 0x84;
+        void* vaddr = 0;
+        word addr_reg_offset;
+        word data_reg_offset;
+        byte revID = 0;
 
-	if (data_length/sizeof(data[0]) < 64) {
-		return (-1);
-	}
+        // Retrieve RevisionID from PCI Config Space (HERA/FPGA-Seaville Replacement is >=3 limited to 0x10)
+        PCIread(Bus, Slot, 0x08, &revID, sizeof(revID), hdev); 
+        if ((revID >=0x3) && (revID <= 0x10)) {
+            VPDCAP  = 0x172;
+            VPDDATA = 0x174;
+            vaddr = divasa_remap_pci_bar(NULL, (divasa_get_pci_bar(Bus, Slot, 0, hdev)), 0x200);
+            DBG_TRC(("HERA/FPGA-Seaville Replacement\n"))
+            if (!vaddr) {
+                DBG_ERR(("ERROR: Unable to Map BAR[0]\n"))
+                return (-1);
+            }
+        }
 
-	data[63] = 0x0 ; /* serial number */
-	for ( i = 0 ; i < 64 ; ++i )
-	{
-		addr = i * 4 ;
-		for ( j = 0 ; j < 5; ++j )
-		{
-			PCIwrite (Bus, Slot, addr_reg_offset, &addr, sizeof(addr), hdev) ;
-			diva_os_wait (1) ;
-			PCIread (Bus, Slot, addr_reg_offset, &status, sizeof(status), hdev) ;
-			if (status & 0x8000)
-				break ;
-		}
-		if (j >= 5){
-			DBG_ERR(("EEPROM[%d] read failed (0x%x)", i * 4, addr))
-			return(-1) ;
-		}
-		PCIread (Bus, Slot, data_reg_offset, &data[i], sizeof (data[0]), hdev) ;
-		if (pcie != 0) {
-			data[i] = (data[i] >> 16) | (data[i] << 16);
-		}
-	}
+        addr_reg_offset = (pcie == 0) ? 0x4E : VPDCAP;
+        data_reg_offset = (pcie == 0) ? 0x50 : VPDDATA;
+        DBG_TRC(("VPDCAP=%04x VPDDATA=%08x", addr_reg_offset, data_reg_offset))
 
-	DBG_BLK(((char *)&data[0], data_length))
+        if (data_length/sizeof(data[0]) < 64) {
+                return (-1);
+        }
 
-	return (0);
+        data[63] = 0x0 ; /* serial number */
+        for ( i = 0 ; i < 64 ; ++i )
+        {
+                addr = i * 4 ;
+                for ( j = 0 ; j < 5; ++j )
+                {
+                        if (vaddr) {
+                            iowrite16(addr, vaddr+addr_reg_offset);
+                        } else {
+                            PCIwrite (Bus, Slot, addr_reg_offset, &addr, sizeof(addr), hdev) ;
+                        }
+                        diva_os_wait (1) ;
+                        if (vaddr) {
+                            status = ioread16(vaddr+addr_reg_offset);
+                        } else {
+                            PCIread (Bus, Slot, addr_reg_offset, &status, sizeof(status), hdev) ;
+                        }
+                        if (status & 0x8000)
+                                break ;
+                }
+               if (j >= 5){
+                        DBG_ERR(("EEPROM[%d] read failed (0x%x)", i * 4, addr))
+                        return(-1) ;
+                }
+                if (vaddr) {
+                    data[i] = ioread32(vaddr+data_reg_offset);
+                } else {
+                    PCIread (Bus, Slot, data_reg_offset, &data[i], sizeof (data[0]), hdev) ;
+                }
+                if (pcie != 0) {
+                        data[i] = (data[i] >> 16) | (data[i] << 16);
+                }
+        }
+
+        if (vaddr) {
+            divasa_unmap_pci_bar(vaddr);
+        }
+
+        DBG_BLK(((char *)&data[0], data_length))
+
+        return (0);
 }
 
 /******************************************************************************/
@@ -1136,7 +1301,7 @@ int diva_dma_write_sdram_block (PISDN_ADAPTER IoAdapter,
 	}
 
 	if (length != 0) {
-		byte *plx = (byte*)IoAdapter->reset;
+		byte *plx = &(((byte*)IoAdapter->reset)[IoAdapter->plx_offset]);
 		volatile byte  *dmacsr0  = (byte*)&plx[0xa8];
 		volatile dword *dmamode0 = (dword*)&plx[0x80];
 		volatile dword *dmadpr0  = (dword*)&plx[0x90];
@@ -1335,5 +1500,102 @@ int diva_dma_write_sdram_block (PISDN_ADAPTER IoAdapter,
 	return (ret);
 }
 
+static void diva_oob_put (PISDN_ADAPTER IoAdapter, ENTITY* e) {
+  diva_os_spin_lock_magic_t irql;
+  diva_oob_entity_queue_t* pQ = &IoAdapter->oob_q;
+
+  diva_os_enter_spin_lock (&IoAdapter->data_spin_lock, &irql, "xon");
+
+  if (pQ->count < sizeof(pQ->Id)/sizeof(pQ->Id[0])) {
+    IDI_SYNC_REQ *syncReq = (IDI_SYNC_REQ*)e ;
+    pQ->Id[pQ->write] = syncReq->diva_xdi_xon.info.Id;
+    pQ->Ch[pQ->write] = syncReq->diva_xdi_xon.info.Ch;
+    pQ->write++;
+    if (pQ->write >= sizeof(pQ->Id)/sizeof(pQ->Id[0])) {
+      pQ->write = 0;
+    }
+    pQ->count++;
+  }
+
+  diva_os_schedule_soft_isr (&IoAdapter->req_soft_isr);
+  diva_os_leave_spin_lock (&IoAdapter->data_spin_lock, &irql, "xon");
+} 
+
+static void diva_process_streaming_mapping (PISDN_ADAPTER IoAdapter, IDI_SYNC_REQ *syncReq) {
+  diva_xdi_process_streaming_mapping_t* pI = &syncReq->diva_xdi_streaming_mapping_req.info;
+	diva_os_spin_lock_magic_t irql;
+
+  switch (pI->request) {
+    case IDI_SYNC_REQ_PROCESS_STREAMING_MAPPING_ALLOC_COMMAND: {
+			int min_free_entries;
+
+      diva_os_enter_spin_lock (&IoAdapter->data_spin_lock, &irql, "stream_dma_op");
+			min_free_entries = (IoAdapter->fragment_map != 0) ? 10 : 30;
+			if (diva_nr_free_dma_entries ((struct _diva_dma_map_entry*)IoAdapter->dma_map) > min_free_entries) {
+				pI->dma_handle = diva_alloc_dma_map_entry ((struct _diva_dma_map_entry*)IoAdapter->dma_map);
+				if (pI->dma_handle >= 0) {
+					unsigned long dma_magic, dma_magic_hi;
+					void* local_addr;
+					diva_get_dma_map_entry ((struct _diva_dma_map_entry*)IoAdapter->dma_map, pI->dma_handle, &local_addr, &dma_magic);
+					diva_get_dma_map_entry_hi (IoAdapter->dma_map, pI->dma_handle, &dma_magic_hi);
+					pI->addr    = local_addr;
+					pI->dma_lo  = (dword)dma_magic;
+					pI->dma_hi  = (dword)dma_magic_hi;
+					pI->request = IDI_SYNC_REQ_PROCESS_STREAMING_COMMAND_OK;
+				}
+			}
+      diva_os_leave_spin_lock (&IoAdapter->data_spin_lock, &irql, "stream_dma_op");
+		} break;
+
+    case IDI_SYNC_REQ_PROCESS_STREAMING_MAPPING_FREE_COMMAND:
+			diva_os_enter_spin_lock (&IoAdapter->data_spin_lock, &irql, "stream_dma_op");
+			if (pI->dma_handle >= 0) {
+				diva_free_dma_map_entry((struct _diva_dma_map_entry*)IoAdapter->dma_map, pI->dma_handle);
+				pI->addr    = 0;
+				pI->dma_lo  = 0;
+				pI->dma_hi  = 0;
+				pI->request = IDI_SYNC_REQ_PROCESS_STREAMING_COMMAND_OK;
+			}
+			diva_os_leave_spin_lock (&IoAdapter->data_spin_lock, &irql, "stream_dma_op");
+      break;
+
+    case IDI_SYNC_REQ_PROCESS_STREAMING_SYSTEM_MAP_COMMAND:
+			pI->dma_lo = IoAdapter->sdram_bar;
+			pI->dma_hi = 0;
+			pI->addr   = IoAdapter->ram - IoAdapter->shared_ram_offset;
+			pI->request = IDI_SYNC_REQ_PROCESS_STREAMING_COMMAND_OK;
+      break;
+
+		case IDI_SYNC_REQ_PROCESS_STREAMING_SYSTEM_INSTALL_CALLBACK_COMMAND:
+			diva_os_enter_spin_lock (&IoAdapter->data_spin_lock, &irql, "stream_dma_op");
+			IoAdapter->shedule_stream_proc = pI->shedule_stream_proc;
+			IoAdapter->shedule_stream_proc_context = pI->shedule_stream_proc_context;
+			diva_os_leave_spin_lock (&IoAdapter->data_spin_lock, &irql, "stream_dma_op");
+			pI->shedule_stream_proc         = 0;
+			pI->shedule_stream_proc_context = 0;
+			break;
+  }
+}
+
+/*
+  Dummy functions for L series
+	*/
+byte no_mem_in (ADAPTER *a, void *addr) { return (0); }
+word no_mem_inw (ADAPTER *a, void *addr) { return (0); }
+void no_mem_in_dw (ADAPTER *a, void *addr, dword* data, int dwords) { WRITE_DWORD(data, 0); }
+void no_mem_in_buffer (ADAPTER *a, void *addr, void *buffer, word length) { memset(buffer, 0x00, length); }
+void no_mem_look_ahead (ADAPTER *a, PBUFFER *RBuffer, ENTITY *e) { PISDN_ADAPTER IoAdapter = (PISDN_ADAPTER)a->io; IoAdapter->RBuffer.length = 0; e->RBuffer = (DBUFFER *)&IoAdapter->RBuffer; }
+void no_mem_out (ADAPTER *a, void *addr, byte data) { }
+void no_mem_outw (ADAPTER *a, void *addr, word data) { }
+void no_mem_out_dw (ADAPTER *a, void *addr, const dword* data, int dwords) { }
+void no_mem_out_buffer (ADAPTER *a, void *addr, void *buffer, word length) { }
+void no_mem_inc (ADAPTER *a, void *addr) { }
+void no_pr_out(ADAPTER * a) { }
+dword no_ram_offset (ADAPTER* a) { return (0); }
+byte no_dpc(ADAPTER * a) { return FALSE; }
+byte no_test_int(ADAPTER * a) { return (0); }
+void no_clear_int(ADAPTER * a) { }
+void no_cpu_trapped (PISDN_ADAPTER IoAdapter) { }
+int no_load (PISDN_ADAPTER IoAdapter) { return (TRUE); }
 
 

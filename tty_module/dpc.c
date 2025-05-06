@@ -1,12 +1,13 @@
 
 /*
  *
-  Copyright (c) Dialogic(R), 2009.
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2009-2014.
  *
   This source file is supplied for the use with
-  Dialogic range of DIVA Server Adapters.
+  Sangoma (formerly Dialogic) range of DIVA Server Adapters.
  *
-  Dialogic(R) File Revision :    2.1
+  File Revision :    2.1
  *
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -89,7 +90,7 @@ static spinlock_t diva_dpc_q_lock;
 	*/
 extern void diva_tty_process_write_dpc (void);
 extern int Channel_Count;
-extern volatile int dpc_init_complete;
+extern atomic_t dpc_init_complete;
 dword diva_tty_dpc_scheduler_protection_channel_count = 120;
 
 /*
@@ -107,7 +108,12 @@ typedef struct work_struct* diva_work_queue_fn_parameter_t;
 
 static void diva_tty_dpc_proc (diva_work_queue_fn_parameter_t context);
 #endif
-static void diva_timer_function (struct timer_list *);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,14,0)
+static void diva_timer_function (unsigned long data);
+#else
+static void diva_timer_function (struct timer_list *t);
+#endif
+
 static void diva_process_timer_ticks (void);
 
 /* --------------------------------------------------------------------------
@@ -143,7 +149,7 @@ static spinlock_t diva_tty_timer_lock;
 #define DIVA_TIMER_RES_MS	20
 #define DIVA_TIMER_TO ((DIVA_TIMER_RES_MS * HZ) / 1000)
 static struct  timer_list	diva_timer_id;
-static atomic_t					divas_timer_running;
+atomic_t		divas_timer_running;
 static unsigned long diva_to;
 static volatile unsigned long last_dpc_time = 0;
 static unsigned long diva_timer_ticks; /* in DIVA_TIMER_RES_MS */
@@ -184,10 +190,16 @@ int	diva_start_main_dpc (void) {
 	if (divas_dpc_pid != (-1))
 #endif /* } */
 	{
-		timer_setup(&diva_timer_id, diva_timer_function, 0);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,14,0)			  
+		init_timer (&diva_timer_id);
 		diva_timer_ticks = 0;
 
-		atomic_set(&divas_timer_running, 1);
+		diva_timer_id.function	= (void *)diva_timer_function;
+		diva_timer_id.data		= (unsigned long)&diva_timer_ticks;
+#else
+		timer_setup(&diva_timer_id, diva_timer_function, 0);
+		diva_timer_ticks = 0;
+#endif
 		if (!(diva_to = DIVA_TIMER_TO)) {
 			diva_to = 1;
 		}
@@ -209,7 +221,6 @@ static void diva_process_queued_dpc (void) {
 	unsigned long old_irql;
 	diva_entity_queue_t q;
 	sys_DPC* dpc;
-
 	old_irql = eicon_splimp ();
 
 #if defined(DIVA_USES_MUTEX)
@@ -266,7 +277,7 @@ static int diva_tty_dpc_proc (void* context) {
 			spin_unlock_irq(&current->sigmask_lock);
     } else {
 			(void)test_and_clear_bit (1, &divas_dpc_count);
-			if (dpc_init_complete == 1) {
+			if (atomic_read(&dpc_init_complete) == 1) {
 				diva_process_timer_ticks ();
 				diva_process_queued_dpc();
 				diva_tty_process_write_dpc ();
@@ -292,7 +303,7 @@ static void diva_tty_dpc_proc (diva_work_queue_fn_parameter_t context) {
 				break;
 			}
 
-			if (dpc_init_complete == 1) {
+			if (atomic_read(&dpc_init_complete) == 1) {
 				diva_process_timer_ticks ();
 				diva_process_queued_dpc();
 				diva_tty_process_write_dpc ();
@@ -347,7 +358,14 @@ void diva_shutdown_main_dpc (void) {
 	}
 
 	atomic_set(&divas_dpc_thread_running, 0);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6,0,0) || \
+	(defined(RHEL_RELEASE_CODE) && LINUX_VERSION_CODE >= KERNEL_VERSION(5,14,0))
+	/* This function removed in-tree in 6.x and eventually became a kernel warning, which RHEL 9.5 backported it
+	*/
+	cancel_work_sync(&tty_dpc);
+#else
 	flush_scheduled_work();
+#endif
 #endif /* } */
 }
 
@@ -419,7 +437,11 @@ int sysCancelDpc (sys_DPC *Dpc) {
 /*
 	Timer callback. UN-SAFE, and can run in interrupt context
 	*/
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,14,0)
+static void diva_timer_function (unsigned long data) {
+#else
 static void diva_timer_function (struct timer_list *t) {
+#endif
 	unsigned long flags;
 
 	if (!atomic_read(&divas_timer_running)) {
@@ -438,7 +460,11 @@ static void diva_timer_function (struct timer_list *t) {
 	schedule_work(&tty_dpc);
 #endif /* } */
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,14,0)
 	mod_timer (&diva_timer_id, jiffies + diva_to);
+#else
+	mod_timer (t, jiffies + diva_to);
+#endif
 	atomic_set(&divas_timer_running, 1);
 }
 

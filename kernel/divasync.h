@@ -1,12 +1,16 @@
 
 /*
  *
-  Copyright (c) Dialogic, 2007.
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
  *
   This source file is supplied for the use with
-  Dialogic range of DIVA Server Adapters.
+  Sangoma (formerly Dialogic) range of Adapters.
  *
-  Dialogic File Revision :    2.1
+  File Revision :    2.1
  *
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -23,6 +27,9 @@
   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  */
+
+#include <linux/version.h>
+
 #ifndef __DIVA_SYNC__H  
 #define __DIVA_SYNC__H
 #define IDI_SYNC_REQ_REMOVE             0x00
@@ -91,6 +98,7 @@ typedef struct _diva_xdi_get_extended_xdi_features {
    features[1]
   */
 #define DIVA_XDI_EXTENDED_FEATURE_FC_OK_LABEL     0x01
+#define DIVA_XDI_EXTENDED_FEATURE_XON_OOB_REQ     0x02
 #define DIVA_XDI_EXTENDED_FEATURES_MAX_SZ    2
 /******************************************************************************/
 #define IDI_SYNC_REQ_XDI_GET_ADAPTER_SDRAM_BAR   0x93
@@ -177,6 +185,9 @@ typedef struct _diva_xdi_get_clock_data {
   dword bus_addr_hi;
   dword length;
   void* addr;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,16,0)
+  void* pci_dev_handle;
+#endif
 } diva_xdi_get_clock_data_t;
 /******************************************************************************/
 #define IDI_SYNC_REQ_XDI_ADAPTER_REMOVED_NOT_AVAILABLE 0xA4
@@ -246,6 +257,7 @@ typedef struct _diva_xdi_clock_control_command_on {
   diva_xdi_clock_isr_proc_t isr_callback;
   const void*               isr_callback_context;
   dword                     port;
+	dword* volatile           sample_counter;
 } diva_xdi_clock_control_command_on;
 typedef struct _diva_xdi_clock_control_command_off {
   dword                     port;
@@ -261,12 +273,54 @@ typedef struct _diva_xdi_clock_control_command {
 /******************************************************************************/
 #define IDI_SYNC_REQ_GET_XDI_IFC 0xAA
 typedef struct _diva_xdi_idi_ifc {
-	void* (*ifc_alloc_proc_fn)(ENTITY*, PIDI_CALL, int, byte, byte, dword);
-	void  (*request_proc_fn)(void* context);
-	void  (*ctrl_proc_fn)(void* context, int, dword);
-	void  (*ifc_release_proc_fn)(void*);
+  void* (*ifc_alloc_proc_fn)(ENTITY*, PIDI_CALL, int, byte, byte, dword);
+  void  (*request_proc_fn)(void* context);
+  void  (*ctrl_proc_fn)(void* context, int, dword);
+  void  (*ifc_release_proc_fn)(void*);
 } diva_xdi_idi_ifc_t;
 /******************************************************************************/
+#define IDI_SYNC_REQ_PROCESS_STREAMING_MAPPING 0xAB
+#define IDI_SYNC_REQ_PROCESS_STREAMING_COMMAND_OK            0
+#define IDI_SYNC_REQ_PROCESS_STREAMING_MAPPING_ALLOC_COMMAND 1
+#define IDI_SYNC_REQ_PROCESS_STREAMING_MAPPING_FREE_COMMAND  2
+#define IDI_SYNC_REQ_PROCESS_STREAMING_SYSTEM_MAP_COMMAND    3
+#define IDI_SYNC_REQ_PROCESS_STREAMING_SYSTEM_INSTALL_CALLBACK_COMMAND 4
+typedef struct _diva_xdi_process_streaming_mapping {
+  dword request;  /* 0 - alloc, 1 - release, 2 - request system mapping */
+  dword dma_lo;   /* DMA addr lo or system lo */
+  dword dma_hi;   /* DMA addr hi or system hi */
+  void* addr;     /* DMA or system mapped address */
+  int dma_handle; /* DMA handle */
+	void (*shedule_stream_proc)(const void* shedule_stream_proc_context);
+	const void* shedule_stream_proc_context;
+} diva_xdi_process_streaming_mapping_t;
+/******************************************************************************/
+#define IDI_SYNC_REQ_HW_ACCESS 0xAC
+typedef struct _diva_xdi_hw_access {
+  void* hdev;
+  void* resource;
+  dword bar[4];
+  void* addr[4];
+  void* (*alloc_dma_page_proc)(void* hdev, dword* lo, dword* hi);
+  void  (*free_dma_page_proc)(void* hdev, void* addr, dword lo, dword hi);
+	int (*connect_irq_proc)(void*, int (*)(void*), void*);
+	dword logical_adapter_number;
+  dword serial_number;
+} diva_xdi_hw_access_t;
+/******************************************************************************/
+#define IDI_SYNC_REQ_XON 0xAD
+typedef struct _diva_xdi_xon {
+ byte Id;
+ byte Ch;
+} diva_xdi_xon_t;
+/******************************************************************************/
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,16,0)
+#define IDI_SYNC_REQ_XDI_UNMAP_CLOCK_DATA_ADDR 0xAE
+/*
+  Used to unmap clock data DMA
+  */
+/******************************************************************************/
+#endif
 /*
  * IDI_SYNC_REQ_SERIAL_HOOK - special interface for the DIVA Mobile card
  */
@@ -597,6 +651,21 @@ typedef union
     unsigned char Rc;
     diva_xdi_idi_ifc_t info;
   } diva_xdi_idi_ifc_req;
+  struct {
+    unsigned char Req;
+    unsigned char Rc;
+    diva_xdi_process_streaming_mapping_t info;
+  } diva_xdi_streaming_mapping_req;
+  struct {
+    unsigned char Req;
+    unsigned char Rc;
+    diva_xdi_hw_access_t info;
+  } diva_xdi_hw_access;
+ struct {
+    unsigned char Req;
+    unsigned char Rc;
+  diva_xdi_xon_t info;
+ } diva_xdi_xon;
 } IDI_SYNC_REQ;
 /******************************************************************************/
 #endif /* __DIVA_SYNC__H */  

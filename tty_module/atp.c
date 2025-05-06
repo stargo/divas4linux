@@ -1,12 +1,13 @@
 
 /*
  *
-  Copyright (c) Dialogic(R), 2009.
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2009-2014.
  *
   This source file is supplied for the use with
-  Dialogic range of DIVA Server Adapters.
+  Sangoma (formerly Dialogic) range of DIVA Server Adapters.
  *
-  Dialogic(R) File Revision :    2.1
+  File Revision :    2.1
  *
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -133,9 +134,6 @@ unsigned long global_mode = GLOBAL_MODE_NONE;
 static char global_mode_name [24] = "none     ";
 static void atRing (ISDN_PORT *P);
 static int atPrintCID (ISDN_PORT* P, char* Str, int in_ring, int type, const char* rsp, int limit);
-
-extern void* diva_mem_malloc (dword length);
-extern void diva_mem_free    (void* ptr);
 
 /* Unimodem response codes and associated modem response strings (not	*/
 /* completely exact, unimodem knows only the CONNECT response code 2).	*/
@@ -1545,7 +1543,7 @@ static int atDialError (byte Cause)
 /* translate disconnect cause to response code */
 
 	switch (Cause) {
-case CAUSE_FATAL	: return R_NO_DIALTONE;
+	case CAUSE_FATAL	: return R_NO_DIALTONE;
 	case CAUSE_CONGESTION	:
 	case CAUSE_AGAIN	: /* no free channel to set up call */
 	case CAUSE_BUSY		: return R_BUSY;
@@ -3448,7 +3446,7 @@ static int atDollar (ISDN_PORT* P, byte** Arg) {
 
 static int atAmper (ISDN_PORT *P, byte **Arg)
 {
-	byte *p, *v, func, *tmp;
+	byte *p, *v, func, tmp [2048];
 	int  Val, i; AT_CONFIG *prf;
 	
 	p    = *Arg;
@@ -3499,10 +3497,6 @@ static int atAmper (ISDN_PORT *P, byte **Arg)
 	case 'v' : /* show current settings and factory profiles */
 		i = /* hyperterminal patches */
 		((P->At.Wait | P->At.Block | P->At.Defer | P->At.Split) != 0);
-		tmp = diva_mem_malloc(2048);
-		if (tmp == NULL) {
-			return (R_ERROR);
-		}
 		v = tmp;
 			v += sprintf (v,
 (byte*)"\r\n\
@@ -3553,7 +3547,6 @@ PROFILE %2d: E%d V%d Q%d X%d &D%d &K%d &Q%d S0=%d +iM%d +iP%d +iS%d/%d +iB%d",
 
 		atRspFlush (P);
 		portRxEnqueue (P, tmp, (word) (v - tmp), 0);
-		diva_mem_free(tmp);
 
 		break;
 
@@ -4610,6 +4603,15 @@ int portDown (void *C, void *hP, byte Cause, byte q931_cause)
 	}
 	case P_ANSWERED	:
 		atRsp (P, atDialError (Cause));
+		switch (atDialError (Cause))
+		{
+		case R_NO_DIALTONE:
+		case R_BUSY:
+		case R_NO_ANSWER:
+		case R_NO_CARRIER:
+			LostCarrier = 0 ;
+			break;
+		}
 		break;
 
 	case P_DATA	:
@@ -4622,6 +4624,7 @@ int portDown (void *C, void *hP, byte Cause, byte q931_cause)
 		if ((global_options & DIVA_ISDN_AT_RSP_IF_RINGING) != 0 &&
 				(*P->pMsrShadow & MS_RLSD_ON) == 0 && P->Mode  != P_MODE_FAX) {
 			atRsp (P, R_NO_CARRIER);
+			LostCarrier = 0;
 		}
 		break;
 
@@ -4681,7 +4684,7 @@ void *portRing (void *C, ISDN_CONN_PARMS *Parms)
 	ISDN_PORT_DESC	*D;
 	ISDN_PORT	*P, *bestP, *anyP;
 	int		sizeDest, sizeAcpt, Want;
-	int pass;
+	int pass, len;
 
 	/* see if we want this call */
 
@@ -4797,7 +4800,20 @@ void *portRing (void *C, ISDN_CONN_PARMS *Parms)
 	} else {
 		sprintf ((char*)P->At.Ring, "%s(%s)", Parms->Orig, Parms->Orig_1);
 	}
-	str_cpy ((char*)P->At.RingName, (char *)Parms->OrigName);
+	if (Parms->OrigName[0] != '\0')
+	{
+		str_cpy ((char*)P->At.RingName, (char*)Parms->OrigName);
+	}
+	else
+	{
+		for (len = 0; len < Parms->DisplayIE[0]; len++)
+		{
+			P->At.RingName[len] = ((Parms->DisplayIE[1+len] & 0x7f) >= 0x20 &&
+				(Parms->DisplayIE[1+len] & 0x7f) <= 0x7e) ? // is a printable char
+				Parms->DisplayIE[1+len] & 0x7f : ' ';
+		}
+		P->At.RingName[Parms->DisplayIE[0]] = '\0';
+	}
 
 	if (P->At.f.Regs[0] == 0) {
 		/* set MsrShadow, generate RING response and notify */

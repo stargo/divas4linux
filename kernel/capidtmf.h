@@ -1,11 +1,16 @@
+
 /*
  *
-  Copyright (c) Dialogic, 2007.
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
  *
   This source file is supplied for the use with
-  Dialogic range of DIVA Server Adapters.
+  Sangoma (formerly Dialogic) range of Adapters.
  *
-  Dialogic File Revision :    2.1
+  File Revision :    2.1
  *
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -22,6 +27,7 @@
   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  */
+
 #ifndef CAPIDTMF_H_  
 #define CAPIDTMF_H_
 /*---------------------------------------------------------------------------*/
@@ -34,14 +40,15 @@
 #define DSPDTMF_RX_HIGH_EXCEEDING_LOW_DEFAULT	10	/* dB */
 #define DSPDTMF_RX_LOW_EXCEEDING_HIGH_DEFAULT	10	/* dB */
 #define DSPDTMF_RX_HARMONICS_SEL_DEFAULT	12	/* dB */
+#define DSPDTMF_RX_FAR_SELECTIVITY_DEFAULT	16	/* dB */
 #define CAPIDTMF_RECV_BASE_FREQUENCY_COUNT   (CAPIDTMF_LOW_GROUP_FREQUENCIES + CAPIDTMF_HIGH_GROUP_FREQUENCIES)
 #define CAPIDTMF_RECV_GUARD_FREQUENCY_COUNT  8
 #define CAPIDTMF_RECV_TOTAL_FREQUENCY_COUNT  (CAPIDTMF_RECV_BASE_FREQUENCY_COUNT + CAPIDTMF_RECV_GUARD_FREQUENCY_COUNT)
-#define CAPIDTMF_RECV_POSITIVE_COEFF_COUNT   16
+#define CAPIDTMF_RECV_POSITIVE_COEFF_COUNT   CAPIDTMF_RECV_TOTAL_FREQUENCY_COUNT
 #define CAPIDTMF_RECV_NEGATIVE_COEFF_COUNT   (CAPIDTMF_RECV_TOTAL_FREQUENCY_COUNT - CAPIDTMF_RECV_POSITIVE_COEFF_COUNT)
-#define CAPIDTMF_RECV_ACCUMULATE_CYCLES      205
-#define CAPIDTMF_RECV_FUNDAMENTAL_OFFSET     (0xff35L * 2)
-#define CAPIDTMF_RECV_FUNDAMENTAL_DECREMENT  (0x0028L * 2)
+#define CAPIDTMF_RECV_ACCUMULATE_CYCLES      160
+#define CAPIDTMF_RECV_FUNDAMENTAL_OFFSET     (0xf3b9L * 2)
+#define CAPIDTMF_RECV_FUNDAMENTAL_DECREMENT  (0x0019L * 2)
 #define CAPIDTMF_RECV_DIGIT_BUFFER_SIZE      32
 #define CAPIDTMF_RECV_STATE_IDLE             0x00
 #define CAPIDTMF_RECV_STATE_DTMF_ACTIVE      0x01

@@ -18,7 +18,7 @@
 										nr_xdi_responses++;
 										printf "diva_xdi_response_instance[%s]=\"%s\"\n", nr_xdi_responses, 0
 										printf "diva_xdi_response_value[%s]=\"%s\"\n", nr_xdi_responses, response
-										printf "diva_xdi_response_adapter_name[%s]='%s'\n", nr_xdi_responses, "Diva M-Adapter driver"
+										printf "diva_xdi_response_adapter_name[%s]='%s'\n", nr_xdi_responses, "Diva drivers"
 										printf "diva_xdi_response_owner[%s]='%s'\n", nr_xdi_responses, owner
 									} else if (owner == "0xb") {
 										nr_xdi_responses++;

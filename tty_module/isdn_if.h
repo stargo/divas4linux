@@ -1,12 +1,13 @@
 
 /*
  *
-  Copyright (c) Dialogic(R), 2009.
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2009-2014.
  *
   This source file is supplied for the use with
-  Dialogic range of DIVA Server Adapters.
+  Sangoma (formerly Dialogic) range of DIVA Server Adapters.
  *
-  Dialogic(R) File Revision :    2.1
+  File Revision :    2.1
  *
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -40,6 +41,7 @@
 # define ISDN_MAX_FRAME		2048
 # define ISDN_MAX_V120_FRAME	256
 # define ISDN_MAX_PARTY_NAME 64
+# define ISDN_MAX_DISPLAY_IE 84
 
 
 /* Capabilities								*/
@@ -299,6 +301,7 @@ typedef struct ISDN_CONN_PARMS
 	unsigned char	Orig_1[ISDN_MAX_NUMBER] ;		/* second origination number		*/
 	unsigned char	OrigSub[ISDN_MAX_SUBADDR] ;	/* origination subaddress	*/
 	unsigned char	OrigName[ISDN_MAX_PARTY_NAME] ;		/* origination number		*/
+	unsigned char   DisplayIE[ISDN_MAX_DISPLAY_IE] ;/* Display info element          */
 	unsigned char	Bc[ISDN_MAX_BC] ;			/* bearer capabilities		*/
 	unsigned char	Llc[ISDN_MAX_LLC] ;			/* low layer compatibility	*/
 	unsigned char	Service ;					/* 1TR6 Service	Indicator	*/
@@ -426,6 +429,7 @@ ISDN_REQUESTS *	isdnBind (ISDN_INDICATIONS *Indications,
 #define DIVA_FAX_ALLOW_HIRES         0x10
 #define DIVA_ISDN_IGNORE_NUMBER_TYPE 0x20
 #define DIVA_ISDN_AT_RSP_IF_RINGING  0x40
+#define DIVA_ISDN_DIAL_RR            0x80
 
 #define BIT_T_DETECT_ON_S  1 /* Use BT detection only if the owner is not clear */
 #define BIT_T_DETECT_ON_D  2 /* Use BT detection only if not modem */

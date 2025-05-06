@@ -1,12 +1,13 @@
 
 /*
  *
-  Copyright (c) Dialogic(R), 2009.
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2009-2014.
  *
   This source file is supplied for the use with
-  Dialogic range of DIVA Server Adapters.
+  Sangoma (formerly Dialogic) range of DIVA Server Adapters.
  *
-  Dialogic(R) File Revision :    2.1
+  File Revision :    2.1
  *
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -727,6 +728,12 @@ static MAN_INFO global_options_dir[] = {
 											(void*)global_options_proc, (void*)DIVA_ISDN_AT_RSP_IF_RINGING,
                       0,            0
   },
+  {"DIVA_ISDN_DIAL_RR",
+											MI_BOOLEAN,   MI_WRITE,          MI_CALL,              1,
+											(void*)global_options_proc, (void*)DIVA_ISDN_DIAL_RR,
+                      0,            0
+  },
+
   {"TTY_INIT",        MI_ASCIIZ,    MI_WRITE,          MI_CALL,              64,
                       (void*)tty_init_proc,0,
                       0,            0

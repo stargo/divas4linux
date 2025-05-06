@@ -1,11 +1,16 @@
+
 /*
  *
-  Copyright (c) Dialogic, 2008.
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
  *
   This source file is supplied for the use with
-  Dialogic range of DIVA Server Adapters.
+  Sangoma (formerly Dialogic) range of Adapters.
  *
-  Dialogic File Revision :    2.1
+  File Revision :    2.1
  *
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -22,6 +27,7 @@
   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  */
+
 #include "platform.h"
 #include <linux/stdarg.h>
 #include "debuglib.h"
@@ -31,7 +37,8 @@
 #include "pr_pc.h"
 #include "di_defs.h"
 #include "dsp_defs.h"
-#include "di.h" 
+#include "di.h"
+#include "vidi_di.h"
 #include "io.h"
 
 #include "xdi_msg.h"
@@ -41,6 +48,7 @@
 #include "mi_pc.h"
 #include "dsrv_analog.h"
 #include "dsrv4bri.h"
+#include "divatest.h" /* Adapter test framework */
 
 /*
 **  IMPORTS
@@ -48,8 +56,6 @@
 extern void* diva_xdiLoadFileFile;
 extern dword diva_xdiLoadFileLength;
 extern void diva_xdi_display_adapter_features (int card);
-extern int qBri_FPGA_download (PISDN_ADAPTER IoAdapter);
-extern void start_analog_hardware (PISDN_ADAPTER IoAdapter);
 extern int diva_card_read_xlog (diva_os_xdi_adapter_t* a);
 extern void prepare_analog_functions (PISDN_ADAPTER IoAdapter);
 extern void diva_4pri_memcpy (PISDN_ADAPTER IoAdapter, byte* mem, dword address, const byte* src, dword length);
@@ -88,7 +94,7 @@ static int diva_analog_write_sdram_block (PISDN_ADAPTER IoAdapter,
 static int diva_analog_start_adapter (PISDN_ADAPTER IoAdapter,
                                     dword start_address,
                                     dword features);
-static int check_analog_interrupt (PISDN_ADAPTER IoAdapter);
+static void check_analog_interrupt (PISDN_ADAPTER IoAdapter);
 static int diva_analog_stop_adapter (diva_os_xdi_adapter_t* a);
 
 /*
@@ -247,7 +253,7 @@ diva_analog_init_card (diva_os_xdi_adapter_t* a)
 
   a->xdi_adapter.Channels = CardProperties[a->CardOrdinal].Channels;
   a->xdi_adapter.e_max = CardProperties[a->CardOrdinal].E_info;
-  a->xdi_adapter.e_tbl = diva_os_malloc (0, a->xdi_adapter.e_max * sizeof(E_INFO)); 
+  a->xdi_adapter.e_tbl = diva_os_malloc (0, a->xdi_adapter.e_max * sizeof(E_INFO));
 
   if (!a->xdi_adapter.e_tbl) {
     diva_analog_cleanup_adapter (a);
@@ -269,14 +275,16 @@ diva_analog_init_card (diva_os_xdi_adapter_t* a)
   if (a->CardOrdinal == CARDTYPE_DIVASRV_ANALOG_2PORT ||
       a->CardOrdinal == CARDTYPE_DIVASRV_ANALOG_2P_PCIE ||
       a->CardOrdinal == CARDTYPE_DIVASRV_V_ANALOG_2P_PCIE ||
-      a->CardOrdinal == CARDTYPE_DIVASRV_V_ANALOG_2PORT) {
+      a->CardOrdinal == CARDTYPE_DIVASRV_V_ANALOG_2PORT ||
+      a->CardOrdinal == CARDTYPE_DIVASRV_V_ANALOG_2P_PCIE_HYPERCOM) {
     a->dsp_mask = 0x00000003;
     strcpy (a->xdi_adapter.req_soft_isr.dpc_thread_name, "kdivas2and");
-  }  
+  }
   else if (a->CardOrdinal == CARDTYPE_DIVASRV_ANALOG_4PORT ||
       a->CardOrdinal == CARDTYPE_DIVASRV_ANALOG_4P_PCIE ||
       a->CardOrdinal == CARDTYPE_DIVASRV_V_ANALOG_4P_PCIE ||
-      a->CardOrdinal == CARDTYPE_DIVASRV_V_ANALOG_4PORT) {
+      a->CardOrdinal == CARDTYPE_DIVASRV_V_ANALOG_4PORT ||
+      a->CardOrdinal == CARDTYPE_DIVASRV_V_ANALOG_4P_PCIE_HYPERCOM) {
     a->dsp_mask = 0x0000000f;
     strcpy (a->xdi_adapter.req_soft_isr.dpc_thread_name, "kdivas4and");
   } else {
@@ -297,7 +305,8 @@ diva_analog_init_card (diva_os_xdi_adapter_t* a)
   a->xdi_adapter.isr_soft_isr.object = a->xdi_adapter.req_soft_isr.object;
   prepare_analog_functions (&a->xdi_adapter);
 
-  diva_init_dma_map (a->resources.pci.hdev, (struct _diva_dma_map_entry**)&a->xdi_adapter.dma_map, 32);
+  diva_init_dma_map (a->resources.pci.hdev, (struct _diva_dma_map_entry**)&a->xdi_adapter.dma_map,
+											(8/*Ch*/+8/*Sig*/+2/*NULLPlci*/)*2/*Rx+Tx*/ + 2/*RxTxBuffers*/ + 1/*MAN*/ + 32/*LI*/);
 
   /*
     Set up hardware related pointers
@@ -380,6 +389,8 @@ diva_analog_cleanup_adapter (diva_os_xdi_adapter_t* a)
   diva_os_destroy_spin_lock (&a->xdi_adapter.isr_spin_lock, "unload");
   diva_os_destroy_spin_lock (&a->xdi_adapter.data_spin_lock,"unload");
 
+	diva_cleanup_vidi (&a->xdi_adapter);
+
   if (a->xdi_adapter.e_tbl) {
     diva_os_free (0, a->xdi_adapter.e_tbl);
   }
@@ -404,7 +415,7 @@ diva_analog_cleanup_adapter (diva_os_xdi_adapter_t* a)
     Unregister I/O
   */
   if (a->resources.pci.bar[1] != 0 && a->resources.pci.addr[1]) {
-    diva_os_register_io_port (a, 0, a->resources.pci.bar[1], 
+    diva_os_register_io_port (a, 0, a->resources.pci.bar[1],
       _analog_bar_length[1],
       &a->port_name[0]);
     a->resources.pci.bar[1]  = 0;
@@ -497,7 +508,7 @@ diva_analog_cmd_card_proc (struct _diva_os_xdi_adapter* a,
 
     case DIVA_XDI_UM_CMD_WRITE_FPGA:
       if (!a->xdi_adapter.ControllerNumber) {
-        ret = diva_analog_write_fpga_image (a, (byte*)&cmd[1], 
+        ret = diva_analog_write_fpga_image (a, (byte*)&cmd[1],
                                           cmd->command_data.write_fpga.image_length);
       }
       break;
@@ -530,14 +541,13 @@ diva_analog_cmd_card_proc (struct _diva_os_xdi_adapter* a,
       ret = 0;
       break;
 
-    case DIVA_XDI_UM_CMD_ADAPTER_TEST:
-      if (a->xdi_adapter.DivaAdapterTestProc) {
+	 case DIVA_XDI_UM_CMD_ADAPTER_TEST:
+		if (a->xdi_adapter.DivaAdapterTestProc) {
 				dword real_memory_size, mapped_memory_size, segments, i;
 				volatile dword* las0ba_ctrl;
 				dword las0ba_original;
 
 				a->xdi_adapter.AdapterTestMask = cmd->command_data.test.test_command;
-
 				if (DIVA_ANALOG_PCIE(&a->xdi_adapter) == 0) {
 					real_memory_size = mapped_memory_size = _analog_bar_length[2];
 					las0ba_ctrl = &las0ba_original;
@@ -552,30 +562,30 @@ diva_analog_cmd_card_proc (struct _diva_os_xdi_adapter* a,
 				segments = real_memory_size/mapped_memory_size;
 
 				for (i = 0; i < segments; i++) {
-          if (i != 0) {
-            *las0ba_ctrl = (dword)(las0ba_original + i * mapped_memory_size);
-          }
-          if ((*(a->xdi_adapter.DivaAdapterTestProc))(&a->xdi_adapter) == 0) {
-            DBG_LOG(("Memory test[%d] : OK", i))
-            ret = 0;
-          } else {
-            DBG_ERR(("Memory test[%d] : FAILED", i))
-            ret = -1;
-            break;
-          }
+		 			if (i != 0) {
+						*las0ba_ctrl = (dword)(las0ba_original + i * mapped_memory_size);
+					}
+					if ((*(a->xdi_adapter.DivaAdapterTestProc))(&a->xdi_adapter) == 0) {
+						DBG_LOG(("Memory test[%d] : OK", i))
+						ret = 0;
+					} else {
+						DBG_ERR(("Memory test[%d] : FAILED", i))
+						ret = -1;
+						break;
+			 		}
 				}
 				*las0ba_ctrl = las0ba_original;
-      } else {
-        ret = -1;
-      }
-      a->xdi_adapter.AdapterTestMask = 0;
-      break;
+		} else {
+		  ret = -1;
+		}
+		a->xdi_adapter.AdapterTestMask = 0;
+		break;
 
     case DIVA_XDI_UM_CMD_ALLOC_DMA_DESCRIPTOR:
       if (a->xdi_adapter.dma_map) {
         a->xdi_mbox.data_length = sizeof(diva_xdi_um_cfg_cmd_data_alloc_dma_descriptor_t);
         if ((a->xdi_mbox.data = diva_os_malloc (0, a->xdi_mbox.data_length))) {
-          diva_xdi_um_cfg_cmd_data_alloc_dma_descriptor_t* p = 
+          diva_xdi_um_cfg_cmd_data_alloc_dma_descriptor_t* p =
             (diva_xdi_um_cfg_cmd_data_alloc_dma_descriptor_t*)a->xdi_mbox.data;
           int nr = diva_alloc_dma_map_entry ((struct _diva_dma_map_entry*)a->xdi_adapter.dma_map);
           unsigned long dma_magic, dma_magic_hi;
@@ -638,6 +648,47 @@ diva_analog_cmd_card_proc (struct _diva_os_xdi_adapter* a,
 			if ((a->xdi_mbox.data = diva_os_malloc (0, a->xdi_mbox.data_length)) != 0) {
 				memcpy (a->xdi_mbox.data, a->xdi_adapter.hw_info, sizeof(a->xdi_adapter.hw_info));
 				a->xdi_mbox.status = DIVA_XDI_MBOX_BUSY;
+				ret = 0;
+			}
+			break;
+
+    case DIVA_XDI_UM_CMD_INIT_VIDI:
+      if (diva_init_vidi (&a->xdi_adapter) == 0) {
+        PISDN_ADAPTER IoAdapter = &a->xdi_adapter;
+
+        a->xdi_mbox.data_length = sizeof(diva_xdi_um_cfg_cmd_data_init_vidi_t);
+        if ((a->xdi_mbox.data = diva_os_malloc (0, a->xdi_mbox.data_length)) != 0) {
+          diva_xdi_um_cfg_cmd_data_init_vidi_t* vidi_data =
+                              (diva_xdi_um_cfg_cmd_data_init_vidi_t*)a->xdi_mbox.data;
+
+          vidi_data->req_magic_lo = IoAdapter->host_vidi.req_buffer_base_dma_magic;
+          vidi_data->req_magic_hi = IoAdapter->host_vidi.req_buffer_base_dma_magic_hi;
+          vidi_data->ind_magic_lo = IoAdapter->host_vidi.ind_buffer_base_dma_magic;
+          vidi_data->ind_magic_hi = IoAdapter->host_vidi.ind_buffer_base_dma_magic_hi;
+          vidi_data->dma_segment_length    = IoAdapter->host_vidi.dma_segment_length;
+          vidi_data->dma_req_buffer_length = IoAdapter->host_vidi.dma_req_buffer_length;
+          vidi_data->dma_ind_buffer_length = IoAdapter->host_vidi.dma_ind_buffer_length;
+          vidi_data->dma_ind_remote_counter_offset = IoAdapter->host_vidi.dma_ind_buffer_length;
+
+          a->xdi_mbox.status = DIVA_XDI_MBOX_BUSY;
+          ret = 0;
+        }
+      }
+      break;
+
+		case DIVA_XDI_UM_CMD_SET_VIDI_MODE:
+			if (a->xdi_adapter.ControllerNumber == 0 && a->xdi_adapter.Initialized == 0 &&
+					a->xdi_adapter.host_vidi.remote_indication_counter == 0 &&
+					(cmd->command_data.vidi_mode.vidi_mode == 0 || a->xdi_adapter.dma_map != 0)) {
+				PISDN_ADAPTER IoAdapter = &a->xdi_adapter;
+
+				DBG_LOG(("A(%d) vidi %s", IoAdapter->ANum,
+								cmd->command_data.vidi_mode.vidi_mode != 0 ? "on" : "off"))
+
+				IoAdapter->host_vidi.vidi_active = cmd->command_data.vidi_mode.vidi_mode != 0;
+
+				prepare_analog_functions (IoAdapter);
+
 				ret = 0;
 			}
 			break;
@@ -725,6 +776,8 @@ diva_analog_reset_adapter (struct _diva_os_xdi_adapter* a)
   memset (&IoAdapter->a.rx_stream[0],            0x00, sizeof(IoAdapter->a.rx_stream));
   memset (&IoAdapter->a.tx_stream[0],            0x00, sizeof(IoAdapter->a.tx_stream));
 
+	diva_cleanup_vidi (IoAdapter);
+
   if (IoAdapter->dma_map) {
     diva_reset_dma_mapping (IoAdapter->dma_map);
   }
@@ -753,11 +806,55 @@ diva_analog_write_sdram_block (PISDN_ADAPTER IoAdapter,
   return (0);
 }
 
-static int
-diva_analog_start_adapter (PISDN_ADAPTER IoAdapter,
-                         dword start_address,
-                         dword features)
-{
+
+static int vidi_diva_analog_start_adapter (PISDN_ADAPTER IoAdapter, dword features) {
+	int i, adapter_started;
+
+	if (IoAdapter->host_vidi.vidi_active == 0 || IoAdapter->host_vidi.remote_indication_counter == 0) {
+		DBG_ERR(("A(%d) vidi not initialized", IoAdapter->ANum))
+		return (-1);
+	}
+	DBG_LOG(("A(%d) vidi start", IoAdapter->ANum))
+
+	/*
+		Allow interrupts. VIDI reports adapter start up using message.
+		*/
+	IoAdapter->reset[PLX9054_INTCSR] = PLX9054_INT_ENABLE;
+
+	/*
+		Activate DPC
+		*/
+	IoAdapter->Initialized = 1;
+	IoAdapter->host_vidi.vidi_started = 0;
+
+  /*
+    start adapter
+  */
+  start_analog_hardware (IoAdapter);
+
+	for (i = 0; i < 2000; i++) {
+		diva_os_sleep (10);
+
+		adapter_started = (IoAdapter->host_vidi.vidi_started != 0);
+
+		if (adapter_started == IoAdapter->tasks)
+			return (i);
+	}
+
+	/*
+		Adapter start failed, de-activate DPC
+		*/
+	IoAdapter->Initialized = 0;
+
+	/*
+		De-activate interrupts
+		*/
+	IoAdapter->disIrq (IoAdapter) ;
+
+	return (-1);
+}
+
+static int idi_diva_analog_start_adapter (PISDN_ADAPTER IoAdapter, dword features) {
   volatile word *signature;
   int started = 0;
   int i;
@@ -775,60 +872,88 @@ diva_analog_start_adapter (PISDN_ADAPTER IoAdapter,
   for ( i = 0 ; i < 300 ; ++i ) {
     diva_os_wait (10) ;
     if (signature[0] == 0x4447) {
-      DBG_TRC(("Protocol startup time %d.%02d seconds", (i / 100), (i % 100) ))
-      started = 1;
+      started = i+1;
       break;
     }
   }
 
-  if (!started) {
-    DBG_FTL(("%s: Adapter selftest failed, signature=%04x",
-              IoAdapter->Properties.Name, signature[0]))
-      (*(IoAdapter->trapFnc))(IoAdapter);
-    IoAdapter->stop(IoAdapter);
+  if (started == 0) {
+		IoAdapter->disIrq (IoAdapter) ;
     return (-1);
   }
 
-  IoAdapter->Initialized = 1;
-  IoAdapter->IrqCount = 0;
+  diva_os_sleep (200);
 
-  if (check_analog_interrupt (IoAdapter)) {
-    DBG_ERR(("A(%d) interrupt test failed", IoAdapter->ANum))
-    IoAdapter->Initialized = 0;
-    IoAdapter->stop(IoAdapter);
-    return (-1);
-  }
+	check_analog_interrupt (IoAdapter);
 
-  IoAdapter->Properties.Features = (word)features;
-  diva_xdi_display_adapter_features (IoAdapter->ANum);
-
-  DBG_LOG(("A(%d) ANALOG adapter successfull started", IoAdapter->ANum))
-
-  diva_xdi_didd_register_adapter (IoAdapter->ANum);
-
-  return (0);
+  return (started);
 }
 
 static int
+diva_analog_start_adapter (PISDN_ADAPTER IoAdapter,
+                         dword start_address,
+                         dword features)
+{
+	int adapter_status;
+
+  if (IoAdapter->Initialized != 0) {
+    DBG_ERR(("A(%d) adapter already running", IoAdapter->ANum))
+    return (-1);
+  }
+  if (IoAdapter->Address == 0) {
+    DBG_ERR(("A(%d) adapter not mapped", IoAdapter->ANum))
+    return (-1);
+  }
+
+	if (IoAdapter->host_vidi.vidi_active != 0) {
+		adapter_status = vidi_diva_analog_start_adapter (IoAdapter, features);
+	} else {
+		adapter_status = idi_diva_analog_start_adapter (IoAdapter, features);
+	}
+
+	if (adapter_status >= 0) {
+		DBG_LOG(("A(%d) Protocol startup time %d.%02d seconds",
+							IoAdapter->ANum, (adapter_status / 100), (adapter_status % 100)))
+
+		IoAdapter->features = IoAdapter->features;
+		IoAdapter->a.protocol_capabilities = IoAdapter->features;
+
+		IoAdapter->Initialized = 1;
+		IoAdapter->IrqCount = 0;
+		IoAdapter->Properties.Features = (word)features;
+		sprintf (IoAdapter->Name, "A(%d)", (int)IoAdapter->ANum);
+
+		/*
+			Wait until protocol code started
+			*/
+		diva_os_sleep(100);
+
+		/*
+			Show adapter features
+			*/
+		diva_xdi_display_adapter_features (IoAdapter->ANum);
+
+    DBG_LOG(("A(%d) %s adapter successfull started", IoAdapter->ANum, IoAdapter->Properties.Name))
+    diva_xdi_didd_register_adapter (IoAdapter->ANum);
+	} else {
+    DBG_ERR(("A(%d) Adapter start failed Signature=0x%08lx, TrapId=%08lx, boot count=%08lx",
+              IoAdapter->ANum,
+              *(volatile dword*)(IoAdapter->Address + DIVA_PRI_V3_BOOT_SIGNATURE),
+              *(volatile dword*)(IoAdapter->Address + 0x80),
+              *(volatile dword*)(IoAdapter->Address + DIVA_PRI_V3_BOOT_COUNT)))
+    IoAdapter->stop(IoAdapter);
+		DBG_ERR(("-----------------------------------------------------------------"))
+		DBG_ERR(("XLOG recovery for adapter %d %s (%p)", IoAdapter->ANum, IoAdapter->Properties.Name, IoAdapter->ram))
+		(*(IoAdapter->trapFnc))(IoAdapter);
+		DBG_ERR(("-----------------------------------------------------------------"))
+	}
+
+	return ((adapter_status >= 0) ? 0 : -1);
+}
+
+static void
 check_analog_interrupt (PISDN_ADAPTER IoAdapter)
 {
-#ifdef	SUPPORT_INTERRUPT_TEST_ON_4BRI
-  int i ;
-  ADAPTER *a = &IoAdapter->a ;
-
-  IoAdapter->IrqCount = 0 ;
-
-  IoAdapter->reset[PLX9054_INTCSR] = PLX9054_INT_ENABLE ;
-  /*
-    interrupt test
-  */
-  a->ReadyInt = 1 ;
-  a->ram_out (a, &PR_RAM->ReadyInt, 1) ;
-
-  for ( i = 100 ; !IoAdapter->IrqCount && (i-- > 0) ; diva_os_wait(10)) ;
-
-  return ((IoAdapter->IrqCount > 0) ? 0 : -1);
-#else
   dword volatile *Irq ;
   /*
     Reset on-board interrupt register
@@ -841,9 +966,6 @@ check_analog_interrupt (PISDN_ADAPTER IoAdapter)
   IoAdapter->reset[PLX9054_INTCSR] = PLX9054_INT_ENABLE;
 
   diva_os_wait(100);
-
-  return (0) ;
-#endif	/* SUPPORT_INTERRUPT_TEST_ON_4BRI */
 }
 
 static void
@@ -866,42 +988,55 @@ diva_analog_stop_adapter_w_io (diva_os_xdi_adapter_t* a, int do_io)
 {
   PISDN_ADAPTER IoAdapter = &a->xdi_adapter;
   int i;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,16,0)
+  divas_pci_card_resources_t *p_pci = &(a->resources.pci);
+#endif
 
   if (!IoAdapter->ram) {
     return (-1);
   }
+  DBG_LOG(("%s Adapter: %d", __FUNCTION__, IoAdapter->ANum));
 
   if (!IoAdapter->Initialized) {
-    DBG_ERR(("A(%d) can't stop ANALOG adapter - not running", IoAdapter->ANum))
+    DBG_ERR(("A: A(%d) can't stop adapter - not running", IoAdapter->ANum))
     return (-1); /* nothing to stop */
   }
 
+  if (IoAdapter->host_vidi.vidi_active == 0) {
+    IoAdapter->Initialized = 0;
+
+    /*
+      Disconnect Adapters from DIDD
+    */
+    diva_xdi_didd_remove_adapter(IoAdapter->ANum);
+  }
+
+  if (do_io != 0) {
+    i = 100;
+
+    /*
+      Stop interrupts
+    */
+    if (IoAdapter->host_vidi.vidi_active == 0) {
+      a->clear_interrupts_proc = diva_analog_clear_interrupts;
+      IoAdapter->a.ReadyInt = 1;
+      IoAdapter->a.ram_inc (&IoAdapter->a, &PR_RAM->ReadyInt) ;
+    } else {
+      IoAdapter->stop (IoAdapter);
+      a->clear_interrupts_proc = diva_analog_clear_interrupts;
+      i = 0;
+    }
+    do {
+      diva_os_sleep (10);
+    } while (i-- && a->clear_interrupts_proc);
+    if (a->clear_interrupts_proc) {
+      diva_analog_clear_interrupts (a);
+      a->clear_interrupts_proc = 0;
+    }
+    IoAdapter->a.ReadyInt = 0;
+  }
+
   IoAdapter->Initialized = 0;
-
-  /*
-    Disconnect Adapters from DIDD
-  */
-  diva_xdi_didd_remove_adapter(IoAdapter->ANum);
-
-	if (do_io != 0) {
-	  i = 100;
-
-	  /*
-	    Stop interrupts
-	  */
-	  a->clear_interrupts_proc = diva_analog_clear_interrupts;
-	  IoAdapter->a.ReadyInt = 1;
-	  IoAdapter->a.ram_inc (&IoAdapter->a, &PR_RAM->ReadyInt) ;
-	  do {
-	    diva_os_sleep (10);
-	  } while (i-- && a->clear_interrupts_proc);
-	  if (a->clear_interrupts_proc) {
-	    diva_analog_clear_interrupts (a);
-	    a->clear_interrupts_proc = 0;
-	    DBG_ERR(("A(%d) no final interrupt from ANALOG adapter", IoAdapter->ANum))
-	  }
-	  IoAdapter->a.ReadyInt = 0;
-	}
 
   /*
     kill pending dpcs
@@ -909,12 +1044,28 @@ diva_analog_stop_adapter_w_io (diva_os_xdi_adapter_t* a, int do_io)
   diva_os_cancel_soft_isr (&IoAdapter->req_soft_isr);
   diva_os_cancel_soft_isr (&IoAdapter->isr_soft_isr);
 
-	if (do_io != 0) {
-	  /*
-	    Stop and reset adapter
-	  */
-	  IoAdapter->stop (IoAdapter) ;
-	}
+  if (IoAdapter->host_vidi.vidi_active != 0) {
+    /*
+      Disconnect Adapters from DIDD
+      */
+    diva_xdi_didd_remove_adapter(IoAdapter->ANum);
+  }
+
+  if (do_io != 0 && IoAdapter->host_vidi.vidi_active == 0) {
+    /*
+      Stop and reset adapter
+      */
+    IoAdapter->stop (IoAdapter) ;
+  }
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,16,0)
+  /*
+    Unmap Clock Data DMA from DIDD
+  */
+  diva_xdi_didd_unmap_clock_data_addr(IoAdapter->ANum,
+                                      p_pci->clock_data_bus_addr,
+                                      p_pci->hdev);
+#endif
 
   return (0);
 }

@@ -1,12 +1,16 @@
 
 /*
  *
-  Copyright (c) Dialogic, 2008.
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
  *
   This source file is supplied for the use with
-  Dialogic range of DIVA Server Adapters.
+  Sangoma (formerly Dialogic) range of Adapters.
  *
-  Dialogic File Revision :    2.1
+  File Revision :    2.1
  *
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -23,7 +27,6 @@
   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  */
-
 
 #include "platform.h"
 #include "cardtype.h"
@@ -46,12 +49,6 @@
   */
 #define BYTE_ACCESS       0
 #define MULTIBYTE_ACCESS  1
-
-extern void start_qBri_hardware (PISDN_ADAPTER IoAdapter);
-extern int start_pri_v3_hardware (PISDN_ADAPTER IoAdapter);
-extern void start_analog_hardware(PISDN_ADAPTER IoAdapter);
-extern int   start_4pri_hardware (PISDN_ADAPTER IoAdapter);
-extern int   start_4prie_hardware (PISDN_ADAPTER IoAdapter);
 
 /*
 	LOCALS
@@ -365,6 +362,9 @@ static int DivaAdapterMemtest (PISDN_ADAPTER IoAdapter,
         case CARDTYPE_DIVASRV_V1P_V10H_PCIE:
         case CARDTYPE_DIVASRV_IPMEDIA_300_V10:
         case CARDTYPE_DIVASRV_IPMEDIA_600_V10:
+        case CARDTYPE_DIVASRV_V4P_V10H_PCIE_HYPERCOM:
+        case CARDTYPE_DIVASRV_V2P_V10H_PCIE_HYPERCOM:
+        case CARDTYPE_DIVASRV_V1P_V10H_PCIE_HYPERCOM:
           *(volatile dword*)&mem[0x104] = 64*1024*1024;
           *(volatile dword*)&mem[0x108] = 7; /* Card type */
           start_4pri_hardware (IoAdapter);
@@ -372,7 +372,11 @@ static int DivaAdapterMemtest (PISDN_ADAPTER IoAdapter,
 
         case CARDTYPE_DIVASRV_V4P_V10Z_PCIE:
         case CARDTYPE_DIVASRV_V8P_V10Z_PCIE:
-          *(volatile dword*)&mem[0x104] = 64*1024*1024;
+        case CARDTYPE_DIVASRV_V4P_V10Z_PCIE_HYPERCOM:
+        case CARDTYPE_DIVASRV_V8P_V10Z_PCIE_HYPERCOM:
+        case CARDTYPE_DIVASRV_M4P_V10Z_PCIE:
+        case CARDTYPE_DIVASRV_M8P_V10Z_PCIE:
+          *(volatile dword*)&mem[0x104] = 128*1024*1024;
           *(volatile dword*)&mem[0x108] = 7; /* Card type */
           start_4prie_hardware (IoAdapter);
           break;
@@ -422,6 +426,9 @@ static int DivaAdapterMemtest (PISDN_ADAPTER IoAdapter,
         case CARDTYPE_DIVASRV_V_ANALOG_4P_PCIE:
         case CARDTYPE_DIVASRV_ANALOG_2P_PCIE:
         case CARDTYPE_DIVASRV_V_ANALOG_2P_PCIE:
+        case CARDTYPE_DIVASRV_V_ANALOG_2P_PCIE_HYPERCOM:
+        case CARDTYPE_DIVASRV_V_ANALOG_4P_PCIE_HYPERCOM:
+        case CARDTYPE_DIVASRV_V_ANALOG_8P_PCIE_HYPERCOM:
           *(volatile dword*)&mem[0x104] = DIVA_ANALOG_PCIE_REAL_SDRAM_SIZE;
           *(volatile dword*)&mem[0x108] = 5;
           start_analog_hardware (IoAdapter);
@@ -744,7 +751,7 @@ static void diva_print_plx_registers (volatile byte* plx) {
 }
 
 static int dma_memory_test (PISDN_ADAPTER IoAdapter) {
-	byte *plx = (byte*)IoAdapter->reset;
+	byte *plx = &(((byte*)IoAdapter->reset)[IoAdapter->plx_offset]);
 	volatile byte  *dmacsr0  = (byte*)&plx[0xa8];
 	volatile byte  *dmacsr1  = (byte*)&plx[0xa9];
 	int dma_channel_0 = (IoAdapter->AdapterTestMask &
@@ -913,3 +920,4 @@ int DivaAdapterTest(PISDN_ADAPTER IoAdapter) {
 
 #endif /* } */
 
+// vim: set tabstop=2 softtabstop=2 shiftwidth=2 expandtab :

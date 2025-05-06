@@ -1,25 +1,33 @@
-/*------------------------------------------------------------------------------
+
+/*
  *
- * (c) COPYRIGHT 1999-2007       Dialogic Corporation
+  Copyright (c) Sangoma Technologies, 2018-2022
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
  *
- * ALL RIGHTS RESERVED
+  This source file is supplied for the use with
+  Sangoma (formerly Dialogic) range of Adapters.
  *
- * This software is the property of Dialogic Corporation and/or its
- * subsidiaries ("Dialogic"). This copyright notice may not be removed,
- * modified or obliterated without the prior written permission of
- * Dialogic.
+  File Revision :    2.1
  *
- * This software is a Trade Secret of Dialogic and may not be
- * copied, transmitted, provided to or otherwise made available to any company,
- * corporation or other person or entity without written permission of
- * Dialogic.
+  This program is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; either version 2, or (at your option)
+  any later version.
  *
- * No right, title, ownership or other interest in the software is hereby
- * granted or transferred. The information contained herein is subject
- * to change without notice and should not be construed as a commitment of
- * Dialogic.
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY OF ANY KIND WHATSOEVER INCLUDING ANY
+  implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+  See the GNU General Public License for more details.
  *
- *------------------------------------------------------------------------------*/
+  You should have received a copy of the GNU General Public License
+  along with this program; if not, write to the Free Software
+  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *
+ */
+
 #define __DIVA_INCLUDE_DITRACE_PARAMETERS__
 #include <stdarg.h>
 #include <stdlib.h>
@@ -182,7 +190,7 @@ extern word xlog(byte *stream, void * buffer);
 extern void sig_handler (int sig_nr);
 extern int term_signal;
 
-#define MAINT_DRIVER_NAME "/proc/net/eicon/maint"
+#define MAINT_DRIVER_NAME "/proc/net/isdn/eicon/maint"
 #define NEW_MAINT_DRIVER_NAME "/dev/DivasMAINT"
 int diva_maint_uses_ioctl;
 
@@ -534,6 +542,7 @@ int ditrace_read_traces (int do_poll) {
   byte data[MSG_FRAME_MAX_SIZE+sizeof(*pmsg)];
   dword* pcmd = (dword*)&data[0];
 	struct pollfd fds[2];
+	dword tbuffer_length = sizeof(data);
   int ret;
 
   if (ditrace_list_drivers (0,0)) {
@@ -548,29 +557,40 @@ int ditrace_read_traces (int do_poll) {
     return (-1);
   }
 
-  pcmd[0] = DITRACE_READ_TRACE_ENTRY;
-  pcmd[1] = (dword)id_list[0];
-  pcmd[2] = sizeof(data);
-
-
   for (;;) {
+    pcmd[0] = DITRACE_READ_TRACE_ENTRY;
+    pcmd[1] = (dword)id_list[0];
+    pcmd[2] = tbuffer_length;
 
     while ((ret = ((diva_maint_uses_ioctl != 0) ?
                                  ioctl (fd, DIVA_XDI_IO_CMD_WRITE_MSG, (ulong)pcmd) :
-                                 write (fd, data, sizeof(data)))) > sizeof(*pmsg)) {
+                                 write (fd, data, sizeof(data)))) > (int)sizeof(*pmsg)) {
       if (diva_decode_message (pmsg, ret)) {
         close(fd);
         return (-1);
       }
       pcmd[0] = DITRACE_READ_TRACE_ENTRY;
       pcmd[1] = (dword)id_list[0];
-      pcmd[2] = sizeof(data);
+      pcmd[2] = tbuffer_length;
     }
     if (ret < 0) {
-      if (!silent_operation)
-        perror("DITRACE");
-      close (fd);
-      return (-1);
+			int stop = tbuffer_length == 257;
+			char tmp[512];
+
+			tbuffer_length >>= 2;
+			tbuffer_length = MAX(tbuffer_length, 257);
+
+			snprintf (tmp, sizeof(tmp), "%s: reduced transfer buffer size to %u Bytes",
+								stop == 0 ? "WARNING" : "ERROR", tbuffer_length);
+
+			fprintf (VisualStream, "%s\n", tmp);
+
+			if (stop != 0) {
+	      close (fd);
+				return (-1);
+    	}
+
+			continue;
     }
 
     memset (&fds, 0x00, sizeof (fds));
@@ -612,6 +632,7 @@ static int diva_write_binary_ring_buffer (dword buffer_size, int do_poll) {
 	double total_compressed   = 1;
 	double total_uncompressed = 1;
 	int flush_events = -1;
+	dword tbuffer_length = sizeof(data);
 
 	search_events = (ditrace_find_entry ("search")->found != 0);
 
@@ -626,7 +647,7 @@ static int diva_write_binary_ring_buffer (dword buffer_size, int do_poll) {
 
   pcmd[0] = DITRACE_READ_TRACE_ENTRYS;
   pcmd[1] = (dword)0;
-  pcmd[2] = sizeof(data);
+  pcmd[2] = tbuffer_length;
 
   if (rb_fd < 0) {
     if (!silent_operation)
@@ -717,6 +738,10 @@ static int diva_write_binary_ring_buffer (dword buffer_size, int do_poll) {
 															 buffer_size - sizeof(MSG_QUEUE) - 512 - 2048 - header_length);
     header_length += add_file (&rb, DATADIR"/httpd/index.html",
 															 buffer_size - sizeof(MSG_QUEUE) - 512 - 2048 - header_length);
+    header_length += add_file (&rb, DATADIR"/project.info",
+															 buffer_size - sizeof(MSG_QUEUE) - 512 - 2048 - header_length);
+    header_length += add_file (&rb, "/etc/asterisk/capi.conf",
+															 buffer_size - sizeof(MSG_QUEUE) - 512 - 2048 - header_length);
   }
 
 	if ((buffer_size - sizeof(MSG_QUEUE) - 512 - 2048 - header_length) < (16*1024)) {
@@ -755,10 +780,6 @@ static int diva_write_binary_ring_buffer (dword buffer_size, int do_poll) {
   if (do_poll)
     fprintf (VisualStream, "==> Read Message Stream, please press 'q' to exit\n");
 
-  pcmd[0] = DITRACE_READ_TRACE_ENTRYS;
-  pcmd[1] = (dword)0;
-  pcmd[2] = sizeof(data);
-
 	act.sa_handler = sig_handler;
 	sigemptyset(&act.sa_mask);
 	act.sa_flags = SA_NOMASK;
@@ -768,9 +789,14 @@ static int diva_write_binary_ring_buffer (dword buffer_size, int do_poll) {
 
 
   for (;term_signal == 0;) {
+
+    pcmd[0] = DITRACE_READ_TRACE_ENTRYS;
+    pcmd[1] = (dword)0;
+    pcmd[2] = tbuffer_length;
+
     while ((ret = ((diva_maint_uses_ioctl != 0) ?
                                  ioctl (fd, DIVA_XDI_IO_CMD_WRITE_MSG, (ulong)pcmd) :
-                                 write (fd, data, sizeof(data)))) > sizeof(*pmsg)) {
+                                 write (fd, data, sizeof(data)))) > (int)sizeof(*pmsg)) {
       pdata = &data[0];
 			if (flush_events > 0) {
 				flush_events--;
@@ -839,7 +865,7 @@ static int diva_write_binary_ring_buffer (dword buffer_size, int do_poll) {
 
       pcmd[0] = DITRACE_READ_TRACE_ENTRYS;
       pcmd[1] = (dword)0;
-      pcmd[2] = sizeof(data);
+      pcmd[2] = tbuffer_length;
 
       events++;
 
@@ -848,10 +874,25 @@ static int diva_write_binary_ring_buffer (dword buffer_size, int do_poll) {
 			}
     }
     if (ret < 0) {
+			dword org_tbuffer_length = tbuffer_length;
+			int stop = tbuffer_length == 4*1024;
+			char tmp[512];
+
+			if (tbuffer_length > 4*1024)
+				tbuffer_length -= 4*1024;
+			tbuffer_length = MAX(tbuffer_length, 4*1024);
+
+			snprintf (tmp, sizeof(tmp), "%s: reduced transfer buffer size from %u to %u Bytes",
+								stop == 0 ? "WARNING" : "ERROR", org_tbuffer_length, tbuffer_length);
+			add_string_to_buffer (dbg_queue, &sequence, 0, tmp);
+
       if (!silent_operation)
-        perror("DITRACE");
-      close (fd);
-      return (-1);
+				fprintf (VisualStream, "%s\n", tmp);
+
+			if (stop != 0)
+				break;
+
+			continue;
     }
     if (!silent_operation && do_poll) {
 			if (compress_data) {
@@ -958,7 +999,7 @@ int ditrace_main (int argc, char** argv) {
   
   diva_trace_init();
 
-	diva_dprintf = do_dprintf;
+	__diva_dprintf = do_dprintf;
 	VisualStream = stdout;
 	DebugStream  = VisualStream;
   OutStream    = VisualStream;

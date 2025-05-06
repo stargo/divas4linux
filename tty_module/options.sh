@@ -33,52 +33,51 @@ if [ $(($1)) -eq 2 ]
 then
   patchlevel=`cd $KSRC; make --no-print-directory -f $here/conftest.make conftest.PATCHLEVEL`
   sublevel=`cd $KSRC; make --no-print-directory -f $here/conftest.make conftest.SUBLEVEL`
-	if [ $((patchlevel)) -gt $((5)) -a $((sublevel)) -gt $((17)) ]
-	then
-		mkdir test > /dev/null 2>&1
+  if [ $((patchlevel)) -gt $((5)) -a $((sublevel)) -gt $((17)) ]
+  then
+    mkdir test > /dev/null 2>&1
 
-		echo '#include <linux/version.h>' >  test/test.c
-		echo '#include <linux/module.h>'  >> test/test.c
-		echo 'int __init  test_init(void) { return (0); }' >> test/test.c
-		echo 'void __exit test_exit(void) { }'             >> test/test.c
-		echo 'module_init(test_init)'    >> test/test.c
-		echo 'module_exit(test_exit)'    >> test/test.c
+    echo '#include <linux/version.h>' >  test/test.c
+    echo '#include <linux/module.h>'  >> test/test.c
+    echo 'int __init  test_init(void) { return (0); }' >> test/test.c
+    echo 'void __exit test_exit(void) { }'             >> test/test.c
+    echo 'module_init(test_init)'    >> test/test.c
+    echo 'module_exit(test_exit)'    >> test/test.c
 
-		echo "obj-m := test.o" > test/Makefile
-		command=$(cd $KSRC; make --no-print-directory modules SUBDIRS=${here}/test V=1 | grep " \-c " | grep "test\.c" | sed -e "s/gcc//" - | sed -e "s/-I *include/-I\/usr\/src\/linux\/include/g;" - | sed -e "s/-o .*$//" -)
-		command="-I/usr/src/linux/drivers/isdn/hardware/eicon $command"
+    echo "obj-m := test.o" > test/Makefile
+    command=$(cd $KSRC; make --no-print-directory modules SUBDIRS=${here}/test V=1 | grep " \-c " | grep "test\.c" | sed -e "s/gcc//" - | sed -e "s/-I *include/-I\/usr\/src\/linux\/include/g;" - | sed -e "s/-o .*$//" -)
+    command="-I/usr/src/linux/drivers/isdn/hardware/eicon $command"
     grep "^ *#define *CONFIG_SMP" $KSRC/include/linux/autoconf.h > /dev/null 2>&1
     if [ $(($?)) -eq 0 ]
     then
-    	command="$command -DDIVA_SMP=1"
+      command="$command -DDIVA_SMP=1"
     fi
-		command=$(echo $command | sed -e "s/ -c / /" -)
-		command=$(echo $command | sed -e "s/-include include\/linux\/autoconf.h/-include \/usr\/src\/linux\/include\/linux\/autoconf.h/" -)
-		command=$(echo $command | sed -e "s/-D\"KBUILD_STR(s)=#s\"//" -)
-		command=$(echo $command | sed -e "s/-D\"KBUILD_BASENAME=KBUILD_STR(test)\"//" -)
-		command=$(echo $command | sed -e "s/-D\"KBUILD_MODNAME=KBUILD_STR(test)\"//" -)
-		echo -D__KERNEL_VERSION_GT_2_4__=1 $command
-	else
+    command=$(echo $command | sed -e "s/ -c / /" -)
+    command=$(echo $command | sed -e "s/-include include\/linux\/autoconf.h/-include \/usr\/src\/linux\/include\/linux\/autoconf.h/" -)
+    command=$(echo $command | sed -e "s/-D\"KBUILD_STR(s)=#s\"//" -)
+    command=$(echo $command | sed -e "s/-D\"KBUILD_BASENAME=KBUILD_STR(test)\"//" -)
+    command=$(echo $command | sed -e "s/-D\"KBUILD_MODNAME=KBUILD_STR(test)\"//" -)
+    echo -D__KERNEL_VERSION_GT_2_4__=1 $command
+  else
     NKCFLAGS=`cd $KSRC; make --no-print-directory -f $here/conftest.make conftest.CFLAGS`
     grep "^ *#define *CONFIG_SMP" $KSRC/include/linux/autoconf.h > /dev/null 2>&1
     if [ $(($?)) -eq 0 ]
     then
-    	NKCFLAGS="$NKCFLAGS -DDIVA_SMP=1"
+      NKCFLAGS="$NKCFLAGS -DDIVA_SMP=1"
     fi
 
-
-  	if [ $((patchlevel)) -le $((4)) ]
-  	then
-  		echo -I /usr/src/linux/drivers/isdn/eicon $NKCFLAGS
-  	else
-  		echo $NKCFLAGS | grep __KERNEL__  > /dev/null 2>&1
-  		if [ $(($?)) -ne 0 ]
-  		then
-  			NKCFLAGS="-D__KERNEL__ $NKCFLAGS"
-  		fi
-  		echo -nostdinc -iwithprefix include -D__KERNEL_VERSION_GT_2_4__=1 -I/usr/src/linux/drivers/isdn/hardware/eicon $NKCFLAGS | sed -e "s/-I *include/-I\/usr\/src\/linux\/include/g;" -
+    if [ $((patchlevel)) -le $((4)) ]
+    then
+      echo -I /usr/src/linux/drivers/isdn/eicon $NKCFLAGS
+    else
+      echo $NKCFLAGS | grep __KERNEL__  > /dev/null 2>&1
+      if [ $(($?)) -ne 0 ]
+      then
+        NKCFLAGS="-D__KERNEL__ $NKCFLAGS"
+      fi
+      echo -nostdinc -iwithprefix include -D__KERNEL_VERSION_GT_2_4__=1 -I/usr/src/linux/drivers/isdn/hardware/eicon $NKCFLAGS | sed -e "s/-I *include/-I\/usr\/src\/linux\/include/g;" -
     fi
-	fi
+  fi
 fi
 if [ $(($1)) -eq 3 ]
 then
@@ -124,6 +123,18 @@ then
 	else
 		echo "2"
 	fi
+fi
+
+if [ $(($1)) -eq 9 ]
+then
+  k_version=`sed -ne "/^ *VERSION *=/p" $KSRC/Makefile | sed -e "s/^.*= *//" -`
+  rhel_drm_version=`sed -ne "/^ *RHEL_DRM_VERSION *=/p" $KSRC/Makefile | awk 'BEGIN { FS = "=" } ; { print $2 }'|sed -e 's/^[[:space:]]*//'`
+  if [ "$((rhel_drm_version))" -ne "" -a $((k_version)) -eq $((4)) -a $((rhel_drm_version)) -eq $((5)) ]
+  then
+    echo "1"
+  else  
+    echo "0"
+  fi
 fi
 
 rm -f conftest.make

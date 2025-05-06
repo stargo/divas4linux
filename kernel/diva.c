@@ -1,11 +1,16 @@
+
 /*
  *
-  Copyright (c) Dialogic, 2008.
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
  *
   This source file is supplied for the use with
-  Dialogic range of DIVA Server Adapters.
+  Sangoma (formerly Dialogic) range of Adapters.
  *
-  Dialogic File Revision :    2.1
+  File Revision :    2.1
  *
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -43,12 +48,15 @@
 #include "diva_pci.h"
 #include "diva.h"
 #include "divasync.h"
+#include "pc_init.h"
+#include "diva_autoconf.h"
 
 #ifdef CONFIG_ISDN_DIVAS_PRIPCI
 #include "os_pri.h"
 #include "os_pri3.h"
 #include "os_4pri.h"
 #include "os_4prie.h"
+#include "os_4prile.h"
 #endif
 #ifdef CONFIG_ISDN_DIVAS_BRIPCI
 #include "os_bri.h"
@@ -136,14 +144,21 @@ DivaIdiReqFunc(62)
 DivaIdiReqFunc(63)
 
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,19)
 struct pt_regs;
-#endif
 
 /*
 **  LOCALS
 */
 diva_entity_queue_t adapter_queue;
+
+typedef struct _diva_hotplug_wait_entry {
+	diva_entity_link_t link;
+	diva_os_xdi_adapter_t *pdiva;
+	void* pdev;
+	unsigned long CardOrdinal;
+	int msi;
+} diva_hotplug_wait_entry_t;
+static diva_entity_queue_t hotplug_wait_q;
 
 typedef struct _diva_get_xlog {
 	word command;
@@ -162,25 +177,23 @@ static diva_supported_cards_info_t divas_supported_cards[] = {
 	/*
 	   PRI Cards
 	 */
-#if defined(DIVA_INCLUDE_DISCONTINUED_HARDWARE)
-	{CARDTYPE_DIVASRV_P_30M_PCI, diva_pri_init_card},
-#endif
+//	{CARDTYPE_DIVASRV_P_30M_PCI, diva_pri_init_card},
 	/*
 	   PRI Rev.2 Cards
 	 */
-#if defined(DIVA_INCLUDE_DISCONTINUED_HARDWARE)
-	{CARDTYPE_DIVASRV_P_30M_V2_PCI, diva_pri_init_card},
-#endif
+//	{CARDTYPE_DIVASRV_P_30M_V2_PCI, diva_pri_init_card},
 	/*
 	   PRI Rev.2 VoIP Cards
 	 */
-#if defined(DIVA_INCLUDE_DISCONTINUED_HARDWARE)
-	{CARDTYPE_DIVASRV_VOICE_P_30M_V2_PCI, diva_pri_init_card},
-#endif
+//	{CARDTYPE_DIVASRV_VOICE_P_30M_V2_PCI, diva_pri_init_card},
 	/*
 	   PRI Rev.3 Cards
 	 */
 	{CARDTYPE_DIVASRV_P_30M_V30_PCI, diva_pri_v3_init_card},
+	/*
+	   PRI L-Serie
+	 */
+	{ CARDTYPE_DIVA_L_P_V10_PCIE, diva_pri_v3_init_card},
 	/*
 	   4PRI cards
 	 */
@@ -199,9 +212,25 @@ static diva_supported_cards_info_t divas_supported_cards[] = {
 	{CARDTYPE_DIVASRV_V4P_V10H_PCIE, diva_4pri_init_card},
 	{CARDTYPE_DIVASRV_V2P_V10H_PCIE, diva_4pri_init_card},
 	{CARDTYPE_DIVASRV_V1P_V10H_PCIE, diva_4pri_init_card},
+	{CARDTYPE_DIVASRV_V4P_V10H_PCIE_HYPERCOM, diva_4pri_init_card},
+	{CARDTYPE_DIVASRV_V2P_V10H_PCIE_HYPERCOM, diva_4pri_init_card},
+	{CARDTYPE_DIVASRV_V1P_V10H_PCIE_HYPERCOM, diva_4pri_init_card},
 
   {CARDTYPE_DIVASRV_V8P_V10Z_PCIE, diva_4prie_init_card},
   {CARDTYPE_DIVASRV_V4P_V10Z_PCIE, diva_4prie_init_card},
+  {CARDTYPE_DIVASRV_V8P_V10Z_PCIE_HYPERCOM, diva_4prie_init_card},
+  {CARDTYPE_DIVASRV_V4P_V10Z_PCIE_HYPERCOM, diva_4prie_init_card},
+  {CARDTYPE_DIVASRV_M8P_V10Z_PCIE, diva_4prie_init_card},
+  {CARDTYPE_DIVASRV_M4P_V10Z_PCIE, diva_4prie_init_card},
+
+	/*
+		L series PCIe cards
+		*/
+  {CARDTYPE_DIVA_L_1P_V10_PCIE, diva_4prile_init_card},
+  {CARDTYPE_DIVA_L_2P_V10_PCIE, diva_4prile_init_card},
+  {CARDTYPE_DIVA_L_4P_V10_PCIE, diva_4prile_init_card},
+  {CARDTYPE_DIVA_L_8P_V10_PCIE, diva_4prile_init_card},
+
 #endif
 #ifdef CONFIG_ISDN_DIVAS_ANALOG
 	{CARDTYPE_DIVASRV_ANALOG_2PORT,   diva_analog_init_card},
@@ -217,15 +246,17 @@ static diva_supported_cards_info_t divas_supported_cards[] = {
 	{CARDTYPE_DIVASRV_V_ANALOG_2P_PCIE, diva_analog_init_card},
 	{CARDTYPE_DIVASRV_V_ANALOG_4P_PCIE, diva_analog_init_card},
 	{CARDTYPE_DIVASRV_V_ANALOG_8P_PCIE, diva_analog_init_card},
+
+	{CARDTYPE_DIVASRV_V_ANALOG_2P_PCIE_HYPERCOM, diva_analog_init_card},
+	{CARDTYPE_DIVASRV_V_ANALOG_4P_PCIE_HYPERCOM, diva_analog_init_card},
+	{CARDTYPE_DIVASRV_V_ANALOG_8P_PCIE_HYPERCOM, diva_analog_init_card},
 #endif
 #ifdef CONFIG_ISDN_DIVAS_BRIPCI
 	/*
 	   4BRI Rev 1 Cards
 	 */
-#if defined(DIVA_INCLUDE_DISCONTINUED_HARDWARE)
-	{CARDTYPE_DIVASRV_Q_8M_PCI,       diva_4bri_init_card},
-	{CARDTYPE_DIVASRV_VOICE_Q_8M_PCI, diva_4bri_init_card},
-#endif
+//	{CARDTYPE_DIVASRV_Q_8M_PCI,       diva_4bri_init_card},
+//	{CARDTYPE_DIVASRV_VOICE_Q_8M_PCI, diva_4bri_init_card},
 	/*
 	   4BRI Rev 2 Cards
 	 */
@@ -253,9 +284,7 @@ static diva_supported_cards_info_t divas_supported_cards[] = {
 	/*
 	   BRI
 	 */
-#if defined(DIVA_INCLUDE_DISCONTINUED_HARDWARE)
-	{CARDTYPE_MAESTRA_PCI, diva_bri_init_card},
-#endif
+//	{CARDTYPE_MAESTRA_PCI, diva_bri_init_card},
 #endif
 
 	/*
@@ -265,13 +294,37 @@ static diva_supported_cards_info_t divas_supported_cards[] = {
 };
 
 static void diva_init_request_array(void);
-static void *divas_create_pci_card(int handle, void *pci_dev_handle, int msi);
+static void *divas_create_pci_card(int handle, void *pci_dev_handle, int msi, int dac_disabled);
 
 static diva_os_spin_lock_t adapter_lock;
 
-static int diva_find_free_adapters(int base, int nr)
+static int diva_find_free_adapters(int base, int nr, dword cardType, dword serialNumber)
 {
-	int i;
+	int i, mapEntries, found = 0, ignoreSn;
+	const unsigned int* map = diva_os_get_hotplug_map (&mapEntries, &ignoreSn);
+
+	if (mapEntries >= 2) {
+		int currentController = 0, pos;
+
+		for (pos = 0; pos < (mapEntries - 1) && map[pos] != 0 && map[pos] < CARDTYPE_MAX; pos += 2) {
+			if (currentController == base) {
+				if (map[pos] == cardType && (ignoreSn != 0 || map[pos+1] == serialNumber)) {
+					found = 1;
+					break;
+				} else {
+					return (-1);
+				}
+			} else {
+				currentController += CardProperties[map[pos]].Adapters;
+			}
+		}
+	} else {
+		found = 1;
+	}
+
+	if (found == 0)
+		return (-1);
+
 
 	for (i = 0; i < nr; i++) {
 		if (IoAdapters[base + i]) {
@@ -285,7 +338,7 @@ static int diva_find_free_adapters(int base, int nr)
 /* --------------------------------------------------------------------------
     Add card to the card list
    -------------------------------------------------------------------------- */
-void *diva_driver_add_card(void *pdev, unsigned long CardOrdinal, int msi)
+void *diva_driver_add_card(void *pdev, unsigned long CardOrdinal, int msi, int dac_disabled)
 {
 	diva_os_spin_lock_magic_t old_irql;
 	diva_os_xdi_adapter_t *pdiva, *pa;
@@ -293,7 +346,7 @@ void *diva_driver_add_card(void *pdev, unsigned long CardOrdinal, int msi)
 
 	for (i = 0; divas_supported_cards[i].CardOrdinal != -1; i++) {
 		if (divas_supported_cards[i].CardOrdinal == CardOrdinal) {
-			if (!(pdiva = divas_create_pci_card(i, pdev, msi))) {
+			if (!(pdiva = divas_create_pci_card(i, pdev, msi, dac_disabled))) {
 				return (0);
 			}
 			switch (CardOrdinal) {
@@ -301,6 +354,7 @@ void *diva_driver_add_card(void *pdev, unsigned long CardOrdinal, int msi)
 			case CARDTYPE_DIVASRV_2P_M_V10_PCI:
 			case CARDTYPE_DIVASRV_IPMEDIA_300_V10:
 			case CARDTYPE_DIVASRV_V2P_V10H_PCIE:
+			case CARDTYPE_DIVASRV_V2P_V10H_PCIE_HYPERCOM:
 				max = MAX_ADAPTER - 2;
 				nr = 2;
 				break;
@@ -309,12 +363,32 @@ void *diva_driver_add_card(void *pdev, unsigned long CardOrdinal, int msi)
 			case CARDTYPE_DIVASRV_4P_M_V10_PCI:
 			case CARDTYPE_DIVASRV_IPMEDIA_600_V10:
 			case CARDTYPE_DIVASRV_V4P_V10Z_PCIE:
+			case CARDTYPE_DIVASRV_V4P_V10Z_PCIE_HYPERCOM:
+			case CARDTYPE_DIVASRV_M4P_V10Z_PCIE:
 			case CARDTYPE_DIVASRV_V4P_V10H_PCIE:
+			case CARDTYPE_DIVASRV_V4P_V10H_PCIE_HYPERCOM:
 				max = MAX_ADAPTER - 4;
 				nr = 4;
 				break;
 
 			case CARDTYPE_DIVASRV_V8P_V10Z_PCIE:
+			case CARDTYPE_DIVASRV_V8P_V10Z_PCIE_HYPERCOM:
+			case CARDTYPE_DIVASRV_M8P_V10Z_PCIE:
+				max = MAX_ADAPTER - 8;
+				nr = 8;
+				break;
+
+			case CARDTYPE_DIVA_L_2P_V10_PCIE:
+				max = MAX_ADAPTER - 2;
+				nr = 2;
+				break;
+
+			case CARDTYPE_DIVA_L_4P_V10_PCIE:
+				max = MAX_ADAPTER - 4;
+				nr = 4;
+				break;
+
+			case CARDTYPE_DIVA_L_8P_V10_PCIE:
 				max = MAX_ADAPTER - 8;
 				nr = 8;
 				break;
@@ -338,7 +412,7 @@ void *diva_driver_add_card(void *pdev, unsigned long CardOrdinal, int msi)
 			diva_os_enter_spin_lock(&adapter_lock, &old_irql, "add card");
 
 			for (i = 0; i < max; i++) {
-				if (!diva_find_free_adapters(i, nr)) {
+				if (!diva_find_free_adapters(i, nr, pdiva->xdi_adapter.cardType, pdiva->xdi_adapter.serialNo)) {
 					pdiva->controller = i + 1;
 					pdiva->xdi_adapter.ANum = pdiva->controller;
 					IoAdapters[i] = &pdiva->xdi_adapter;
@@ -370,11 +444,46 @@ void *diva_driver_add_card(void *pdev, unsigned long CardOrdinal, int msi)
 					}
 
 					diva_os_leave_spin_lock(&adapter_lock, &old_irql, "add card");
+
+					diva_os_notify_user_mode_helper (DivaUserModeHelperEventAdapterInserted,
+																						pdiva->xdi_adapter.cardType,
+																						pdiva->xdi_adapter.serialNo);
+
 					return (pdiva);
 				}
 			}
 
 			diva_os_leave_spin_lock(&adapter_lock, &old_irql, "add card");
+
+			/*
+				Wait until hot plug interface updated
+				*/
+			{
+				int nr, ignoreSn;
+				const unsigned int* hotplug_map = diva_os_get_hotplug_map (&nr, &ignoreSn);
+
+				if (hotplug_map != 0 && nr >=2 ) {
+					diva_hotplug_wait_entry_t* pWait = diva_os_malloc (0, sizeof(*pWait));
+
+					if (pWait != 0) {
+						pWait->pdiva = pdiva;
+						pWait->pdev = pdev;
+						pWait->CardOrdinal = CardOrdinal;
+						pWait->msi = msi;
+						diva_os_enter_spin_lock(&adapter_lock, &old_irql, "wait card");
+						diva_q_add_tail (&hotplug_wait_q, &pWait->link);
+						diva_os_leave_spin_lock(&adapter_lock, &old_irql, "wait card");
+
+						DBG_LOG(("hotplug wait for %u %u", pdiva->xdi_adapter.cardType, pdiva->xdi_adapter.serialNo))
+
+						diva_os_notify_user_mode_helper (DivaUserModeHelperEventAdapterInsertedNoCfg,
+																							pdiva->xdi_adapter.cardType,
+																							pdiva->xdi_adapter.serialNo);
+
+						return (pdiva);
+					}
+				}
+			}
 
 			/*
 			   Not able to add adapter - remove it and return error
@@ -394,10 +503,30 @@ void *diva_driver_add_card(void *pdev, unsigned long CardOrdinal, int msi)
    -------------------------------------------------------------------------- */
 int divasa_xdi_driver_entry(void)
 {
+	int nr, pos = 0, ignoreSn;
+	const unsigned int* hotplug_map = diva_os_get_hotplug_map (&nr, &ignoreSn);
+	dword currentController = 0;
+
 	diva_os_initialize_spin_lock(&adapter_lock, "adapter");
 	diva_q_init(&adapter_queue);
 	memset(&IoAdapters[0], 0x00, sizeof(IoAdapters));
 	diva_init_request_array();
+
+	for (pos = 0; pos < nr-1; pos += 2) {
+		dword cardType     = hotplug_map[pos];
+		dword serialNumber = hotplug_map[pos+1];
+
+		if (cardType != 0 && cardType < CARDTYPE_MAX) {
+			int controllers = CardProperties[cardType].Adapters;
+			if (currentController + controllers <= MAX_ADAPTER) {
+				dword i;
+
+				for (i = 0; i < controllers; currentController++, i++) {
+					DBG_LOG(("HotPlug map[%u:%u%s-%u]=%u", cardType, serialNumber, ignoreSn == 0 ? "" : "i", i+1, currentController))
+				}
+			}
+		}
+	}
 
 	return (0);
 }
@@ -427,6 +556,7 @@ void diva_driver_remove_card(void *pdiva, int* msi)
 	diva_os_spin_lock_magic_t old_irql;
 	diva_os_xdi_adapter_t *a[8];
 	diva_os_xdi_adapter_t *pa;
+	diva_entity_link_t* link;
 	int i;
 
 	pa = a[0] = (diva_os_xdi_adapter_t *) pdiva;
@@ -451,7 +581,23 @@ void diva_driver_remove_card(void *pdiva, int* msi)
 		diva_q_remove(&adapter_queue, &a[i]->link);
 	}
 
+	link = diva_q_get_head(&hotplug_wait_q);
+	while (link != 0) {
+		diva_hotplug_wait_entry_t* pWait = DIVAS_CONTAINING_RECORD(link, diva_hotplug_wait_entry_t, link);
+		if (pWait->pdiva == pdiva) {
+			diva_q_remove(&hotplug_wait_q, link);
+			break;
+		}
+		link = diva_q_get_next(link);
+	}
+
 	diva_os_leave_spin_lock(&adapter_lock, &old_irql, "driver_unload");
+
+	if (link != 0) {
+		diva_hotplug_wait_entry_t* pWait = DIVAS_CONTAINING_RECORD(link, diva_hotplug_wait_entry_t, link);
+		DBG_LOG(("remove hotplug wait %u %u", pWait->pdiva->xdi_adapter.cardType, pWait->pdiva->xdi_adapter.serialNo))
+		diva_os_free (0, pWait);
+	}
 
 	(*(a[0]->interface.cleanup_adapter_proc)) (a[0]);
 
@@ -465,6 +611,70 @@ void diva_driver_remove_card(void *pdiva, int* msi)
 			diva_os_free(0, a[i]);
 		}
 	}
+}
+
+void diva_restart_hotplug_wait_q (void) {
+	int mapEntries, ignoreSn;
+	diva_entity_link_t* link;
+	diva_os_spin_lock_magic_t old_irql;
+
+	diva_os_get_hotplug_map (&mapEntries, &ignoreSn);
+	if (mapEntries < 2)
+		return;
+
+	/* Clean up hotplug wait q */
+	diva_os_enter_spin_lock(&adapter_lock, &old_irql, "restart hotplug q");
+
+	link = diva_q_get_head(&hotplug_wait_q);
+	while (link != 0) {
+		diva_hotplug_wait_entry_t* pWait = DIVAS_CONTAINING_RECORD(link, diva_hotplug_wait_entry_t, link);
+		int i, j, max = MAX_ADAPTER - pWait->pdiva->xdi_adapter.tasks, nr = pWait->pdiva->xdi_adapter.tasks;
+
+		link = diva_q_get_next (link);
+
+		for (i = 0; i < max; i++) {
+			if (!diva_find_free_adapters(i, nr, pWait->pdiva->xdi_adapter.cardType, pWait->pdiva->xdi_adapter.serialNo)) {
+				diva_os_xdi_adapter_t *pdiva = pWait->pdiva, *pa;
+
+				pdiva->controller = i + 1;
+				pdiva->xdi_adapter.ANum = pdiva->controller;
+				IoAdapters[i] = &pdiva->xdi_adapter;
+				diva_q_remove (&hotplug_wait_q, &pWait->link);
+
+				diva_os_leave_spin_lock(&adapter_lock, &old_irql, "restart hotplug q");
+
+				diva_os_free (0, pWait);
+				create_adapter_proc(pdiva);	/* add adapter to proc file system */
+				DBG_LOG(("delayed add %s:%d", CardProperties [pdiva->xdi_adapter.cardType].Name, pdiva->controller))
+
+				diva_os_enter_spin_lock(&adapter_lock, &old_irql, "restart hotplug q");
+
+				pa = pdiva;
+				for (j = 1; j < nr; j++) {	/* slave adapters, if any */
+					pa = (diva_os_xdi_adapter_t *) diva_q_get_next(&pa->link);
+					if (pa && !pa->interface.cleanup_adapter_proc) {
+						pa->controller = i + 1 + j;
+						pa->xdi_adapter.ANum = pa->controller;
+						IoAdapters[i + j] = &pa->xdi_adapter;
+
+						diva_os_leave_spin_lock(&adapter_lock, &old_irql, "restart hotplug q");
+
+						DBG_LOG(("delayed add slave adapter (%d)", pa->controller))
+						create_adapter_proc(pa);	/* add adapter to proc file system */
+
+						diva_os_enter_spin_lock(&adapter_lock, &old_irql, "restart hotplug q");
+
+					} else {
+						DBG_ERR(("slave adapter problem"))
+						break;
+					}
+				}
+				break;
+			}
+		}
+	}
+
+	diva_os_leave_spin_lock(&adapter_lock, &old_irql, "restart hotplug q");
 }
 
 int diva_driver_stop_card_no_io (void* pdiva) {
@@ -481,7 +691,7 @@ int diva_driver_stop_card_no_io (void* pdiva) {
 /* --------------------------------------------------------------------------
     Create diva PCI adapter and init internal adapter structures
    -------------------------------------------------------------------------- */
-static void *divas_create_pci_card(int handle, void *pci_dev_handle, int msi)
+static void *divas_create_pci_card(int handle, void *pci_dev_handle, int msi, int dac_disabled)
 {
 	diva_supported_cards_info_t *pI = &divas_supported_cards[handle];
 	diva_os_spin_lock_magic_t old_irql;
@@ -501,8 +711,14 @@ static void *divas_create_pci_card(int handle, void *pci_dev_handle, int msi)
 	a->Bus = DIVAS_XDI_ADAPTER_BUS_PCI;
 	a->xdi_adapter.cardType = a->CardOrdinal;
 	a->xdi_adapter.msi      = (msi != 0);
+	a->xdi_adapter.software_options |= ((dac_disabled == 0) ? 0 : (PCINIT_SOFTWARE_OPTION_DAC_DISABLED));
 	a->resources.pci.bus = diva_os_get_pci_bus(pci_dev_handle);
 	a->resources.pci.func = diva_os_get_pci_func(pci_dev_handle);
+  if (diva_os_get_pci_revision_id(pci_dev_handle, &a->resources.pci.revId) != 0)
+  {
+    DBG_ERR(("A: error reading PCI Revision ID"));
+    return (0);
+  }
 	a->resources.pci.hdev = pci_dev_handle;
 
 	/*
@@ -531,6 +747,19 @@ static void *divas_create_pci_card(int handle, void *pci_dev_handle, int msi)
 void divasa_xdi_driver_unload(void)
 {
 	diva_os_xdi_adapter_t *a;
+	diva_entity_link_t* link;
+	diva_os_spin_lock_magic_t old_irql;
+
+	/* Clean up hotplug wait q */
+	diva_os_enter_spin_lock(&adapter_lock, &old_irql, "remode adapter");
+	for (link = diva_q_get_head(&hotplug_wait_q); link != 0; link = diva_q_get_head(&hotplug_wait_q)) {
+		diva_hotplug_wait_entry_t* pWait = DIVAS_CONTAINING_RECORD(link, diva_hotplug_wait_entry_t, link);
+		diva_q_remove(&hotplug_wait_q, link);
+		diva_os_leave_spin_lock(&adapter_lock, &old_irql, "driver_unload");
+		diva_os_free (0, pWait);
+		diva_os_enter_spin_lock(&adapter_lock, &old_irql, "remode adapter");
+	}
+	diva_os_leave_spin_lock(&adapter_lock, &old_irql, "driver_unload");
 
 	while ((a = get_and_remove_from_queue())) {
 		if (a->interface.cleanup_adapter_proc) {
@@ -601,9 +830,65 @@ void diva_xdi_close_adapter(void *adapter, void *os_handle)
 	}
 }
 
+int diva_xdi_write_direct (void *os_handle,
+													 const void *src,
+													 int length,
+													 divas_xdi_copy_from_user_fn_t cp_fn) {
+	diva_xdi_direct_access_cmd_t cmd;
+	int ret = -1;
+
+	if (unlikely(length > sizeof(cmd) || length < sizeof(cmd.hdr)+sizeof(dword)))
+		return (-1);
+
+	if ((*cp_fn) (os_handle, &cmd, src, length) != length)
+		return (-1);
+
+	if (unlikely(cmd.hdr.ident != DIVA_XDI_DIRECT_ACCESS_CMD_IDENT))
+		return (-1);
+
+	if (cmd.hdr.cmd == DIVA_XDI_DIRECT_ACCESS_CMD_WRITE_BY_ADDRESS &&
+			sizeof(cmd.cmd.write_by_address) == length - sizeof(cmd.hdr) &&
+			(cmd.cmd.write_by_address.address & 0x3U) == 0) {
+		diva_os_xdi_adapter_t *a;
+		diva_os_spin_lock_magic_t old_irql;
+
+		diva_os_enter_spin_lock(&adapter_lock, &old_irql, "write_direct");
+
+		for (a = (diva_os_xdi_adapter_t *) diva_q_get_head(&adapter_queue);
+				 a != 0;
+				 a = (diva_os_xdi_adapter_t *)diva_q_get_next(&a->link)) {
+			if (a->xdi_adapter.ControllerNumber == 0 && a->xdi_adapter.Initialized != 0 && a->xdi_adapter.sdram_bar != 0) {
+				dword start = a->xdi_adapter.sdram_bar;
+				dword end   = a->xdi_adapter.sdram_bar + a->xdi_adapter.AdapterTestMemoryLength;
+				dword dst   = cmd.cmd.write_by_address.address;
+
+				if (dst > start && dst < end) {
+					dword offset = dst - start;
+					volatile dword* vdst = (dword*)(((byte*)(a->xdi_adapter.AdapterTestMemoryStart)) + offset);
+
+					*vdst = cmd.cmd.write_by_address.value;
+					ret = length;
+					break;
+				}
+			}
+		}
+
+		diva_os_leave_spin_lock(&adapter_lock, &old_irql, "write_direct");
+	}
+
+	return (ret);
+}
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,16,0)
 static int diva_get_clock_memory_info (dword* bus_addr_lo,
 																			 dword* bus_addr_hi,
 																			 dword* length) {
+#else
+static int diva_get_clock_memory_info (dword* bus_addr_lo,
+																			 dword* bus_addr_hi,
+																			 dword* length,
+																			 void*  pci_dev_handle) {
+#endif
   int mem_length = MAX(sizeof(IDI_SYNC_REQ),(sizeof(DESCRIPTOR)*MAX_DESCRIPTORS));
   byte* mem = (byte*)diva_os_malloc(0, mem_length);
 	int ret = -1;
@@ -627,6 +912,9 @@ static int diva_get_clock_memory_info (dword* bus_addr_lo,
 			IDI_SYNC_REQ* sync_req = (IDI_SYNC_REQ*)mem;
 
 			memset (sync_req, 0x00, sizeof(*sync_req));
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,16,0)
+			sync_req->xdi_clock_data.info.pci_dev_handle = pci_dev_handle;
+#endif
 
       sync_req->xdi_clock_data.Rc = IDI_SYNC_REQ_XDI_GET_CLOCK_DATA;
 			(*dadapter_request)((ENTITY*)sync_req);
@@ -634,12 +922,17 @@ static int diva_get_clock_memory_info (dword* bus_addr_lo,
 				*bus_addr_lo = sync_req->xdi_clock_data.info.bus_addr_lo;
 				*bus_addr_hi = sync_req->xdi_clock_data.info.bus_addr_hi;
 				*length      = sync_req->xdi_clock_data.info.length;
+				DBG_LOG(("%s: (%08x:%08x), length:%d",
+					__FUNCTION__,
+					sync_req->xdi_clock_data.info.bus_addr_lo,
+					sync_req->xdi_clock_data.info.bus_addr_hi,
+					sync_req->xdi_clock_data.info.length))
 				ret = 0;
-			}
+			}	
 		}
 
 		diva_os_free (0, mem);
-	} 
+	}
 
 	return (ret);
 }
@@ -652,20 +945,32 @@ static int diva_common_cmd_card_proc (struct _diva_os_xdi_adapter* a,
 	int ret = -1;
 
 	if (cmd->adapter != a->controller) {
-		DBG_ERR(("common_cmd, wrond controller=%d != %d", cmd->adapter, a->controller))
+		DBG_ERR(("common_cmd, wrong controller=%d != %d", cmd->adapter, a->controller))
 		return (-1);
 	}
 
 	switch (cmd->command) {
 		case DIVA_XDI_UM_CMD_GET_CLOCK_MEMORY_INFO:
+			DBG_LOG(("clock data cmd: adapter= %d", a->controller))
 			a->xdi_mbox.data_length = sizeof(diva_xdi_um_cfg_cmd_get_clock_memory_info_t);
 			if ((a->xdi_mbox.data = diva_os_malloc (0, a->xdi_mbox.data_length)) != 0) {
 				diva_xdi_um_cfg_cmd_get_clock_memory_info_t* info =
 									(diva_xdi_um_cfg_cmd_get_clock_memory_info_t*)a->xdi_mbox.data;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,16,0)
 				if (diva_get_clock_memory_info (&info->bus_addr_lo, &info->bus_addr_hi, &info->length) == 0) {
+#else
+				if (diva_get_clock_memory_info (
+							&info->bus_addr_lo, &info->bus_addr_hi, &info->length, a->resources.pci.hdev) == 0) {
+					a->resources.pci.clock_data_bus_addr = info->bus_addr_lo; // save bus address for stop/unmap
+#endif
 					a->xdi_mbox.status = DIVA_XDI_MBOX_BUSY;
 					ret = 0;
+					DBG_LOG(("%s: cmd=0x%x A(%d) (pci_dev=%p)",
+						 	__FUNCTION__, cmd->command, a->controller, a->resources.pci.hdev));
+					DBG_LOG(("%s: (%08x:%08x), length:%d",
+						 	__FUNCTION__, info->bus_addr_lo, info->bus_addr_hi, info->length));
 				} else {
+					DBG_ERR(("%s xdi_clock_data, A(%d) (pci_dev=%p)", __FUNCTION__, a->controller, a->resources.pci.hdev))
 					diva_os_free (0, a->xdi_mbox.data);
 					a->xdi_mbox.data        = 0;
 					a->xdi_mbox.data_length = 0;
@@ -738,6 +1043,88 @@ static int diva_common_cmd_card_proc (struct _diva_os_xdi_adapter* a,
 			}
 			break;
 
+		case DIVA_XDI_UM_CMD_BAR_ACCESS:
+			a->xdi_mbox.data        = 0;
+			a->xdi_mbox.data_length = 0;
+			if (a->xdi_adapter.ControllerNumber == 0) {
+				diva_xdi_um_bar_access_data_t* data = &cmd->command_data.bar_access_data;
+				void* base = 0;
+
+				switch (data->bar)
+				{
+				case 0:
+					base = a->xdi_adapter.reset;
+					break;
+
+				case 3:
+					base = a->xdi_adapter.ctlReg;
+					break;
+				}
+				if (!base) {
+					break;
+				}
+
+				byte* const response = diva_os_malloc(0, data->length + sizeof(dword));
+
+				if (!response) {
+					break;
+				}
+				a->xdi_mbox.data = response;
+				a->xdi_mbox.data_length = data->length + sizeof(dword);
+				a->xdi_mbox.status = DIVA_XDI_MBOX_BUSY;
+				ret = 0;
+				*(dword*) response = 0x80000000;
+				if (!(data->access_type & DIVA_BAR_ACCESS_TYPE_SINGLE)) {
+					break;
+				}
+
+				if ((data->access_type & DIVA_BAR_ACCESS_TYPE_WRITE) ||
+						(data->access_type & DIVA_BAR_ACCESS_TYPE_WRITE_READ)) {
+					switch (data->length)
+					{
+					case 1:
+						*(volatile byte*) (base + data->offset) = (byte) data->data;
+						*(dword*) response = 0;
+						break;
+
+					case 2:
+						*(volatile word*) (base + data->offset) = (word) data->data;
+						*(dword*) response = 0;
+						break;
+
+					case 4:
+						*(volatile dword*) (base + data->offset) = data->data;
+						*(dword*) response = 0;
+						break;
+					}
+					if ((*(dword*) response & 0x80000000) != 0) {
+						break;
+					}
+				}
+
+				if (!(data->access_type & DIVA_BAR_ACCESS_TYPE_WRITE) ||
+						(data->access_type & DIVA_BAR_ACCESS_TYPE_WRITE_READ)) {
+					switch (data->length)
+					{
+					case 1:
+						response[sizeof(dword)] = *(volatile byte*) (base + data->offset);
+						*(dword*) response = 1;
+						break;
+
+					case 2:
+						*(word*) &response[sizeof(dword)] = *(volatile word*) (base +data->offset);
+						*(dword*) response = 2;
+						break;
+
+					case 4:
+						*(dword*) &response[sizeof(dword)] = *(volatile dword*) (base + data->offset);
+						*(dword*) response = 4;
+						break;
+					}
+				}
+			}
+			break;
+
 		case DIVA_XDI_UM_CMD_CLOCK_INTERRUPT_DATA:
 			a->xdi_mbox.data_length = sizeof(diva_xdi_um_cfg_cmd_get_clock_interrupt_data_t);
 			if ((a->xdi_mbox.data = diva_os_malloc (0, a->xdi_mbox.data_length)) != 0) {
@@ -752,9 +1139,33 @@ static int diva_common_cmd_card_proc (struct _diva_os_xdi_adapter* a,
 			}
 			break;
 
-		default:
-			*adapter_specific_command = 1;
-			break;
+    case DIVA_XDI_UM_CMD_READ_SOFTWARE_OPTIONS:
+      a->xdi_mbox.data_length = sizeof(dword);
+      a->xdi_mbox.data = diva_os_malloc (0, a->xdi_mbox.data_length);
+      if (a->xdi_mbox.data) {
+        *(dword*)a->xdi_mbox.data = a->xdi_adapter.software_options;
+        a->xdi_mbox.status = DIVA_XDI_MBOX_BUSY;
+        ret = 0;
+      } else {
+        a->xdi_mbox.data_length = 0;
+      }
+      break;
+
+    case DIVA_XDI_UM_CMD_GET_PCI_REVISION_ID:
+      a->xdi_mbox.data_length = 1;
+      a->xdi_mbox.data = diva_os_malloc (0, a->xdi_mbox.data_length);
+      if (a->xdi_mbox.data) {
+        *(byte*)a->xdi_mbox.data = a->resources.pci.revId;
+        a->xdi_mbox.status = DIVA_XDI_MBOX_BUSY;
+        ret = 0;
+      } else {
+        a->xdi_mbox.data_length = 0;
+      }
+      break;
+
+    default:
+      *adapter_specific_command = 1;
+      break;
 	}
 
 	return (ret);
@@ -1004,7 +1415,36 @@ int diva_card_read_xlog(diva_os_xdi_adapter_t * a)
 	req->req = LOG;
 	req->rc = 0x00;
 
-	(*(a->xdi_adapter.DIRequest)) (&a->xdi_adapter, (ENTITY *) req);
+	if (IDI_PROP(a->CardOrdinal,Card) != CARD_PASSIVEP) {
+		(*(a->xdi_adapter.DIRequest)) (&a->xdi_adapter, (ENTITY *) req);
+	} else {
+		DESCRIPTOR DIDD_Table[MAX_DESCRIPTORS];
+		IDI_SYNC_REQ syncReq;
+		IDI_CALL request;
+		int x;
+
+		diva_os_read_descriptor_array(DIDD_Table, sizeof(DIDD_Table));
+
+		for (x = 0, request = 0; x < MAX_DESCRIPTORS && request == 0; x++) {
+			if (DIDD_Table[x].channels != 0 && DIDD_Table[x].type < IDI_VADAPTER) {
+				syncReq.xdi_logical_adapter_number.Req = 0;
+				syncReq.xdi_logical_adapter_number.Rc  = IDI_SYNC_REQ_XDI_GET_LOGICAL_ADAPTER_NUMBER;
+				syncReq.xdi_logical_adapter_number.info.logical_adapter_number = 0;
+				DIDD_Table[x].request((ENTITY*)&syncReq);
+				if (syncReq.xdi_logical_adapter_number.info.logical_adapter_number == a->xdi_adapter.ANum) {
+					request = DIDD_Table[x].request;
+				}
+			}
+		}
+
+		if (request != 0) {
+			request((ENTITY*)req);
+		} else {
+			diva_os_free(0, data);
+			diva_os_free(0, req);
+			return (-1);
+		}
+	}
 
 	if (!req->rc || req->req) {
 		diva_os_free(0, data);
@@ -1034,3 +1474,4 @@ void diva_vidi_sync_buffers_and_start_tx_dma(PISDN_ADAPTER IoAdapter) {
   *(volatile dword*)dma_req_counter = (dword)IoAdapter->host_vidi.local_request_counter;
 }
 
+// vim: set tabstop=2 softtabstop=2 shiftwidth=2 :

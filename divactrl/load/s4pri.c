@@ -1,29 +1,33 @@
-/*------------------------------------------------------------------------------
+
+/*
  *
- * (c) COPYRIGHT 1999-2007       Dialogic Corporation
+  Copyright (c) Sangoma Technologies, 2018-2022
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
  *
- * ALL RIGHTS RESERVED
+  This source file is supplied for the use with
+  Sangoma (formerly Dialogic) range of Adapters.
  *
- * This software is the property of Dialogic Corporation and/or its
- * subsidiaries ("Dialogic"). This copyright notice may not be removed,
- * modified or obliterated without the prior written permission of
- * Dialogic.
+  File Revision :    2.1
  *
- * This software is a Trade Secret of Dialogic and may not be
- * copied, transmitted, provided to or otherwise made available to any company,
- * corporation or other person or entity without written permission of
- * Dialogic.
+  This program is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; either version 2, or (at your option)
+  any later version.
  *
- * No right, title, ownership or other interest in the software is hereby
- * granted or transferred. The information contained herein is subject
- * to change without notice and should not be construed as a commitment of
- * Dialogic.
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY OF ANY KIND WHATSOEVER INCLUDING ANY
+  implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+  See the GNU General Public License for more details.
  *
- *------------------------------------------------------------------------------*/
-/* --------------------------------------------------------------------------
-		This file wraps arpoud classic kernel mode procedure to be able
-		to call same code in user mode
-	 -------------------------------------------------------------------------- */
+  You should have received a copy of the GNU General Public License
+  along with this program; if not, write to the Free Software
+  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *
+ */
+
 #include "platform.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -58,11 +62,12 @@ int divas_4pri_create_image (byte* sdram, /* SDRAM image */
                              int prot_fd,
                              int dsp_fd,
 														 dword* protocol_features,
-														 int tasks) {
+                             int tasks,
+                             int pcie_fs) {
 	PISDN_ADAPTER IoAdapter, Slave;
-	PISDN_ADAPTER adapter_array[4];
+	PISDN_ADAPTER adapter_array[8];
 	ADAPTER_LIST_ENTRY	quadro_list;
-	dword card_bar = cfg_get_card_bar (2);
+	dword card_bar = pcie_fs == 0 ? cfg_get_card_bar (2) :  cfg_get_card_bar (0);
 	dword offset;
 	int i;
   int vidi_init_ok = 0;
@@ -119,6 +124,11 @@ int divas_4pri_create_image (byte* sdram, /* SDRAM image */
 	strcpy (IoAdapter->protocol_name, "p0");
 	diva_set_named_value ("bfdload.bin", (dword)dsp_fd);
 	strcpy (&IoAdapter->AddDownload[0], "bfdload.bin");
+
+	for (i = 0; i < tasks; i++) {
+		Slave = IoAdapter->QuadroList->QuadroAdapter[i];
+		Slave->xconnectExportMode = MIN(DivaXconnectExportModeMax,diva_nr_li_descriptors);
+	}
 
 	for (i = 0; i < tasks; i++) {
 		Slave = IoAdapter->QuadroList->QuadroAdapter[i];

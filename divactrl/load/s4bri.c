@@ -1,29 +1,33 @@
-/*------------------------------------------------------------------------------
+
+/*
  *
- * (c) COPYRIGHT 1999-2007       Dialogic Corporation
+  Copyright (c) Sangoma Technologies, 2018-2022
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
  *
- * ALL RIGHTS RESERVED
+  This source file is supplied for the use with
+  Sangoma (formerly Dialogic) range of Adapters.
  *
- * This software is the property of Dialogic Corporation and/or its
- * subsidiaries ("Dialogic"). This copyright notice may not be removed,
- * modified or obliterated without the prior written permission of
- * Dialogic.
+  File Revision :    2.1
  *
- * This software is a Trade Secret of Dialogic and may not be
- * copied, transmitted, provided to or otherwise made available to any company,
- * corporation or other person or entity without written permission of
- * Dialogic.
+  This program is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; either version 2, or (at your option)
+  any later version.
  *
- * No right, title, ownership or other interest in the software is hereby
- * granted or transferred. The information contained herein is subject
- * to change without notice and should not be construed as a commitment of
- * Dialogic.
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY OF ANY KIND WHATSOEVER INCLUDING ANY
+  implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+  See the GNU General Public License for more details.
  *
- *------------------------------------------------------------------------------*/
-/* --------------------------------------------------------------------------
-		This file wraps arpoud classic kernel mode procedure to be able
-		to call same code in user mode
-	 -------------------------------------------------------------------------- */
+  You should have received a copy of the GNU General Public License
+  along with this program; if not, write to the Free Software
+  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *
+ */
+
 #include "platform.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -34,8 +38,10 @@
 #include "os.h"
 #include "diva_cfg.h"
 #include <dlist.h>
+#include <xdi_msg.h>
 
 #include <s_4bri.c>
+
 extern int card_ordinal;
 extern int logical_adapter;
 extern int logical_adapter_separate_config;
@@ -67,6 +73,20 @@ int divas_4bri_create_image (int revision,
 	dword          code, FileLength;
 	byte           *File;
 	dword card_bar = cfg_get_card_bar (2);
+  int vidi_init_ok = 0;
+	dword vidi_mode;
+
+	vidi_mode = diva_cfg_get_vidi_mode ();
+
+
+	DBG_LOG(("vidi mode: %u", vidi_mode))
+
+	if (diva_cfg_get_set_vidi_state (vidi_mode) != 0) {
+		vidi_mode = 0;
+		DBG_ERR(("failed to update vidi mode state"))
+	}
+
+	DBG_LOG(("vidi state: '%s'", vidi_mode != 0 ? "on" : "off"))
 
 	protocol_ids[0] = protocol_id_0;
 	protocol_ids[1] = protocol_id_1;
@@ -85,10 +105,10 @@ int divas_4bri_create_image (int revision,
 		}
 	}
 
-
 	for (i = 0; i < tasks; i++) {
 		Slave = adapter_array[i];
 		Slave->ControllerNumber = i;
+		Slave->host_vidi.vidi_active = vidi_mode != 0;
 		Slave->reentrant = (byte)reentrant_protocol;
 		if (revision) {
 			if (reentrant_protocol != 0) {
@@ -204,7 +224,6 @@ int divas_4bri_create_image (int revision,
 				Slave->features       = IoAdapter->features;
 				Slave->InitialDspInfo = IoAdapter->InitialDspInfo;
 			}
-
 		} else {
 	  	if (!qBri_telindus_load (IoAdapter)) {
 				for (i = 0; i < tasks; i++) { free (adapter_array[i]); }
@@ -222,6 +241,17 @@ int divas_4bri_create_image (int revision,
 
 	for (i = 0; i < tasks; i++) {
   	Slave = IoAdapter->QuadroList->QuadroAdapter[i] ;
+		if (vidi_mode != 0) {
+			diva_xdi_um_cfg_cmd_data_init_vidi_t host_vidi;
+
+			memset (&host_vidi, 0x00, sizeof(host_vidi));
+			if (diva_cfg_get_vidi_info_struct (i, &host_vidi) != 0) {
+				DBG_ERR(("A(%d) failed to initialize vidi", card_number+i))
+				vidi_init_ok = -1;
+				break;
+			}
+			diva_set_vidi_values (Slave, &host_vidi);
+		}
 		if (IoAdapter->reentrant != 0) {
 			Slave->ram += MP_SHARED_RAM_OFFSET;
 		} else {

@@ -1,11 +1,16 @@
+
 /*
  *
-  Copyright (c) Dialogic, 2007.
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
  *
   This source file is supplied for the use with
-  Dialogic range of DIVA Server Adapters.
+  Sangoma (formerly Dialogic) range of Adapters.
  *
-  Dialogic File Revision :    1.9
+  File Revision :    2.1
  *
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -22,36 +27,7 @@
   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  */
-/* Definitions for use with the Management Information Element      */
 
-/*------------------------------------------------------------------*/
-/* Management information element                                   */
-/* ----------------------------------------------------------       */
-/* Byte     Coding            Comment                               */
-/* ----------------------------------------------------------       */
-/*    0 | 0 1 1 1 1 1 1 1 | ESC                                     */
-/*    1 | 0 x x x x x x x | Length of information element (m-1)     */
-/*    2 | 1 0 0 0 0 0 0 0 | Management Information Id               */
-/*    3 | x x x x x x x x | Type                                    */
-/*    4 | x x x x x x x x | Attribute                               */
-/*    5 | x x x x x x x x | Status                                  */
-/*    6 | x x x x x x x x | Variable Value Length (m-n)             */
-/*    7 | x x x x x x x x | Path / Variable Name String Length (n-8)*/
-/* 8..n | x x x x x x x x | Path/Node Name String separated by '\'  */
-/* n..m | x x x x x x x x | Variable content                        */
-/*------------------------------------------------------------------*/
-
-/*------------------------------------------------------------------*/
-/* Type Field                                                       */
-/*                                                                  */
-/* MAN_READ:      not used                                          */
-/* MAN_WRITE:     not used                                          */
-/* MAN_EVENT_ON:  not used                                          */
-/* MAN_EVENT_OFF: not used                                          */
-/* MAN_INFO_IND:  type of variable                                  */
-/* MAN_EVENT_IND: type of variable                                  */
-/* MAN_TRACE_IND  not used                                          */
-/*------------------------------------------------------------------*/
 #define MI_DIR          0x01  /* Directory string (zero terminated) */
 #define MI_EXECUTE      0x02  /* Executable function (has no value) */
 #define MI_ASCIIZ       0x03  /* Zero terminated string             */

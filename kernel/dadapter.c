@@ -1,12 +1,16 @@
 
 /*
  *
-  Copyright (c) Dialogic, 2007.
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
  *
   This source file is supplied for the use with
-  Dialogic range of DIVA Server Adapters.
+  Sangoma (formerly Dialogic) range of Adapters.
  *
-  Dialogic File Revision :    2.1
+  File Revision :    2.1
  *
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -23,8 +27,7 @@
   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  */
-/*
- */
+
 #include "platform.h"
 #include "pc.h"
 #include "debuglib.h"
@@ -266,20 +269,45 @@ static void IDI_CALL_LINK_T diva_dadapter_request (\
 #endif
   case IDI_SYNC_REQ_XDI_GET_CLOCK_DATA: {
     diva_xdi_get_clock_data_t* clock_data = &syncReq->xdi_clock_data.info;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,16,0)
     if (diva_get_clock_data (&clock_data->bus_addr_lo,
                              &clock_data->bus_addr_hi,
                              &clock_data->length,
                              &clock_data->addr) == 0) {
-      DBG_LOG(("clock data: (%08x:%08x) %p, length:%d",
-              clock_data->bus_addr_lo,
-              clock_data->bus_addr_hi,
-              clock_data->addr,
-              clock_data->length))
+#else
+    if (diva_get_clock_data (&clock_data->bus_addr_lo,
+                             &clock_data->bus_addr_hi,
+                             &clock_data->length,
+                             &clock_data->addr,
+                             clock_data->pci_dev_handle) == 0) {
+	DBG_LOG(("%s: (%08x:%08x) %p, len:%d dev=%p",
+              __FUNCTION__,
+	      clock_data->bus_addr_lo,
+	      clock_data->bus_addr_hi,
+	      clock_data->addr,
+	      clock_data->length,
+	      clock_data->pci_dev_handle))
+#endif
       e->Rc = 0xff;
     } else {
       e->Rc = OUT_OF_RESOURCES;
     }
   } break;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,16,0)
+  case IDI_SYNC_REQ_XDI_UNMAP_CLOCK_DATA_ADDR: {
+    diva_xdi_get_clock_data_t* clock_data = &syncReq->xdi_clock_data.info;
+
+    DBG_LOG(("%s: (%08x:%08x) %p",
+              __FUNCTION__, clock_data->bus_addr_lo, clock_data->bus_addr_hi, clock_data->pci_dev_handle))
+    if (diva_unmap_clock_data (clock_data->bus_addr_lo,
+                           0,
+                           clock_data->pci_dev_handle) == 0) {
+      e->Rc = 0xff;
+    } else {
+      e->Rc = OUT_OF_RESOURCES;
+    }
+  } break;
+#endif
   default:
    DBG_ERR (("Can't process sync request, Req=%02x", e->Rc))
    e->Rc = OUT_OF_RESOURCES;

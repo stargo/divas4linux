@@ -1,11 +1,16 @@
+
 /*
  *
-  Copyright (c) Dialogic, 2008.
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
  *
   This source file is supplied for the use with
-  Dialogic range of DIVA Server Adapters.
+  Sangoma (formerly Dialogic) range of Adapters.
  *
-  Dialogic File Revision :    2.1
+  File Revision :    2.1
  *
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -22,12 +27,14 @@
   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  */
+
 #include "platform.h"
 #include "cardtype.h"
 #include "di_defs.h"
 #include "pc.h"
 #include "pr_pc.h"
 #include "di.h"
+#include "vidi_di.h"
 #include "mi_pc.h"
 #include "pc_maint.h"
 #include "divasync.h"
@@ -37,9 +44,7 @@
 #include "dsrv_analog.h"
 #include "dsrv4bri.h"
 #include "dsp_defs.h"
-#if defined(DIVA_ADAPTER_TEST_SUPPORTED)
 #include "divatest.h" /* Adapter test framework */
-#endif
 #include "fpga_rom.h"
 #include "fpga_rom_xdi.h"
 
@@ -128,10 +133,34 @@ static void stop_analog_hardware (PISDN_ADAPTER IoAdapter) {
 	int reset_offset = MQ2_BREG_RISC;
 	int irq_offset   = MQ2_BREG_IRQ_TEST;
 	int hw_offset    = MQ2_ISAC_DSP_RESET;
+	int i = 0;
 
   Reset = (dword volatile *)(&IoAdapter->ctlReg[reset_offset]) ;
   Irq   = (dword volatile *)(&IoAdapter->ctlReg[irq_offset]) ;
   DspReset = (dword volatile *)(&IoAdapter->ctlReg[hw_offset]);
+
+	if (IoAdapter->host_vidi.vidi_started != 0) {
+		diva_os_spin_lock_magic_t OldIrql;
+
+		diva_os_enter_spin_lock (&IoAdapter->data_spin_lock, &OldIrql, "stop");
+		IoAdapter->host_vidi.request_flags |= DIVA_VIDI_REQUEST_FLAG_STOP_AND_INTERRUPT;
+		diva_os_schedule_soft_isr (&IoAdapter->req_soft_isr);
+		diva_os_leave_spin_lock (&IoAdapter->data_spin_lock, &OldIrql, "stop");
+
+		do {
+			diva_os_sleep(10);
+		} while (i++ < 10 &&
+					 (IoAdapter->host_vidi.request_flags & DIVA_VIDI_REQUEST_FLAG_STOP_AND_INTERRUPT) != 0);
+    if ((IoAdapter->host_vidi.request_flags & DIVA_VIDI_REQUEST_FLAG_STOP_AND_INTERRUPT) == 0) {
+			i = 0;
+			do {
+				diva_os_sleep(10);
+			} while (i++ < 10 && IoAdapter->host_vidi.cpu_stop_message_received != 2);
+    }
+		if (i >= 10) {
+			DBG_ERR(("A(%d) vidi, failed to stop CPU", IoAdapter->ANum))
+		}
+	}
 
   /*
    * clear interrupt line (reset Local Interrupt Test Register)
@@ -171,25 +200,34 @@ int analog_FPGA_download (PISDN_ADAPTER IoAdapter) {
     case CARDTYPE_DIVASRV_V_ANALOG_4P_PCIE:
     case CARDTYPE_DIVASRV_ANALOG_8P_PCIE:
     case CARDTYPE_DIVASRV_V_ANALOG_8P_PCIE:
-  	  if (!(File = (byte *)xdiLoadFile("dspi8pe1.bit", &FileLength, 0))) return (0);
+    case CARDTYPE_DIVASRV_V_ANALOG_2P_PCIE_HYPERCOM:
+    case CARDTYPE_DIVASRV_V_ANALOG_4P_PCIE_HYPERCOM:
+    case CARDTYPE_DIVASRV_V_ANALOG_8P_PCIE_HYPERCOM:
+      if (!(File = (byte *)xdiLoadFile("dspi8pe1.bit", &FileLength, 0))) {
+        return (0);
+      }
       code_start = 0;
       break;
-    
+
     case CARDTYPE_DIVASRV_ANALOG_2PORT:
     case CARDTYPE_DIVASRV_V_ANALOG_2PORT:
-  	  if (!(File = (byte *)xdiLoadFile("dsap2.bit", &FileLength, 0))) return (0);
+      if (!(File = (byte *)xdiLoadFile("dsap2.bit", &FileLength, 0))) {
+        return (0);
+      }
       code_start = 0;
       break;
-    
+
     case CARDTYPE_DIVASRV_ANALOG_4PORT:
     case CARDTYPE_DIVASRV_V_ANALOG_4PORT:
     case CARDTYPE_DIVASRV_ANALOG_8PORT:
     case CARDTYPE_DIVASRV_V_ANALOG_8PORT:
-	    if (!(File = qBri_check_FPGAsrc (IoAdapter, "dsap8.bit", &FileLength, &code_start))) return 0;
+      if (!(File = qBri_check_FPGAsrc (IoAdapter, "dsap8.bit", &FileLength, &code_start))) {
+        return 0;
+      }
       break;
 
     default:
-	    DBG_TRC(("Illegal card type %d", IoAdapter->cardType))
+      DBG_TRC(("Illegal card type %d", IoAdapter->cardType))
       return (0);
   }
 
@@ -281,33 +319,38 @@ int analog_FPGA_download (PISDN_ADAPTER IoAdapter) {
 	}
 
 	if ((IDI_PROP_SAFE(IoAdapter->cardType,HardwareFeatures) & DIVA_CARDTYPE_HARDWARE_PROPERTY_SEAVILLE) != 0) {
-    byte Bus   = (byte)IoAdapter->BusNumber;
-    byte Slot  = (byte)IoAdapter->slotNumber;
-    void* hdev = IoAdapter->hdev;
-    dword pedevcr = 0;
-    byte  MaxReadReq;
+		byte Bus   = (byte)IoAdapter->BusNumber;
+		byte Slot  = (byte)IoAdapter->slotNumber;
+		void* hdev = IoAdapter->hdev;
+		dword pedevcr = 0;
+		byte  MaxReadReq;
+		byte revID = 0;
 
-    PCIread (Bus, Slot, 0x54 /* PEDEVCR */, &pedevcr, sizeof(pedevcr), hdev);
-    if ((MaxReadReq = (byte)((pedevcr >> 12) & 0x07)) != 0x02) {
-      /*
-        A.4.15. DMA Read access on PCIe side can fail when Max
-                read request size is set to 128 or 256 bytes(J mode only)
-                Applies to:
-                  Silicon revision A0 (Intel part number D39505-001 or D44469-001)
-                  Silicon revision A1 (Intel part number D66398-001 or D66396-001)
-                  Device initializes max_read_request_size in PEDEVCR register (see A.3.1.28).
-                  PCI Express Device Control register (PEDEVCR; PCI: 0x54; Local: 0x1054 )
-                  to 512bytes after reset. On certain systems during enumeration, BIOS was writing zero
-                  to this register setting max_read_request_size to 128bytes. Device currently supports
-                  max_read_request size of 512bytes. Setting this register to 128/256 bytes can cause
-                  DMA read access to fail on the PCIe side.
-                  Driver should set max_read_request_size to 512bytes while initializing the boards.
-
-        */
-      DBG_LOG(("PEDEVCR:%08x, MaxReadReq:%02x", pedevcr, MaxReadReq))
-      pedevcr &= ~(0x07U << 12);
-      pedevcr |=  (0x02U << 12);
-      PCIwrite (Bus, Slot, 0x54 /* PEDEVCR */, &pedevcr, sizeof(pedevcr), hdev);
+		PCIread (Bus, Slot, 0x54 /* PEDEVCR */, &pedevcr, sizeof(pedevcr), hdev);
+		if ((MaxReadReq = (byte)((pedevcr >> 12) & 0x07)) != 0x02) {
+			/*
+				A.4.15. DMA Read access on PCIe side can fail when Max
+				read request size is set to 128 or 256 bytes(J mode only)
+				Applies to:
+				  Silicon revision A0 (Intel part number D39505-001 or D44469-001)
+				  Silicon revision A1 (Intel part number D66398-001 or D66396-001)
+				  Device initializes max_read_request_size in PEDEVCR register (see A.3.1.28).
+				  PCI Express Device Control register (PEDEVCR; PCI: 0x54; Local: 0x1054 )
+				  to 512bytes after reset. On certain systems during enumeration, BIOS was writing zero
+				  to this register setting max_read_request_size to 128bytes. Device currently supports
+				  max_read_request size of 512bytes. Setting this register to 128/256 bytes can cause
+				  DMA read access to fail on the PCIe side.
+				  Driver should set max_read_request_size to 512bytes while initializing the boards.
+			*/
+			DBG_LOG(("PEDEVCR:%08x, MaxReadReq:%02x", pedevcr, MaxReadReq))
+			pedevcr &= ~(0x07U << 12);
+			pedevcr |=  (0x02U << 12);
+			// Retrieve RevisionID from PCI Config Space (HERA/FPGA-Seaville Replacement is >=3 limited to 0x10)
+			PCIread(Bus, Slot, 0x08, &revID, sizeof(revID), hdev);
+			if (!((revID >=0x3) && (revID <= 0x10)))
+			{
+				PCIwrite (Bus, Slot, 0x54 /* PEDEVCR */, &pedevcr, sizeof(pedevcr), hdev);
+			}
 		}
 
 		diva_xdi_show_fpga_rom_features (IoAdapter->ctlReg + MQ2_FPGA_INFO_ROM);
@@ -646,7 +689,6 @@ static int load_analog_hardware (PISDN_ADAPTER IoAdapter) {
 	 -------------------------------------------------------------------------- */
 static int analog_ISR (struct _ISDN_ADAPTER* IoAdapter) {
 	dword volatile     *Irq ;
-	int             	  serviced = 0 ;
 
 	if (!(IoAdapter->reset[PLX9054_INTCSR] & 0x80)) {
 		return (0) ;
@@ -660,11 +702,17 @@ static int analog_ISR (struct _ISDN_ADAPTER* IoAdapter) {
 
   if (IoAdapter && IoAdapter->Initialized && IoAdapter->tst_irq (&IoAdapter->a)) {
 			IoAdapter->IrqCount++ ;
-			serviced = 1 ;
 			diva_os_schedule_soft_isr (&IoAdapter->isr_soft_isr);
   }
 
-	return (serviced) ;
+	/*
+		Always serviced if cause indicated by PLX.
+		tst_irq may return false even it interrupt is indicated
+		by PLX. This is in case DPC running on parallel CPU already
+		called clr_irq
+		*/
+
+	return (1) ;
 }
 
 /*
@@ -743,10 +791,18 @@ void prepare_analog_functions (PISDN_ADAPTER IoAdapter) {
 	a->ram_out_buffer   = mem_out_buffer ;
 	a->ram_inc          = mem_inc ;
 
-	IoAdapter->out      = pr_out ;
-	IoAdapter->dpc      = pr_dpc ;
-	IoAdapter->tst_irq  = scom_test_int ;
-	IoAdapter->clr_irq  = scom_clear_int ;
+	if (IoAdapter->host_vidi.vidi_active) {
+		IoAdapter->out      = vidi_host_pr_out;
+		IoAdapter->dpc      = vidi_host_pr_dpc;
+		IoAdapter->tst_irq  = vidi_host_test_int;
+		IoAdapter->clr_irq  = vidi_host_clear_int;
+	} else {
+		IoAdapter->out      = pr_out ;
+		IoAdapter->dpc      = pr_dpc ;
+		IoAdapter->tst_irq  = scom_test_int ;
+		IoAdapter->clr_irq  = scom_clear_int ;
+	}
+
 	IoAdapter->pcm      = (struct pc_maint *)MIPS_MAINT_OFFS ;
 
 	IoAdapter->load     = load_analog_hardware ;

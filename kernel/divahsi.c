@@ -1,11 +1,16 @@
+
 /*
  *
-  Copyright (c) Dialogic, 2007.
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2004-2017
+  Copyright 2000-2003 by Armin Schindler (mac@melware.de)
+  Copyright 2000-2003 Cytronics & Melware (info@melware.de)
+
  *
   This source file is supplied for the use with
-  Dialogic range of DIVA Server Adapters.
+  Sangoma (formerly Dialogic) range of Adapters.
  *
-  Dialogic File Revision :    2.1
+  File Revision :    2.1
  *
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -22,6 +27,7 @@
   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  */
+
 #include <linux/version.h>
 #include <linux/module.h>
 #include <linux/init.h>
@@ -73,11 +79,7 @@ static void diva_hsi_wakeup_read (struct _diva_hsi_info *pHsi);
 static ssize_t diva_hsi_read  (struct file *file, char *buf, size_t count, loff_t *ppos);
 static ssize_t diva_hsi_write (struct file *file, const char *buf, size_t count, loff_t *ppos);
 static unsigned int diva_hsi_poll (struct file *file, poll_table * wait);
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,36)
 static int diva_hsi_ioctl (struct inode *inode, struct file *file, unsigned int cmd, unsigned long arg);
-#else
-static long diva_hsi_ioctl (struct file *file, unsigned int cmd, unsigned long arg);
-#endif
 static int diva_hsi_open (struct inode *inode, struct file *file);
 static int diva_hsi_release(struct inode *inode, struct file *file);
 static int diva_hsi_bridge_init (struct _diva_hsi_info* pHsi, const HSI_BRIDGE_INIT_INPUT* info);
@@ -96,11 +98,7 @@ static struct file_operations diva_hsi_fops = {
 	.read    = diva_hsi_read,
 	.write   = diva_hsi_write,
 	.poll    = diva_hsi_poll,
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,36)
 	.ioctl   = diva_hsi_ioctl,
-#else
-	.unlocked_ioctl   = diva_hsi_ioctl,
-#endif
 	.open    = diva_hsi_open,
 	.release = diva_hsi_release
 };
@@ -584,11 +582,7 @@ static unsigned int diva_hsi_poll (struct file *file, poll_table * wait) {
 	return 0;
 }
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,36)
 static int diva_hsi_ioctl (struct inode *inode, struct file *file, unsigned int cmd, unsigned long arg) {
-#else
-static long diva_hsi_ioctl (struct file *file, unsigned int cmd, unsigned long arg) {
-#endif
 	diva_hsi_info_t* pHsi = (diva_hsi_info_t*)file->private_data;
 	int ret;
 
@@ -637,11 +631,7 @@ static int diva_hsi_open (struct inode *inode, struct file *file) {
 		if (pHsi != 0) {
 			memset (pHsi, 0x00, sizeof(*pHsi));
 			rwlock_init (&pHsi->isr_spin_lock);
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,37)
 			init_MUTEX (&pHsi->diva_hsi_lock);
-#else
-			sema_init(&pHsi->diva_hsi_lock, 1);
-#endif
 			init_waitqueue_head (&pHsi->response_wait_q);
 			tasklet_init (&pHsi->isr_tasklet, diva_hsi_tasklet_proc, (unsigned long)pHsi);
 			diva_q_init (&pHsi->response_q);

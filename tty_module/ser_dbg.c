@@ -1,12 +1,13 @@
 
 /*
  *
-  Copyright (c) Dialogic(R), 2009.
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2009-2014.
  *
   This source file is supplied for the use with
-  Dialogic range of DIVA Server Adapters.
+  Sangoma (formerly Dialogic) range of DIVA Server Adapters.
  *
-  Dialogic(R) File Revision :    2.1
+  File Revision :    2.1
  *
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -32,9 +33,11 @@
 #endif
 //#include <linux/module.h>
 //#include <linux/init.h>
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,14,0)
 #include <asm/uaccess.h>
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,39)
 #include <linux/smp_lock.h>
+#endif
 #endif
 #include <linux/vmalloc.h>
 #include <linux/sched.h>
@@ -79,7 +82,7 @@ int connect_didd(void) {
   int x = 0;
   int dadapter = 0;
   IDI_SYNC_REQ req;
-  static DESCRIPTOR DIDD_Table[MAX_DESCRIPTORS];
+  DESCRIPTOR DIDD_Table[MAX_DESCRIPTORS];
 
   if (!DIVA_DIDD_Read_fn) {
 		return (0);

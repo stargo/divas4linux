@@ -1,12 +1,13 @@
 
 /*
  *
-  Copyright (c) Dialogic(R), 2009.
+  Copyright (c) Sangoma Technologies, 2018-2024
+  Copyright (c) Dialogic(R), 2009-2014.
  *
   This source file is supplied for the use with
-  Dialogic range of DIVA Server Adapters.
+  Sangoma (formerly Dialogic) range of DIVA Server Adapters.
  *
-  Dialogic(R) File Revision :    2.1
+  File Revision :    2.1
  *
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -105,7 +106,7 @@ DCD_ON Message:
 #define DSP_CONNECTED_NORM_BELL202_POS      44
 #define DSP_CONNECTED_NORM_BELL103_SIA      45
 #define DSP_CONNECTED_NORM_V23_REVERSE      46
-#define DSP_CONNECTED_NORM_VOWN_RESERVED_9  47
+#define DSP_CONNECTED_NORM_RB2000           47
 #define DSP_CONNECTED_NORM_VOWN_RESERVED_10 48
 #define DSP_CONNECTED_NORM_VOWN_RESERVED_11 49
 #define DSP_CONNECTED_NORM_VOWN_RESERVED_12 50
@@ -147,12 +148,16 @@ DCD_ON Message:
 #define DSP_CONNECTED_OPTION_MNP5                0x0100
 #define DSP_CONNECTED_OPTION_MNP10               0x0200
 #define DSP_CONNECTED_OPTION_SDLC                0x0400
+#define DSP_CONNECTED_OPTION_HDLCA_TRANSPORT     0x2000
+#define DSP_CONNECTED_OPTION_PACK8_TRANSPORT     0x4000
+#define DSP_CONNECTED_OPTION_MASK_TRANSPORT      0x6000
 #define DSP_CONNECTED_OPTION_MASK_V42            0x0024
 #define DSP_CONNECTED_OPTION_MASK_MNP            0x03c0
 #define DSP_CONNECTED_OPTION_MASK_SDLC           0x0400
 #define DSP_CONNECTED_OPTION_MASK_X75            0x0800
-#define DSP_CONNECTED_OPTION_MASK_ERROR_CORRECT  0x0fe4
+#define DSP_CONNECTED_OPTION_MASK_ERROR_CORRECT  0x6fe4
 #define DSP_CONNECTED_OPTION_MASK_COMPRESSION    0x0320
+#define DSP_CONNECTED_OPTION_DIGITAL_MODEM       0x1000
 #define DSP_UDATA_INDICATION_DISCONNECT         5
 /*
 returns:
@@ -208,6 +213,8 @@ Fields in assign DLC information element for modem protocol V.42/MNP:
 #define DLC_MODEMPROT_BREAK_EXPEDITED        0x02
 #define DLC_MODEMPROT_BREAK_DESTRUCTIVE      0x03
 #define DLC_MODEMPROT_BREAK_CONFIG_MASK      0x03
+#define DLC_MODEMPROT_ENABLE_HDLCA_TRANSPORT 0x04
+#define DLC_MODEMPROT_ENABLE_PACK8_TRANSPORT 0x08
 #define DLC_MODEMPROT_APPL_EARLY_CONNECT     0x01
 #define DLC_MODEMPROT_APPL_PASS_INDICATIONS  0x02
 #define DLC_MODEMPROT_APPL_DISCONNECT_NEG    0x04
