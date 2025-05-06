@@ -1673,9 +1673,6 @@ static void DIVA_EXIT_FUNCTION divas_exit(void)
 	divas_unregister_chrdev();
 	divasfunc_exit();
 
-	device_destroy(divas_class, MKDEV(0, 0));
-	class_destroy(divas_class);
-
 	flush_scheduled_work();
 	diva_os_destroy_spin_lock (&diva_os_usermode_proc.request_lock, "init");
 
@@ -1684,6 +1681,9 @@ static void DIVA_EXIT_FUNCTION divas_exit(void)
 		is not running. Release allocated DMA descriptors
 		*/
 	diva_release_allocated_dma_descriptors (&diva_allocated_dma_descriptors);
+
+	device_destroy(divas_class, MKDEV(0, 0));
+	class_destroy(divas_class);
 
 	printk(KERN_INFO "%s: module unloaded.\n", DRIVERLNAME);
 }
