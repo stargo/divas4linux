@@ -1,0 +1,60 @@
+#!/usr/bin/perl -w
+
+my $divactrl = "/usr/lib/divas/divactrl";
+
+sub mantool($) {
+	my ($param) = @_;
+
+	qx{${divactrl} mantool -b ${param}};
+}
+
+sub getval($$) {
+	my ($info, $key) = @_;
+
+	return "N/A" if ($key !~ m/^(.*)\\([^\\]*)$/);
+	my $path = $1;
+	my $k = $2;
+
+	my $insection = 0;
+	foreach my $line (split(/\n/, $info)) {
+		if ($insection) {
+			last if ($line =~ m/^$/);
+			if ($line =~ m/-\[\Q${k}\E \.*\] = (.*)\w*$/i) {
+				(my $trimmed=$1)=~ s/\s+$//;
+				return $trimmed;
+			}
+		} elsif (($line =~ m/Recursive read: \[\Q${path}\E\]/i) || ($line =~ m/dir-\[\Q${path}\E\]/i)) {
+			$insection = 1;
+		}
+	}
+
+	"N/A";
+}
+
+my $cards = mantool("-L");
+
+die "no cards found: $!" if ($cards !~ m/{(.*)}/);
+
+print "Ctrl Ch         L1           L2           Line       Type      Framing    Layer 2      Layer 3             Remote              Local\n";
+foreach my $card (split(/,/, $1)) {
+	next if ($card >= 1000);
+
+	my $info = mantool("-c ${card} -Recursive -r'Info'");
+	my $state = mantool("-c ${card} -Recursive -r'State'");
+
+	for (my $c=1; $c <= getval($info, "Info\\Channels"); $c++) {
+
+		printf("  %02d %02d %10.10s %12.12s %14.14s %10.10s %12.12s %10.10s %12.12s %18.18s %18.18s\n",
+			$card, $c,
+			getval($state, "State\\Layer1"),
+			getval($state, "State\\Layer2 No1"),
+			getval($state, "State\\B${c}\\Line"),
+			getval($state, "State\\B${c}\\Line Type"),
+			getval($state, "State\\B${c}\\Framing"),
+			getval($state, "State\\B${c}\\Layer2"),
+			getval($state, "State\\B${c}\\Layer3"),
+			getval($state, "State\\B${c}\\Remote Address").getval($state, "State\\B${c}\\Remote SubAddr"),
+			getval($state, "State\\B${c}\\Local Address").getval($state, "State\\B${c}\\Local SubAddr"),
+			);
+	}
+}
