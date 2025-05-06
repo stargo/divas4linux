@@ -55,12 +55,16 @@ foreach my $card (split(/,/, $1)) {
 
 	for (my $c=1; $c <= getval($info, "Info\\Channels"); $c++) {
 
+		my $tx = getval($state, "State\\B${c}\\Modem\\TX Speed");
+		my $rx = getval($state, "State\\B${c}\\Modem\\RX Speed");
+		my $speed = "";
+		$speed = " ${tx}/${rx}" if (getval($state, "State\\B${c}\\Framing") =~ m/Modem/i);
 		$table->add(sprintf("%02d/%02d",$card, $c),
 			getval($state, "State\\Layer1"),
 			getval($state, "State\\Layer2 No1"),
 			getval($state, "State\\B${c}\\Line"),
 			getval($state, "State\\B${c}\\Line Type"),
-			getval($state, "State\\B${c}\\Framing"),
+			getval($state, "State\\B${c}\\Framing")."${speed}",
 			getval($state, "State\\B${c}\\Layer2"),
 			getval($state, "State\\B${c}\\Layer3"),
 			getval($state, "State\\B${c}\\Remote Address").getval($state, "State\\B${c}\\Remote SubAddr"),
