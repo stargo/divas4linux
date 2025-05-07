@@ -4741,13 +4741,19 @@ void *portRing (void *C, ISDN_CONN_PARMS *Parms)
 				}
 			}
 
-			if (sizeDest && (sizeAcpt = str_len ((char*)P->At.Acpt))) {
+			if (P->At.Acpt[0] == '*') { /* Handle AT+iA* */
+				if (P->State != P_COMMAND) {
+					Want++;	/* wanted but busy */
+				} else if (!bestP) {
+					bestP = P; /* only if there is no better one */
+				}
+			} else if (sizeDest && (sizeAcpt = str_len ((char*)P->At.Acpt))) {
 				if ((sizeDest - sizeAcpt) < 0 ||
 						mem_cmp (Parms->Dest + (sizeDest - sizeAcpt), P->At.Acpt, sizeAcpt)) {
 					;	/* explicitely not wanted */
 				} else if (P->State != P_COMMAND) {
 					Want++;	/* wanted but busy */
-				} else if (!bestP || sizeAcpt > (int) str_len ((char*)bestP->At.Acpt)) {
+				} else if (!bestP || sizeAcpt > (int) str_len ((char*)bestP->At.Acpt) || bestP->At.Acpt[0] == '*') {
 					bestP = P; /* this is the best one so far */
 				}
 				continue;
