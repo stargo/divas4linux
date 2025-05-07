@@ -3820,6 +3820,12 @@ int atDial (ISDN_PORT *P, byte **Arg)
 		return R_OK;
 	}
 
+	/* Handle ATDT and ATDP */
+	if (*Next == 't' || *Next == 'T' ||
+	    *Next == 'p' || *Next == 'P') {
+		Next++;
+	}
+
 	/* check number, set 'Next' past end of number and	*/
 	/* modify initial configuration according to dial parms	*/
 
