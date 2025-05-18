@@ -1409,9 +1409,28 @@ static int tty_isdn_chars_in_buffer(struct tty_struct *tty) {
 static unsigned int tty_isdn_chars_in_buffer(struct tty_struct *tty) {
 #endif
 	int dev_num;
+	ser_dev_t *dev_ptr;
 
 	if ((!tty) || tty->closing || ((dev_num = DIVA_MINOR(tty)) >= (Channel_Count+1))) {
 		return (0);
+	}
+
+	/* get out device structure from tty struct */
+	if (!(dev_ptr = (ser_dev_t *)tty->driver_data)) {
+		return (0);
+	}
+	if (!(dev_num=DIVA_MINOR(tty))) {
+		return (0);
+	}
+	if (tty->closing) {
+		return (0);
+	}
+	if (!dev_ptr->P || (dev_ptr->dev_state != DEV_OPEN)) {
+		return (0);
+	}
+	if (PortDoCollectAsync (dev_ptr->P)) {
+		/* Async2Sync, just return 0 to make userspace happy */
+		return 0;
 	}
 
 	return (atomic_read(&ser_devs[dev_num].tx_q_sz));
