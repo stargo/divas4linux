@@ -87,8 +87,72 @@ int		sysTimerPending		 (sys_TIMER *Timer);
 /*
 	Synchronization
 	*/
-unsigned long eicon_splimp (void);
-void eicon_splx (unsigned long);
+
+#if defined(DIVA_USES_MUTEX)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,14,0)
+extern struct semaphore diva_tty_lock;
+#else
+extern spinlock_t diva_tty_lock;
+#endif
+#endif
+
+static inline unsigned long eicon_splimp (void) {
+#if !defined(__KERNEL_VERSION_GT_2_4__) /* { */
+
+	local_bh_disable();
+#if defined(DIVA_SMP)
+	lock_kernel();
+	return (0);
+#else
+	{
+		ulong i;
+		save_flags(i);
+		cli();
+		return (i);
+	}
+#endif
+
+#else /* } { */
+
+#if defined(DIVA_USES_MUTEX)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,14,0)
+    down (&diva_tty_lock);
+#else
+    spin_lock_bh(&diva_tty_lock);
+#endif
+#else
+	local_bh_disable();
+	lock_kernel();
+#endif
+
+	return (0);
+#endif /* } */
+}
+
+static inline void eicon_splx (unsigned long i) {
+#if !defined(__KERNEL_VERSION_GT_2_4__) /* { */
+
+#if defined(DIVA_SMP)
+	unlock_kernel();
+#else
+	ulong f = (ulong)i;
+	restore_flags(f);
+#endif
+	local_bh_enable();
+
+#else /* } { */
+#if defined(DIVA_USES_MUTEX)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,14,0)
+	up (&diva_tty_lock);
+#else
+    spin_unlock_bh(&diva_tty_lock);
+#endif
+#else
+	unlock_kernel();
+	local_bh_enable();
+#endif
+#endif /* } */
+}
 
 /*
 	Debug output
