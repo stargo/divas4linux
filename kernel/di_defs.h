@@ -38,7 +38,7 @@ typedef struct entity_s ENTITY;
 typedef struct buffers_s BUFFERS;
 typedef struct postcall_s POSTCALL;
 typedef struct get_para_s GET_PARA;
-#define BOARD_NAME_LENGTH 9
+#define BOARD_NAME_LENGTH 64
 #define IDI_CALL_LINK_T
 #define IDI_CALL_ENTITY_T
 /* typedef void ( * IDI_CALL)(ENTITY *); */
