@@ -40,6 +40,7 @@ typedef struct _diva_man_var_header {
 	byte   status;
 	byte   value_length;
 	byte	 path_length;
+	byte   data[];
 } diva_man_var_header_t;
 
 

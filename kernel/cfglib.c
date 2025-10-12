@@ -1655,8 +1655,8 @@ static int diva_cfg_create_write_req (diva_cfg_lib_management_ifc_state_t* pE) {
 	memcpy (pVar, rVar, sizeof(*pVar));
 
 	memcpy (pVar, rVar, sizeof(*pVar));
-	memcpy (&pVar->path_length + 1, variable_name, variable_name_length);
-	P = &pVar->path_length + 1 + variable_name_length;
+	memcpy (&pVar->data[0], variable_name, variable_name_length);
+	P = &pVar->data[0] + variable_name_length;
 
 	if (man_execute == 0) {
 		if (pVar->type == 0x03 /* MI_ASCIIZ */) {
@@ -1742,7 +1742,7 @@ static int diva_cfg_create_write_req (diva_cfg_lib_management_ifc_state_t* pE) {
 
 	pVar->length       = variable_value_length + variable_name_length + 6;
 	pVar->value_length = (byte)variable_value_length;
-	*(&pVar->path_length + 1 + variable_name_length + variable_value_length) = 0;
+	*(&pVar->data[0] + variable_name_length + variable_value_length) = 0;
 	length = pVar->length + 3;
 
 	pE->rdata[0] = 0;
