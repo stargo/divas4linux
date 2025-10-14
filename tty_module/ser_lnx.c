@@ -1431,20 +1431,16 @@ static unsigned int tty_isdn_chars_in_buffer(struct tty_struct *tty) {
 static void tty_isdn_hangup (struct tty_struct* tty) {
 	ser_dev_t *sd;
 	ISDN_PORT* P;
-	unsigned long old_irql;
 
 	if (!tty) {
 		return;
 	}
-
-	old_irql = eicon_splimp ();
 
 	sd = (ser_dev_t *)tty->driver_data;
 
 	if (tty->closing || !sd ||
 			!sd->P ||
 			(sd->dev_state != DEV_OPEN)) {
-		eicon_splx (old_irql);
 		return;
 	}
 
@@ -1492,8 +1488,6 @@ static void tty_isdn_hangup (struct tty_struct* tty) {
 	tty->closing = 0;
 	sd->remainder.rx_cur    = 0;
 	sd->dev_open_count = 0;
-
-	eicon_splx (old_irql);
 }
 
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(5,14,0))
