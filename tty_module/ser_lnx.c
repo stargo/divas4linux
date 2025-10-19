@@ -694,19 +694,23 @@ tty_isdn_open(struct tty_struct *tty, struct file *filp)
 
 static void tty_isdn_close(struct tty_struct *tty, struct file *filp) {
 	ser_dev_t *devptr = (ser_dev_t *)tty->driver_data;
+	unsigned long old_irql = eicon_splimp ();
 	ISDN_PORT* P;
 
 	if (!(DIVA_MINOR(tty))) {
+		eicon_splx (old_irql);
 		return;
 	}
 
 	if (!devptr) {
+		eicon_splx (old_irql);
 		return;
 	}
 
 	if (devptr->dev_num==ETSER_CTRL_DEV) {
 		ser_ctrl->dev_state=DEV_CLOSED;
 		ser_ctrl->dev_num=0;
+		eicon_splx (old_irql);
 		return;
 	}
 
@@ -714,6 +718,7 @@ static void tty_isdn_close(struct tty_struct *tty, struct file *filp) {
 #if !defined(__KERNEL_VERSION_GT_2_4__)
 		MOD_DEC_USE_COUNT;
 #endif
+		eicon_splx (old_irql);
 		return;
 	}
 
@@ -724,6 +729,7 @@ static void tty_isdn_close(struct tty_struct *tty, struct file *filp) {
 #if !defined(__KERNEL_VERSION_GT_2_4__)
 		MOD_DEC_USE_COUNT;
 #endif
+		eicon_splx (old_irql);
 		return;
 	}
 	devptr->dev_open_count = 0;
@@ -734,13 +740,16 @@ static void tty_isdn_close(struct tty_struct *tty, struct file *filp) {
 	P = devptr->P;
 
 	if (!P) {
+		eicon_splx (old_irql);
 		return;
 	}
 
+	eicon_splx (old_irql);
 	tty_wait_until_sent(tty, 30 * HZ);
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3,9,0)
 	tty_port_tty_set(tty->port, NULL);
 #endif
+	old_irql = eicon_splimp ();
 
 	diva_tty_channel_clear_write_q(devptr);
 	devptr->P = 0;
@@ -786,6 +795,7 @@ static void tty_isdn_close(struct tty_struct *tty, struct file *filp) {
 	MOD_DEC_USE_COUNT;
 #endif
 
+	eicon_splx (old_irql);
 }
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6,5,0) || \
@@ -1431,16 +1441,20 @@ static unsigned int tty_isdn_chars_in_buffer(struct tty_struct *tty) {
 static void tty_isdn_hangup (struct tty_struct* tty) {
 	ser_dev_t *sd;
 	ISDN_PORT* P;
+	unsigned long old_irql;
 
 	if (!tty) {
 		return;
 	}
+
+	old_irql = eicon_splimp ();
 
 	sd = (ser_dev_t *)tty->driver_data;
 
 	if (tty->closing || !sd ||
 			!sd->P ||
 			(sd->dev_state != DEV_OPEN)) {
+		eicon_splx (old_irql);
 		return;
 	}
 
@@ -1488,6 +1502,8 @@ static void tty_isdn_hangup (struct tty_struct* tty) {
 	tty->closing = 0;
 	sd->remainder.rx_cur    = 0;
 	sd->dev_open_count = 0;
+
+	eicon_splx (old_irql);
 }
 
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(5,14,0))
