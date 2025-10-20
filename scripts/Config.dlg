@@ -2955,7 +2955,7 @@ fi
 #  StartDivaSIPcontrol=1
 #fi
 
-hw_adapters=$(lspci -d 0x1133: ; lspci -d 0x12c7:)
+hw_adapters=$(lspci -d 1133: ; lspci -d 12c7:)
 if [ $((max_softip_adapters)) -gt 0 -a "${hw_adapters}" = "" ]
 then
 	StartDivaSoftIP=1
@@ -9427,11 +9427,11 @@ cat ${diva_xml}.capi >> ${diva_xml}
 		then
 			if [ $((StartDivaSoftIP)) -ne 0 ]
 			then
-				ifconfig > /dev/null 2>&1
+				ip > /dev/null 2>&1
 				if [ $(($?)) -ne 0 ]
 				then
-					echo "\"ifconfig\" utility is missing."
-					echo "it might be part of the \"net-tools\" package."
+					echo "\"ip\" utility is missing."
+					echo "it might be part of the \"iproute2\" package."
 					echo "Exit Configuration Script..."
 					exit $(($?))
 				fi
@@ -9457,7 +9457,7 @@ cat ${diva_xml}.capi >> ${diva_xml}
 				echo '  fi' >> $cfg_file
 	                	echo '  if [ $((softip_stack_started)) -eq $((0)) ]' >> $cfg_file
 	                	echo '  then' >> $cfg_file
-				echo '    ifconfig_ips=$(LC_ALL=EN ifconfig | grep "inet " | sed -rn "s/^\s*//;s/inet (addr:)?(([0-9]*\.){3}[0-9]*).*/\2/gp" 2>/dev/null)' >> $cfg_file
+				echo '    ifconfig_ips=$(LC_ALL=EN ip address list | grep "^\s*inet " | sed -rn "s/^\s*//;s/inet (addr:)?(([0-9]*\.){3}[0-9]*).*/\2/gp" 2>/dev/null)' >> $cfg_file
 				echo '    found_name=0' >> $cfg_file
 				echo '    for ip in ${ifconfig_ips}' >> $cfg_file
 				echo '    do' >> $cfg_file
@@ -11830,7 +11830,7 @@ read_card_config()
 get_hostaddr()
 {
 	found_name=0
-	ifconfig_ips=$(LC_ALL=EN ifconfig | grep "inet " | sed -r 's/^\s*//;s/inet (addr:)?(([0-9]*\.){3}[0-9]*).*/\2/gp' | grep -v "^127." 2>/dev/null)
+	ifconfig_ips=$(LC_ALL=EN ip address list | grep '^\s*inet ' | sed -r 's/^\s*//;s/inet (addr:)?(([0-9]*\.){3}[0-9]*).*/\2/gp' | grep -v "^127." 2>/dev/null)
 	hostname_ip=$(hostname -i 2>/dev/null)
 	if [ $(($?)) -eq 0 ]
 	then
@@ -12004,7 +12004,7 @@ read_softip_config()
 		SOFTIP_RTP_START_PORT="${CSOFTIP_RTP_START_PORT}"
 		SOFTIP_RTP_END_PORT="${CSOFTIP_RTP_END_PORT}"
 
-		ifconfig_ips=$(LC_ALL=EN ifconfig | grep "inet " | sed -r "s/^\s*//;s/inet (addr:)?(([0-9]*\.){3}[0-9]*).*/\2/gp" 2>/dev/null)
+		ifconfig_ips=$(LC_ALL=EN ip address list | grep '^\s*inet ' | sed -r 's/^\s*//;s/inet (addr:)?(([0-9]*\.){3}[0-9]*).*/\2/gp' 2>/dev/null)
 		found_name=0
 		for ip in ${ifconfig_ips}
 		do
@@ -12934,7 +12934,7 @@ else
 fi
 height=3
 hwnote=""
-hw_adapters=$(lspci -d 0x1133: ; lspci -d 0x12c7:)
+hw_adapters=$(lspci -d 1133: ; lspci -d 12c7:)
 if [ $((max_softip_adapters)) -eq 0 -o $(($?)) -ne 0 -o "${hw_adapters}" != "" ]
 then
 	msg="$msg \"C\" \" - CAPI 2.0 interface\""
@@ -13821,7 +13821,7 @@ do
 # or configure by line for analog cards
 #
 
-hw_adapters=$(lspci -d 0x1133: ; lspci -d 0x12c7:)
+hw_adapters=$(lspci -d 1133: ; lspci -d 12c7:)
 if [ $((StartDivaSoftIP)) -gt 0 -a "${hw_adapters}" = "" ]
 then
 	current_card=65
