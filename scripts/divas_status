@@ -60,15 +60,27 @@ foreach my $card (split(/,/, $1)) {
 	my $info = mantool("-c ${card} -Recursive -r'Info'");
 	my $state = mantool("-c ${card} -Recursive -r'State'");
 
+	my $channels = getval($info, "Info\\Channels");
+	if ($channels eq "N/A") {
+		$channels = 0;
+		while(1) {
+			if (getval($state, "State\\B".($channels+1)."\\Framing") ne "N/A") {
+				$channels++;
+			} else {
+				last;
+			}
+		}
+	}
+
 	$controllertable->add($card,
 		getval($info, "Info\\SerialNumber"),
-		getval($info, "Info\\Channels"),
+		$channels,
 		getval($info, "Info\\ProtocolBuild"),
 		getval($info, "Info\\DSPCodeBuild"),
 		getval($info, "Info\\Temperature")."°C",
 		);
 
-	for (my $c=1; $c <= getval($info, "Info\\Channels"); $c++) {
+	for (my $c=1; $c <= $channels; $c++) {
 
 		my $tx = getval($state, "State\\B${c}\\Modem\\TX Speed");
 		my $rx = getval($state, "State\\B${c}\\Modem\\RX Speed");
