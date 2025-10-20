@@ -5,9 +5,9 @@ Copyright 2006-2013 Cytronics & Melware (www.melware.net)
 ## About
 
 This package is a repackaging of the source-level-RPM packages by
-Dialogic repackaged based on the work by Cytronics & Melware.
+Dialogic based on the work by Cytronics & Melware.
 
-Support for newer kernel (tested up to 6.12 (Debian trixie)) has
+Support for newer kernels (tested up to 6.12 (Debian trixie)) has
 been added.
 
 ## Installation
@@ -21,7 +21,6 @@ and after successful compilation, use
     sudo make install
 
 to install the files on your system.
-(You must be root to do that.)
 
 Note:
 --------------------
@@ -33,7 +32,6 @@ The 'divactrl' tool and all other tools,
 scripts and the firmware will be installed to
 
     /usr/lib/divas
-
 
 The compilation needs a configured kernel source at
 
@@ -81,7 +79,7 @@ To stop the cards and unload the diva modules, run the script
 
 ## Systemd integration
 
-A systemd unit is provided for automatic startup and shutdown of the cards.
+A systemd unit is provided for automatic startup of the cards.
 To install it, use
 
     sudo cp divas4linux.service /etc/systemd/system/
