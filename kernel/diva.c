@@ -177,15 +177,21 @@ static diva_supported_cards_info_t divas_supported_cards[] = {
 	/*
 	   PRI Cards
 	 */
-//	{CARDTYPE_DIVASRV_P_30M_PCI, diva_pri_init_card},
+#if defined(DIVA_INCLUDE_DISCONTINUED_HARDWARE)
+	{CARDTYPE_DIVASRV_P_30M_PCI, diva_pri_init_card},
+#endif
 	/*
 	   PRI Rev.2 Cards
 	 */
-//	{CARDTYPE_DIVASRV_P_30M_V2_PCI, diva_pri_init_card},
+#if defined(DIVA_INCLUDE_DISCONTINUED_HARDWARE)
+	{CARDTYPE_DIVASRV_P_30M_V2_PCI, diva_pri_init_card},
+#endif
 	/*
 	   PRI Rev.2 VoIP Cards
 	 */
-//	{CARDTYPE_DIVASRV_VOICE_P_30M_V2_PCI, diva_pri_init_card},
+#if defined(DIVA_INCLUDE_DISCONTINUED_HARDWARE)
+	{CARDTYPE_DIVASRV_VOICE_P_30M_V2_PCI, diva_pri_init_card},
+#endif
 	/*
 	   PRI Rev.3 Cards
 	 */
@@ -255,8 +261,10 @@ static diva_supported_cards_info_t divas_supported_cards[] = {
 	/*
 	   4BRI Rev 1 Cards
 	 */
-//	{CARDTYPE_DIVASRV_Q_8M_PCI,       diva_4bri_init_card},
-//	{CARDTYPE_DIVASRV_VOICE_Q_8M_PCI, diva_4bri_init_card},
+#if defined(DIVA_INCLUDE_DISCONTINUED_HARDWARE)
+	{CARDTYPE_DIVASRV_Q_8M_PCI,       diva_4bri_init_card},
+	{CARDTYPE_DIVASRV_VOICE_Q_8M_PCI, diva_4bri_init_card},
+#endif
 	/*
 	   4BRI Rev 2 Cards
 	 */
@@ -284,7 +292,9 @@ static diva_supported_cards_info_t divas_supported_cards[] = {
 	/*
 	   BRI
 	 */
-//	{CARDTYPE_MAESTRA_PCI, diva_bri_init_card},
+#if defined(DIVA_INCLUDE_DISCONTINUED_HARDWARE)
+	{CARDTYPE_MAESTRA_PCI, diva_bri_init_card},
+#endif
 #endif
 
 	/*
