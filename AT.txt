@@ -368,6 +368,7 @@ AT command           Description
 AT +iA<number>       Accepted address. Incoming calls are only accepted if
                      the called party number equals the phone number
                      configured here. Addresses are compared backwards.
+                     A * instead of a number accepts every number.
                      So, if you set the accepted address to 12, the called
                      party numbers that end with 12, e.g., 12, 812,
                      384012, match the configured address. [c]
@@ -497,16 +498,15 @@ AT +iP<n>            <n>    Specifies the protocol stack used to transfer
                      5      L1 - analog modem with full negotiation, L2 -
                             V.42+V.42bis autodetect, L3 - transparent
                      6      L1 - HDLC, L2 - V.120, L3 - TA
-
-                     7        L1 - Fax, L2 - transparent, L3 - T.30 with
-                              ECM, T.6, MR, MMR, polling
-                     8        L1, L2, and L3 - transparent
-                     9        L1 - HDLC, L2, and L3 - transparent
-                     10       L1 - HDLC, L2 - X.75SLP, L3 - BTX
-                     11       external device 0
-                     12       L1 - HDLC, L2 - X.75SLP and data
-                              compression autodetection in accordance
-                              with V.42bis, L3 - transparent
+                     7      L1 - Fax, L2 - transparent, L3 - T.30 with
+                            ECM, T.6, MR, MMR, polling
+                     8      L1, L2, and L3 - transparent
+                     9      L1 - HDLC, L2, and L3 - transparent
+                     10     L1 - HDLC, L2 - X.75SLP, L3 - BTX
+                     11     external device 0
+                     12     L1 - HDLC, L2 - X.75SLP and data
+                            compression autodetection in accordance
+                            with V.42bis, L3 - transparent
 
 AT +iS<Format>       Format                     Service Indicator/Additional
                                                 Service Indicator
