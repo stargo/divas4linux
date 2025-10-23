@@ -1,0 +1,789 @@
+# AT commands
+
+This excerpt from Sangoma® Diva® System Release 9.6LIN Reference Guide describes the AT
+commands supported by /dev/ttyds*
+
+## AT-Command Set
+
+AT command           Description
+
+AT A                 ANSWER. Accepts an incoming call that has been indicated by a
+                     "RING". If the S0 register is set to zero, TTY indicates a RING until
+                     the call is answered by the AT A command or released.
+
+AT D[T|P]<number>    DIAL. Dials the given number. Dial tone (T) or dial pulse (P) are
+                     ignored. <number> can have the following format:
+                     <CalledPartyNumber>[| <Subaddress>][^56k][+i<y> | +p=btx]
+                     where <y> is the Diva-specific +I command (see below).
+
+AT E[0|1]            <n>        Echo mode. In echo mode, the commands sent to the
+                                modem are echoed back to the terminal.
+                     0          Echo mode OFF. In command mode, the modem does not
+                                reflect the data that it has received from the application
+                                back to the application.
+                     1          Echo mode ON. In command mode, the modem reflects
+                                the data that it has received from the application back to
+                                the application.
+
+AT I[<n>]            INFO. Returns the modem identification string. <n> : integer
+                     ranging from 0 to 9
+
+AT H[0]              HANGUP. Disconnects the line.
+
+AT O[1]              ONLINE. Switches the modem from command mode to data mode.
+
+AT Q[<n>]            <n>      Modem response mode
+                     0        Returns result codes (default)
+                     1        Quiet mode. In quiet mode the modem driver does not
+                              return result codes for the commands.
+
+AT V[<n>]            <n>      Modem response (result code) format
+                     0        Numeric result codes.
+                     1        Plain text result codes (verbal mode, default).
+
+AT L<n>              Command accepted for compatibility reasons.
+
+AT N<n>              Command accepted for compatibility reasons.
+
+AT M<n>              Command accepted for compatibility reasons.
+
+AT Y<n>              Command accepted for compatibility reasons.
+
+AT X<n>              <n>      Result code reporting option
+                     0        Enables minimum information only (plain CONNECT in
+                              case of successful connection establishment, NO CARRIER
+                              in case of dialing/answer error).
+                     4        Enables full information (the result codes are reported,
+                              default).
+
+AT Z[<n>]            Soft reset. Drops the connection if the modem is in ESCAPE mode.
+                     Resets the modem and restores the selected predefined modem
+                     configuration profile <n>. See Supported TTY Profiles on page 63
+                     for more information. See AT&F below for the list of predefined
+                     modem configuration profiles.
+
+AT S<r>=?            Displays the value of the selected S-register <r>.
+
+AT S0=<n>            <n>      Description
+                     0         Disables auto answer. Incoming calls are answered with
+                               an ALERT message and indicated by RING messages
+                               (every 4 sec). The user can investigate the call
+                               parameters, select the appropriate profile or settings and
+                               accept the call by the AT A command. The user can issue
+                               the AT H command to reject the incoming call.
+                     1 ...     Enables auto answer. Incoming calls are indicated by a
+                     254       RING and accepted automatically.
+                     255       Ignores the incoming calls (default).
+
+ATS2=<n>             <n>       Description
+                     (0 ...
+                     255)
+                     127       Disables the escape sequence process, i.e. no escape
+                               character is recognized.
+                     43        The default value of the ESCAPE character ("+").
+
+ATS7=<n>             Default value is set to zero (e.g., modem will use protocol-specific
+                     default value).
+                     Modem mode: time to wait for carrier. Sets the time in seconds
+                     that the modem will wait for a carrier before hanging up. <n> is a
+                     range from 0 to 255 seconds.
+                     Fax mode: time to wait for connect. Sets the time in seconds that
+                     fax will wait for connection before hanging up. Suggested value is
+                     200 seconds. Values less than 10 seconds are ignored. The carrier
+                     waiting time starts after the connection was established and is set
+                     to 60 seconds.
+
+ATS9=<n>             Carrier Detect Response Time. Sets the time in tenths of a second
+                     that a carrier must be present before the modem considers it valid.
+                     <n> is a range from 0 to 255 tenths of a second. This register is
+                     only implemented for compatibility reasons. Writing to this register
+                     does not affect the Carrier Detect Response time.
+
+ATS10=<n>            Delay between carrier loss and hang up. Sets the time in tenths of
+                     a second that the modem waits before hanging up after a loss of
+                     carrier. <n> is a range from 0 ... 255 tenths of a second.
+
+ATS27=<bitmask>      Bit       Value     Result
+                     0         1         Reserved
+                     1         2         Reserved
+                     2         4         Reserved
+                     3         8        Disables 2100 Hz answer tone
+                     4         16       Reserved
+                     5         32       Reserved
+                     6         64       Reserved
+                     7         128      Reserved
+
+ATS51=<bitmask>      Bit       Value    Result
+                     0         1        Disables error correction for 1200 bps
+                                        connections
+                     1         2        Disables error correction for V.22bis connections
+                     2         4        Disables error correction for V.32bis connections
+                     3         8        Reserved
+                     4         16       Reserved
+                     5         32       Reserved
+                     6         64       Reserved
+                     7         128      Reserved
+
+ATS91=<bitmask>      Bit       Value    Result
+                     0         1        Use reverse SDLC establishment (SNRM sent by
+                                        answerer and not by caller). Mandatory for POS.
+                     1         2        Poll on each SDLC frame. Required by some POS
+                                        terminals.
+
+ATS92=<n>            SDLC Address A (default 0x30)
+
+ATS128               S-register 128 is a read-only register. Reading this register allows
+                     to retrieve information on the current (last) incoming call. It returns
+                     a message in the following format: ;<calling party
+                     number>;<destination_address>. If calling party or destination
+                     sub- addresses are present, they are separated by a slash "/" from
+                     the called party number or the destination address. For example,
+                     the calling party number 800, calling party sub-address 900,
+                     destination address 400, destination sub-address 500 are presented
+                     as: ;800/900;400/500.
+
+ATS172=<bitmask>     Bit    Value     Result
+                     0      1         Enable transmission and reception of empty
+                                      frames.
+                     1      2         Enable "multimoding", i.e. a trailing byte
+                                      (modulation tag) in every frame specifies which
+                                      modulation has to be used to send this frame or
+                                      at which modulation it was received. Valid
+                                      modulation tags are 0x27 for V.23 HDX off hook
+                                      and 0x28 for V.23 HDX on hook.
+                     2      4         Shield empty frames. This mode enables a tty
+                                      application to send and receive empty frames.
+                                      Since a frame with a length of 1 byte is invalid in
+                                      the V.23 SMS and V.23 Caller ID protocol, it is
+                                      used to carry the information that an empty
+                                      frame occurred and which modulation was
+                                      detected. The data byte in a real 1 byte frame is
+                                      replaced by a unique value 0xff. A single byte
+                                      frame 0x27 indicates or issues an empty frame in
+                                      V.23 HDX off hook. A single byte frame 0x28
+                                      indicates or issues an empty frame in V.23 HDX
+                                      on hook.
+
+ATS253=<n>           <n>    Description
+                     (0 ...
+                     127)
+                     Set    Write allows to set coded in accordance with Q.931 cause
+                            value to be used to disconnect this call (for example by
+                            ATH/ATZ commands or by DTR drop operation). The Diva
+                            Media Board provides conversion between used national
+                            dependent values/in band procedures and Q.931.
+                     Read   Read after disconnect provides coded in accordance with
+                            Q.931 value of disconnect cause. The Diva Media Board
+                            provides conversion between used national dependent
+                            values/in band procedures and Q.931.
+
+ATS254=<bitmask>     Bit    Value     Result
+                     0      1         Allows to reject incoming call using ATH, ATZ
+                                      commands or using DTR drop procedure.
+                     1      2         Activate TIES (Time Independent Escape
+                                      Sequence). The TIES procedure switches to
+                                      command mode if "+++AT<CR>" (where <CR>
+                                      represents hex digit 0x0D) sequence is detected
+                                      in the data stream after a 20 ms pause and is
+                                      followed by a 40 ms pause.
+
+ATS1001=<number>     Second origination address. This number is placed as the second
+                     origination address.
+
+ATS1002=<number>     Specifies the numbering plan identifier for the second origination
+                     address. Number should be in the range 0...255. If number is set to
+                     128 or larger then octet 3a (presentation and screening indicator)
+                     is not used.
+
+ATS1003=<number>     Specifies the presentation (bits [7:6] in octet 3a of origination
+                     address) and screening (bits [2:1] in octet 3a of origination
+                     address) for the second origination address. Number should be in
+                     the range 0...127.
+
+## AT\ commands
+
+AT command           Description
+
+AT \V[<n>]           <n>      CONNECT message format
+                     0        Plain CONNECT message without any connection parameters.
+                     1        Full CONNECT message including connection parameters
+                              (modulation, compression, transmit/receive rate).
+                     2        Full CONNECT message in multi-line format: CONNECT, TX/RX,
+                              CARRIER, PROTOCOL, COMPRESSION.
+
+AT \T[0...65535]     Inactivity timeout (s). TTY releases the connection if there was no data
+                     traffic on the interface for the time interval specified here.
+
+AT \D[<n>]           Debug level. Reserved for use by Sangoma Technologies.
+
+AT \N[<n>]           <n>      Error correction control
+                     0|1      Turn off error correction, error correction detection, and data
+                              compression (i.e. connect in transparent mode only).
+                     2        Disable V.42 error correction and V.42 error correction detection
+                              (i.e. MNP only). In case of failure, connect in transparent mode.
+                     3        Try to establish error correction; try to detect error correction (any
+                              supported). In case of failure, connect in transparent mode.
+                     4        Force V.42 error correction. Disconnect in case of failure.
+                     5        Force MNP error correction. Disconnect in case of failure.
+                     6        Force V.42 or MNP error correction. Disconnect in case of failure.
+                     7        Try to establish V.42 error correction; try to detect V.42 error
+                              correction. In case of failure, connect in transparent mode.
+                     8        Try to establish MNP error correction; try to detect MNP error
+                              correction. In case of failure, connect in transparent mode.
+                     10       Force SDLC error correction. Disconnect in case of failure.
+                     11       Try to establish SDLC error correction. In case of failure, connect
+                              in transparent mode.
+                     12       Try to establish SDLC or MNP error correction. In case of failure,
+                              connect in transparent mode.
+                     13       Try to establish SDLC or V.42 error correction. In case of failure,
+                              connect in transparent mode.
+                     14       Try to establish SDLC or V.42/MNP error correction. In case of
+                              failure, connect in transparent mode.
+
+## AT% commands
+
+AT command           Description
+
+AT %C[<n>]           <n>    Data compression
+                            control
+                     0      Turn data compression
+                            off
+                     1      Turn data compression
+                            on
+## AT# commands
+
+AT command           Description
+
+AT #CID=?            Displays CID (Caller ID) setting. The short form of this command is "CID?".
+
+AT #CID=<n>          <n>    Sets CID mode. The TTY indicates the origination (CID) and
+                            destination (DAD) number in the RING and/or CONNECT message.
+                            This enables a server application for example to forward incoming
+                            calls directly to their destination. [a]
+                     0      No CID indication
+                     1      CID indication in RING message [a]
+                     2      CID indication in CONNECT message [b]
+                     3      CID indication in RING and in CONNECT messages
+                     5      CID and DAD (Destination Address [a]) indication in RING message
+                            [c]
+                     6      CID and DAD [a] indication in CONNECT message [d]
+                     7      CID and DAD [a] indication in RING and in CONNECT messages
+                     9      Use an mgetty friendly format for CID indication in RING message
+                            [e]
+                     14     HylaFax friendly format
+                            RING
+                            CID: XXX[/YYY]
+                            DAD: HHH[/ZZZ]
+                            RING
+                     15     Use an mgetty friendly format for CID and DAD [a] indication in
+                            RING message [f]
+
+Notes:
+[a] CID (Calling Party Number) is indicated as: RING CID: <number>
+[b] CID (Calling Party Number) is indicated as: CONNECT ... CID: <number>
+[c] Indicated as: RING CID: <number> DAD: <number>
+[d] Indicated as: CONNECT ... CID: <number> DAD: <number>
+[e] Indicated as: RING;<number>
+[f] Indicated as: RING;<number>;<number>
+
+## AT& commands
+
+AT command           Description
+
+AT &C[<n>]           Accepted for compatibility reasons. <n> : any integer
+
+AT &G[<n>]           <n>                Guard tone options
+                     0                  Turns guard tone off (default).
+                     1                  Turns 550 Hz guard tone on.
+                     2                  Turns 1800 Hz guard tone on.
+
+AT &D[<n>]           Data Terminal Ready (DTR) options. <n> ranges from 0 to 3. See AT&Q
+                     command below.
+
+AT &Q[<n>]           Communication options. <n> ranges from 0 to 3. Data Terminal Ready
+                     (DTR) options and Communication (COM) options determine the behavior
+                     of the virtual modem when DTR switches from ON to OFF in accordance
+                     with the following table:
+                     &Q            &D0         &D1             &D2             &D3
+                     &Q0           N [a]       B               C               D
+                     &Q1           A [b]       B [c]           C [d]           D [e]
+                     &Q2           C           C               C               D
+                     &Q3           C           C               C               D
+
+AT &K<n>             <n>                 Terminal flow control options. Defines the flow control
+                                         mechanism.
+                     0                   Disables flow control.
+                     1                   Enables RTS/CTS local + remote flow control
+                                         (obsolete).
+                     2                   Enables XON/XOFF flow control (obsolete).
+                     3                   Enables RTS/CTS local + remote flow control.
+                     4                   Enables XON/XOFF flow control.
+                     5                   Enables transparent XON/XOFF flow control.
+                     6                   Enables both XON/XOFF and RTS/CTS flow control
+                                         (voice).
+
+AT &V                Displays the current configuration, the last number that has been dialed
+                     (last DIAL to), and the calling party number of the last incoming call (last
+                     RING from).
+
+AT &V1               Displays current settings and settings of the available profiles.
+
+AT &F[<n>]           Resets the modem and restores the selected predefined modem
+                     configuration profile. AT&F sets factory defaults for current profile. See
+                     Supported TTY Profiles for details.
+
+Notes:
+[a] No action is taken, the DTR drop is ignored.
+[b] If the modem is online, it hangs up and responds with OK.
+[c] If the modem is online, it switches to command mode (as if an ESCAPE sequence was
+detected) and sends OK.
+[d] If the modem is online, it hangs up and responds with OK.
+[e] If the modem is online, it hangs up and the current profile defaults are restored.
+
+## AT$ commands
+
+AT command           Description
+
+AT $F?               Displays fast connect mode setting.
+
+AT $F<n>             <n>    Sets fast connect mode.
+                     0      Disable fast connect mode
+                     1      ?
+                     2      ?
+                     3      ?
+                     4      ?
+
+## AT+ commands
+
+"AT+" commands are Diva-specific commands which may be used either as part of a
+normal AT command or as part of a called party number.
+
+If you use this AT command in sequence (in one line) with other AT commands, it
+should either be the last command or it should be followed by a semi-colon ";". For
+example: the AT-command sequence AT&F14, AT#CID=7, ATS0=1, AT+IA12 can be written
+as: AT&F14#CID=7S0=1+IA12 or AT&F14+IA12;#CID=7S0=1
+
+AT command           Description
+
+AT +iA<number>       Accepted address. Incoming calls are only accepted if
+                     the called party number equals the phone number
+                     configured here. Addresses are compared backwards.
+                     So, if you set the accepted address to 12, the called
+                     party numbers that end with 12, e.g., 12, 812,
+                     384012, match the configured address. [c]
+
+AT +iO<number>       Origination address. This number is placed as the
+                     origination address. [c]
+
+AT +iB<n>            <n>       B-channel data adaptation rate [d]
+                     2         1200 bps
+                     3         2400 bps
+                     4         4800 bps
+                     5         9600 bps
+                     6         19200 bps
+                     7         38400 bps
+                     8         48000 bps
+                     9         56000 bps
+                     <n>       Determines whether the modem stays in
+                               command mode after call setup.
+
+AT +iC[<n>]          0         Stays in command mode.
+                     1         Switches to data mode.
+
+AT +iD<n>            <n>       Delay for AT-command response (ms).
+                     0         AT-command response is sent immediately.
+                     1 ... AT-command response is delayed.
+                     255
+
+AT +iF<n>            <n>   RNA Framing. [e]
+                     0     No framing check (pass data transparently).
+                     1     Force synchronous conversation (PPP).
+                     2     Force asynchronous conversation (PPP).
+                     3     Force synchronous conversation (RAS).
+                     4     Force asynchronous conversation (RAS).
+                     5     Detects required conversation by analyzing
+                           incoming data packets.
+
+AT +iG<n>            RNA patches
+                     Bit   Value           RNA patches*
+                     1     1               Reserved,
+                                           should be
+                                           zero.
+                     2     2               Reserved,
+                                           should be
+                                           zero.
+                     3     4               Reserved,
+                                           should be
+                                           zero.
+                     4     8               Pass IPCP
+                                           (default is
+                                           track).
+                     5     16              Force patch
+                                           of IPCP.
+                     6     32              Keep RX
+                                           ACCM
+                                           (default is
+                                           add).
+                     7     64              Keep TX
+                                           ACCM
+                                           (default is
+                                           delete).
+                     8     128             Pass LCP
+                                           (default is
+                                           track).
+                     *Controls the behavior of the ASYNC/SYNC PPP
+                     conversion module. See ASYNC/SYNC Conversion
+                     Module for details.
+
+AT +iL<n>            Maximum data frame length. <n> should be in the
+                     range of 0 ... 2048. 0 defaults to the maximum frame
+                     length supported by the Diva Media Board.
+
+AT +iM<n>            <n>      Working mode
+                     1        Normal operation mode. TTY does not try to
+                              preserve the protocol data unit boundaries
+                              (streaming). This mode fully emulates the
+                              behavior of a "classic" modem or terminal
+                              adapter connected via a serial interface.
+                     2        Fax mode. TTY switches to this mode as soon
+                              as a Fax CLASS 1 or Fax CLASS 2 command
+                              is detected.
+                     3        Voice mode (bit-transparent access to B-
+                              channel data).
+                     4        RNA mode. TTY operates in framing mode,
+                              investigates protocol data units, and
+                              provides ASYNC/SYNC conversion if
+                              necessary.
+                     5        BTX over ISDN mode.
+                     6        Frame mode. The TTY preserves the frame
+                              boundaries of the ISDN data frames. Note
+                              that the Linux TTY interface will stream the
+                              data again.
+
+AT +iN<Format>       Format                  Numbering plan for
+                                             destination/origination
+                                             address and
+                                             presentation/screening
+                                             indicators for origination
+                                             address.
+                     Number1[/Number2[/      Specifies the numbering
+                     Number3[/Number4]]]     plan identifier for the
+                                             destination address
+                                             (Number1), origination
+                                             address (Number2),
+                                             presentation indicator - bits
+                                             [7:6] in octet 3a of
+                                             origination address
+                                             (Number3) and screening
+                                             indicator - bits [2:1] in octet
+                                             3a of origination address
+                                             (Number4). Number1 and
+                                             Number2 should be in the
+                                             range 0...127. Number3 and
+                                             Number4 should be in the
+                                             range 0...3.
+
+AT +iP<n>            <n>    Specifies the protocol stack used to transfer
+                            bearer data.
+                     1      L1 - HDLC, L2 - X.75SLP and V.42bis data
+                            compression autodetection in case of
+                            incoming connection, L3 - transparent
+                     2      L1 - V.110 synchronous mode, L2 and L3 -
+                            transparent
+                     3      L1 - V.110 asynchronous mode, L2 and L3 -
+                            transparent
+                     4      L1 - analog modem (synchronous mode), L2
+                            - V.42+V.42bis autodetect, L3 - transparent
+                     5      L1 - analog modem with full negotiation, L2 -
+                            V.42+V.42bis autodetect, L3 - transparent
+                     6      L1 - HDLC, L2 - V.120, L3 - TA
+
+                     7        L1 - Fax, L2 - transparent, L3 - T.30 with
+                              ECM, T.6, MR, MMR, polling
+                     8        L1, L2, and L3 - transparent
+                     9        L1 - HDLC, L2, and L3 - transparent
+                     10       L1 - HDLC, L2 - X.75SLP, L3 - BTX
+                     11       external device 0
+                     12       L1 - HDLC, L2 - X.75SLP and data
+                              compression autodetection in accordance
+                              with V.42bis, L3 - transparent
+
+AT +iS<Format>       Format                     Service Indicator/Additional
+                                                Service Indicator
+                     Number                     Sets the Service Indicator to
+                                                the provided value. The
+                                                Additional Service Indicator
+                                                is set to zero. The number
+                                                should be in the range 1 ...
+                                                7.
+                     Number1/Number2            Number 1: Service
+                                                Indicator. It should be in the
+                                                range of 1 ... 7. Number 2:
+                                                Additional Service Indicator.
+                                                It should be in the range of
+                                                0 ... 255. [f]
+
+At +iT<n>            ISDN trace options. Reserved for use by Sangoma.
+                     <n> ranges from 0 to 255.
+
+AT +iH[<n>]          <n>      Erases/sets slow application workarounds.
+                     0        Erases workarounds. Equivalent to AT
+                              command: AT+IW=0+IX=0+IY=0+iZ0
+                     1        Sets workarounds. Equivalent to AT
+                              command: AT+IW=1+IX=81+IY=8+iZ80
+
+AT +iW<n>            Defers receive notifications to <n> bytes/millisecond.
+                     <n> should be in the range of 0 ... 64000.
+
+AT +iX<n>            Respects read block size and defers receive
+                     notifications. <n> should be in the range of 0 ...
+                     64000.
+
+AT +iY<n>            Defers transmission to <n> bytes/millisecond. <n>
+                     should be in the range of 0 ... 8.
+
+AT +iZ<n>            Splits large frames into <n> byte segments. <n>
+                     should be in the range of 0 ... 2048.
+
+AT +iU=<BC>          Sometimes the Service Indicator and Additional
+AT +iU=<BC/LLC>      Service Indicator are not flexible enough to indicate
+                     the necessary information in bearer capabilities (BC)
+                     and low-layer compatibility (LLC) that the user wants
+                     to provide for an outgoing call. In this case, the user
+                     can set these values directly. For example, to indicate
+                     a V.110 call with 38400 bps and the appropriate flow
+                     control option, the user can enter the command:
+                     AT+IU=<8890214d00bb> to specify the BC value.
+                     The provided BC and LLC values are used without any
+                     verification (except max. length of information
+                     element) to create the SETUP message sent over the
+                     D-channel. This allows the use of proprietary BC/LLC
+                     values not yet covered by standards. See Call
+                     Parameter (BC/LLC) Selection for details.
+                     Example: If the BC value is 8890, enter AT
+                     +iU<8890>. If the of each of the BC and the LLC is
+                     8890, enter AT +iU<8890/8890>.
+
+AT +iI               Reserved.
+
+AT +iE               Mode                       Global TTY mode. See
+                                                Incoming RAS call type
+                                                autodetection for details.
+                     AT&F16+IE=piafs32k         China 32K PIAFS link
+                     AT&F17+IE=piafs64k         China 64K PIAFS link
+                     AT&F18+IE=piafs            China variable speed PIAFS
+                                                link
+                     AT+IE=none                 Resets the tty interfaces to
+                                                "default" mode (i.e.
+                                                signaling information will be
+                                                used to determine the call
+                                                type)
+
+AT +iQ=<binding>     String Binding. See TTY Channel Pool Mode for
+                            details.
+                     oX     Bind TTY to board X for outgoing calls
+                     iX     Bind TTY to board X for incoming calls
+                     aX     Bind TTY to board X for the calls
+                     o0     Erase TTY binding for outgoing calls
+                     i0     Erase TTY binding for incoming calls
+                     a0     Erase TTY bindings for incoming and
+                            outgoing calls
+                     ?      Display current bindings
+
+AT +iK=<binding>     String Binding. See TTY Channel Pool Mode for
+                            details.
+                     oY     Bind TTY to line Y for outgoing calls
+                     iY     Bind TTY to line Y for incoming calls
+                     aY     Bind TTY to line Y for the calls
+                     o0     Erase TTY binding for outgoing calls
+                     i0     Erase TTY binding for incoming calls
+                     a0     Erase TTY bindings for incoming and
+                            outgoing calls
+
+                     ?         Display current bindings
+                     Note: This command must be used in conjunction
+                     with the AT+iQ command to first set the controller
+                     number that the tty interface is bound to
+
+AT +MF=<data bits>   Data bits: 8,7,5. Parity: N (none), O (odd), E (even),
+<parity>,<top bits>  S (space), M (mark). Stop bits: 1, 2. The transmission
+                     rate is derived from the currently selected Rx/Tx
+                     transmission speed (+MS command). Example:
+                     AT+MF=8,N,1 - select 8 data bits, no parity and one
+                     stop bit.
+
+AT +MF?              Returns currently selected framing.
+
+AT +MF=?             Returns list of supported parameters.
+
+AT +MS?              Modulation Selection Query. The response to the
+                     query has the following format: AT +MS:
+                     <mod>,<auto>,<min>,<max>,<min_rx>,<max_rx>
+                     .
+
+AT +MS=[<mod>]       Modulation Selection Set. Modulation: B103 (300 bps),
+[,[<auto>][,[<min>]  B212A (1200 bps), V21 (300 bps), V22 (1200 bps),
+[,[<max>]            V22B (1200 - 2400 bps), V22F (1200 bps Diva Fast
+[,[<min_rx>]         Setup), V22BF (1200 - 2400 bps Diva Fast Setup),
+[,[<max_rx>]]]]]]    V23C (Tx:75 bps/Rx:1200 bps outgoing call, Tx:1200
+                     bps/Rx:75 bps incoming call), V23HDX, V23HDXON
+                     (1200 bps half duplex for SMS over PSTN, off/on hook
+                     standard), V32 (4800 - 9600 bps), V32B, (4800 -
+                     14400 bps), V34 (2400 - 33600 bps), V90 (28000 -
+                     56000 bps download client <- server, 28000 - 32000
+                     bps upload client -> server), V90a (28000 - 56000
+                     bps upload client -> server, 28000 - 32000 bps
+                     download client <- server). Auto: 0 - use only the
+                     specified modulation, 1 - try other modulations with
+                     lower data rates if the specified modulation cannot be
+                     used. min: Minimum transmit data rate. max:
+                     Maximum transmit data rate. min_rx: Minimum
+                     receive data rate. max_rx: Maximum receive data
+                     rate. Only V90 modulation has different
+                     transmit/receive rates. Rate = 0 means no minimum
+                     or maximum limitation. Valid Rate Values (in bps): 75,
+                     300, 600, 1200, 2400, 4800, 7200, 9600, 12000,
+                     14400, 16800, 19200, 21600, 24000, 26400, 28000,
+                     28800, 29333, 30667, 31200, 32000, 33600, 33400,
+                     34667, 36000, 37333, 38000, 38667, 40000, 41333,
+                     42000, 42667, 44000, 45333, 46000, 46667, 48000,
+                     49333, 50000, 50667, 52000, 53333, 54000, 54667,
+                     56000, 0
+Notes:
+[c] If a subaddress (SUB) needs to be entered, it must be separated from the rest of the
+number by a vertical character [|] (also called the pipe symbol).
+[d] If supported by used bearer protocol (for example V.110).
+[e] Determines if the ASYNC/SYNC conversion module is inserted on top of OSI Layer 3 and
+which mode this module assumes. See ASYNC/SYNC Conversion Module for details.
+[f] Commonly used values are: 1/1 - ISDN voice call 3.1 kHz, 1/2 - Analog voice call, 1/3 -
+ISDN voice call 7 kHz, 2/1 - Fax group 2, 2/2 - Fax group 3, 2/3 - Data over modem
+connection, 2/4 - BTX over modem connection, 7/0 - 64 kbps Data, 7/170 - 56 kbps Data,
+7/197 - V.110 rate adaptation. See Call parameter (BC/LLC) selection on page 69 for
+details.
+
+## Fax class 1 and Fax class 2 AT commands
+
+The following list is an excerpt of the complete list.
+
+Command              Description
+
+AT +FCLASS?          Queries the configured modem class.
+
+AT +FCLASS=?         Displays the supported modem classes.
+
+AT +FCLASS=<n>       Configures the modem for modem class <n>. 0 - Data mode, 1 -
+                     EIA class 1, 2 - EIA class 2
+
+AT +FMFR?            Returns the name of the modem manufacturer.
+
+AT +FMDL?            Returns the name of the modem model.
+
+AT +FREV?            Returns the product version.
+
+AT +FLPL=<n>         Control class 2 polling capability. 0 - Normal operation. 1 -
+                     Document available for polling.
+
+AT +FTD              For information, see AT+FTD: Set current time and date.
+
+AT +FPH              For information, see See AT+FPH: Page header generation.
+
+### AT+FTD Set current time and date
+
+The AT+FTD command is used to set the current date and time. The current time and date
+should be set before each fax transmit session. The syntax of the command is:
+
+AT+FTD=year,month,hour,minute,second,zone,dtsdelta
+
+Parameter            Description
+year                 The current year. Range: 1970 to 65535
+month                The current month number. Range: 1 to 12. January is 1.
+day                  The current day of the month. Range: 1 to 31.
+hour                 The current hour. Range: 0 to 23.
+minute               The current minute. Range 0 to 59.
+second               The current second. Range 0 to 59.
+zone                 Reserved. Should be set to zero.
+dtsdelta             Reserved. Should be set to zero.
+
+### AT+FPH: Page header generation
+
+The AT+FPH command is used to enable automatic generation of a Fax page header. There
+are three allowable formats for the syntax of this command:
+ - AT+FPH=mode,"left"
+ - AT+FPH=mode,"left'middle'right"
+ - AT+FPH=mode,"left'right"
+
+### AT+FPH command parameters
+
+Parameter            Description
+mode                 Reserved. Should be set to 1.
+string               The string defines the page header itself. Only ASCII printable characters
+                     are allowed in the string (0x20 thru 0x7e). Escape sequences that are
+                     introduced with the percent (%) character are allowed. The string can be
+                     partitioned into one, two, or three parts by using single quote characters
+                     (') in the command expression.
+
+### Recognized escape sequences
+
+An escape sequence is a % followed by an optional width, which may include a leading left-
+justification signifier, and then by the escape character itself. It is of the form
+%[numbers][-]character. The dash (-) denotes left justification. When the dash is absent,
+right justification is used. If the width specification starts with a zero and the escape
+sequence is expanded, the value will be left-padded with zeroes. Otherwise, it will be left-
+padded with spaces.
+
+Sequence             Description
+%d (or %D)           The day of the month as a decimal number (range 01 to 31).
+%h (or %H)           The hour as a decimal number using a 24-hour clock (range 00 to 23).
+%i (or %I)           The hour as a decimal number using a 12-hour clock (range 01 to 12).
+%m                   The month as a decimal number (range 01 to 12).
+%M                   The minute as a decimal number (two digits).
+%p                   Either "am" or "pm" according to the given time value or the corresponding
+                     strings.
+%P                   The current page number of the fax being sent, as computed by the
+                     padding. Please note that page number is printed at the right upper corner
+                     of the page and not at the location where %P tag was found.
+%r (or %R)           The ID of the remote fax machine. Leading and trailing blanks are
+                     stripped. A printf-style field width specifier such as %20r or %-20r can be
+                     used to print this in a fixed width field.
+%s (or %S)           The second as a decimal number (two digits).
+%t (or %T)           The ID of the transmitting fax machine. Leading and trailing blanks are
+                     stripped. A printf-style field width specifier such as %20t or %-20t can be
+                     used to print this in a fixed width field.
+%y                   The year as a decimal number without the century.
+%Y                   The year as a decimal number including the century.
+%C                   C - unrecognized format character. Printed as C.
+
+## Supported TTY Profiles
+
+You can use the AT&F[<profile>] and ATZ[<profile>] commands to select a TTY profile. The
+following profiles are supported:
+
+Profile              Description
+14                   Autodetection of B-channel protocol (incoming).
+1                    X.75/Transparent/Transparent protocol stack. Data compression in accordance
+                     with V.42bis is detected automatically for incoming calls.
+2                    V.110 synchronous mode.
+3                    V.110 asynchronous mode.
+4                    Synchronous modem with V.42/V.42bis.
+5                    Asynchronous modem (up to V.90) with full negotiation and V.42/V.42bis/MNP.
+6                    V.120, 64 kbps, V.42bis compression auto-detection for incoming connections
+7                    V.120, 56 kbps, V.42bis compression auto-detection for incoming connections
+8                    Bit-transparent access to B-channel data [a]
+9                    HDLC/Transparent/Transparent protocol stack that is widely used for PPP
+                     connections [b].
+10                   Same as profile 9, but with 56000 bps
+11                   BTX
+12                   BTX
+15                   X.75 with data compression in accordance with V.42bis. This profile should be
+                     used for outgoing calls if you wish to use data compression in accordance with
+                     V.42bis. If the opposite side does not support data compression, the
+                     connection will be established without data compression.
+16                   PIAFS 1.0 32 kbps [c]
+17                   PIAFS 2.0 64 kbps [c]
+18                   PIAFS 2.1 32/64 kbps [c]
+
+Notes:
+[a] By default, this profile does not switch to data mode after the connection was
+established.
+[b] This profile switches to numeric mode (ATV0) and "echo off" (ATE0) by default.
+[c] You can use the AT+iE command to activate the CHINA PIAFS protocol extension.

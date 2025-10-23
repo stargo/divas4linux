@@ -93,6 +93,11 @@ cards:
 
     /usr/lib/divas/divas_status
 
+## AT command set
+
+The virtual ports /dev/ttyds* support the AT command set. For a list of
+supported commands, take a look at AT.txt
+
 ## License
 
 The license is GPL (read the file LICENSE), but some files
