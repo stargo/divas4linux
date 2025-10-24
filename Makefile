@@ -13,7 +13,7 @@ EICONDIR=/usr/lib/divas
 
 .PHONY: all clean tty_module kernel
 
-all: kernel/divas.ko tty_module/Divatty.ko divactrl/divactrl
+all: kernel/divas.ko tty_module/Divatty.ko divactrl/divactrl dialog/dialog
 	@echo
 	@echo "Build of divas4linux-melware complete."
 	@echo
@@ -54,6 +54,12 @@ divactrl/divactrl:
 	  rm -rf ./dlinux;		\
 	)
 
+dialog/dialog:
+	@echo "Building dialog utility ..."
+	@echo
+	@make -C dialog
+	@echo
+
 $(KDIR)/.config:
 	@echo "Unable to find configured kernel in $(KDIR)."
 	@echo "Please provide the path to your kernel with KDIR=/path/to/kernelsources"
@@ -92,6 +98,9 @@ install: all
 	@echo "Installing scripts to $(DESTDIR)$(EICONDIR) ..."
 	@if [ `id -u` -eq 0 ]; then chown 0:0 scripts/*; fi
 	@cp -p scripts/* $(DESTDIR)$(EICONDIR)/.
+	@echo "Installing dialog to $(DESTDIR)$(EICONDIR) ..."
+	@if [ `id -u` -eq 0 ]; then chown 0:0 dialog/dialog; fi
+	@cp -p dialog/dialog $(DESTDIR)$(EICONDIR)/.
 	@echo "Installing diva modules to $(DESTDIR)$(EICONDIR) ..."
 	@install -m 0644 kernel/*.ko $(DESTDIR)$(EICONDIR)/.
 	@install -m 0644 tty_module/*.ko $(DESTDIR)$(EICONDIR)/.
@@ -128,6 +137,10 @@ clean:
 	@rm -f tty_module/modules.order
 	@rm -rf tty_module/.tmp_versions
 	@rm -f tty_module/divainclude
+	@rm -f dialog/*.o
+	@rm -f dialog/dialog
+	@rm -f dialog/.depend
+	@rm -f dialog/libdialog.a
 	@echo
 	@echo "Cleaned."
 	@echo

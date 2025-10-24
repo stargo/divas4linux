@@ -18,3 +18,5 @@ divactrl/config.status
 divactrl/divactrl
 divactrl/load/dlistcc.c
 divactrl/tmp
+dialog/dialog
+dialog/libdialog.a
