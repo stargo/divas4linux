@@ -56,7 +56,6 @@ dialog: dialog.o
 
 clean:
 	rm -f core *.o *~ dialog .depend libdialog.a
-	touch .depend
 
 install: dialog libdialog.a
 	install -s dialog $(BINDIR)
@@ -66,5 +65,5 @@ install: dialog libdialog.a
 depend:
 	$(CPP) -M $(CFLAGS) $(SRCS) > .depend
 
-include .depend
+-include .depend
 
