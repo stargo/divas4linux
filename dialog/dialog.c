@@ -244,8 +244,15 @@ j_checklist (const char *t, int ac, const char * const * av)
 	fprintf (stderr, "\nCan't allocate memory in dialog_checklist().\n");
 	exit (-1);
     }
-    ret = dialog_checklist (t, av[2], atoi (av[3]), atoi (av[4]),
-	atoi (av[5]), item_no, av + 6, FLAG_CHECK, status);
+    do {
+        ret = dialog_checklist (t, av[2], atoi (av[3]), atoi (av[4]),
+	    atoi (av[5]), item_no, av + 6, FLAG_CHECK, status);
+        if (helptag && ret == 2) {
+            dialog_clear();
+            dialog_textbox("Help", helptag, 18, 70);
+            dialog_clear();
+        }
+    } while (ret == 2);
     if (ret == 0) {
 	for (i = 0; i < item_no; i++)
 	    if (status[i]) {
@@ -269,8 +276,15 @@ j_radiolist (const char *t, int ac, const char * const * av)
 	fprintf (stderr, "\nCan't allocate memory in dialog_checklist().\n");
 	exit (-1);
     }
-    ret = dialog_checklist (t, av[2], atoi (av[3]), atoi (av[4]),
-	atoi (av[5]), item_no, av + 6, FLAG_RADIO, status);
+    do {
+        ret = dialog_checklist (t, av[2], atoi (av[3]), atoi (av[4]),
+	    atoi (av[5]), item_no, av + 6, FLAG_RADIO, status);
+        if (helptag && ret == 2) {
+            dialog_clear();
+            dialog_textbox("Help", helptag, 18, 70);
+            dialog_clear();
+        }
+    } while (ret == 2);
     if (ret == 0) {
 	for (i = 0; i < item_no; i++)
 	    if (status[i])
@@ -283,8 +297,16 @@ j_radiolist (const char *t, int ac, const char * const * av)
 int
 j_inputbox (const char *t, int ac, const char * const * av)
 {
-    int ret = dialog_inputbox (t, av[2], atoi (av[3]), atoi (av[4]),
-			    ac == 6 ? av[5] : (char *) NULL);
+    int ret;
+    do {
+        ret = dialog_inputbox (t, av[2], atoi (av[3]), atoi (av[4]),
+			        ac == 6 ? av[5] : (char *) NULL);
+        if (helptag && ret == 2) {
+            dialog_clear();
+            dialog_textbox("Help", helptag, 18, 70);
+            dialog_clear();
+        }
+    } while (ret == 2);
     if (ret == 0)
 	fprintf(stderr, dialog_input_result);
     return ret;

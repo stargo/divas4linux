@@ -65,6 +65,10 @@ dialog_inputbox (const char *title, const char *prompt, int height, int width,
 
     x = width / 2 - 11;
     y = height - 2;
+    if (helptag) {
+        x -= 7;
+        _dialog_print_button (dialog, " Help ", y, x + 28, FALSE);
+    }
     _dialog_print_button (dialog, "Cancel", y, x + 14, FALSE);
     _dialog_print_button (dialog, "  OK  ", y, x, TRUE);
 
@@ -154,6 +158,14 @@ dialog_inputbox (const char *title, const char *prompt, int height, int width,
 	case 'c':
 	    delwin (dialog);
 	    return 1;
+	case 'H':
+	case 'h':
+	case M_EVENT + 'h':
+	    if (helptag) {
+	        delwin (dialog);
+	        return 2;
+	    }
+	    break;
 	case M_EVENT + 'i':	/* mouse enter events */
 	case M_EVENT + 'o':	/* use the code for 'UP' */
 	case M_EVENT + 'c':
@@ -163,12 +175,19 @@ dialog_inputbox (const char *title, const char *prompt, int height, int width,
 	    switch (button) {
 	    case -1:
 		button = 1;	/* Indicates "Cancel" button is selected */
+		if (helptag) {
+		    button = 2; /* Indicates "Help" button is selected */
+		    _dialog_print_button (dialog, " Help ", y, x + 28, TRUE);
+		}
 		_dialog_print_button (dialog, "  OK  ", y, x, FALSE);
-		_dialog_print_button (dialog, "Cancel", y, x + 14, TRUE);
+		_dialog_print_button (dialog, "Cancel", y, x + 14, (helptag?FALSE:TRUE));
 		wrefresh (dialog);
 		break;
 	    case 0:
 		button = -1;	/* Indicates input box is selected */
+		if (helptag) {
+		    _dialog_print_button (dialog, " Help ", y, x + 28, FALSE);
+		}
 		_dialog_print_button (dialog, "Cancel", y, x + 14, FALSE);
 		_dialog_print_button (dialog, "  OK  ", y, x, TRUE);
 		wmove (dialog, box_y, box_x + input_x);
@@ -176,8 +195,18 @@ dialog_inputbox (const char *title, const char *prompt, int height, int width,
 		break;
 	    case 1:
 		button = 0;	/* Indicates "OK" button is selected */
+		if (helptag) {
+		    _dialog_print_button (dialog, " Help ", y, x + 28, FALSE);
+		}
 		_dialog_print_button (dialog, "Cancel", y, x + 14, FALSE);
 		_dialog_print_button (dialog, "  OK  ", y, x, TRUE);
+		wrefresh (dialog);
+		break;
+	    case 2:
+		button = 1;	/* Indicates "Cancel" button is selected */
+		_dialog_print_button (dialog, " Help ", y, x + 28, FALSE);
+		_dialog_print_button (dialog, "Cancel", y, x + 14, TRUE);
+		_dialog_print_button (dialog, "  OK  ", y, x, FALSE);
 		wrefresh (dialog);
 		break;
 	    }
@@ -188,21 +217,38 @@ dialog_inputbox (const char *title, const char *prompt, int height, int width,
 	    switch (button) {
 	    case -1:
 		button = 0;	/* Indicates "OK" button is selected */
+		if (helptag) {
+		    _dialog_print_button (dialog, " Help ", y, x + 28, FALSE);
+		}
 		_dialog_print_button (dialog, "Cancel", y, x + 14, FALSE);
 		_dialog_print_button (dialog, "  OK  ", y, x, TRUE);
 		wrefresh (dialog);
 		break;
 	    case 0:
 		button = 1;	/* Indicates "Cancel" button is selected */
+		if (helptag) {
+		    _dialog_print_button (dialog, " Help ", y, x + 28, FALSE);
+		}
 		_dialog_print_button (dialog, "  OK  ", y, x, FALSE);
 		_dialog_print_button (dialog, "Cancel", y, x + 14, TRUE);
 		wrefresh (dialog);
 		break;
 	    case 1:
 		button = -1;	/* Indicates input box is selected */
+		if (helptag) {
+		    button = 2; /* Indicates "Help" button is selected */
+		    _dialog_print_button (dialog, " Help ", y, x + 28, TRUE);
+		}
+		_dialog_print_button (dialog, "Cancel", y, x + 14, FALSE);
+		_dialog_print_button (dialog, "  OK  ", y, x, (helptag?FALSE:TRUE));
+		wmove (dialog, box_y, box_x + input_x);
+		wrefresh (dialog);
+		break;
+	    case 2:
+		button = -1;	/* Indicates input box is selected */
+		_dialog_print_button (dialog, " Help ", y, x + 28, FALSE);
 		_dialog_print_button (dialog, "Cancel", y, x + 14, FALSE);
 		_dialog_print_button (dialog, "  OK  ", y, x, TRUE);
-		wmove (dialog, box_y, box_x + input_x);
 		wrefresh (dialog);
 		break;
 	    }

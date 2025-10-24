@@ -140,6 +140,10 @@ dialog_checklist (const char *title, const char *prompt, int height, int width,
     }
     x = width / 2 - 11;
     y = height - 2;
+    if (helptag) {
+        x -= 7;
+        _dialog_print_button (dialog, " Help ", y, x + 28, FALSE);
+    }
     _dialog_print_button (dialog, "Cancel", y, x + 14, FALSE);
     _dialog_print_button (dialog, "  OK  ", y, x, TRUE);
     wrefresh (dialog);
@@ -313,18 +317,41 @@ dialog_checklist (const char *title, const char *prompt, int height, int width,
 	case M_EVENT + 'C':
 	    delwin (dialog);
 	    return 1;
+	case 'H':
+	case 'h':
+	case M_EVENT + 'h':
+	    if (helptag) {
+	        delwin (dialog);
+	        return 2;
+	    }
+	    break;
 	case M_EVENT + 'o':	/* mouse enter... */
 	case M_EVENT + 'c':	/* use the code for toggling */
 	    button = (key == M_EVENT + 'o');
 	case TAB:
 	case KEY_LEFT:
 	case KEY_RIGHT:
-	    if (!button) {
-		button = 1;	/* "Cancel" button selected */
-		_dialog_print_button (dialog, "  OK  ", y, x, FALSE);
-		_dialog_print_button (dialog, "Cancel", y, x + 14, TRUE);
+	    if (key == KEY_LEFT) {
+		if (button == 0) button = (helptag?3:2);
+	        button--;
 	    } else {
-		button = 0;	/* "OK" button selected */
+	        button++;
+	    }
+	    button %= (helptag?3:2);
+	    if (button == 2) { /* "Help" button selected */
+		_dialog_print_button (dialog, " Help ", y, x + 28, TRUE);
+		_dialog_print_button (dialog, "Cancel", y, x + 14, FALSE);
+		_dialog_print_button (dialog, "  OK  ", y, x, FALSE);
+	    } else if (button == 1) { /* "Cancel" button selected */
+	        if (helptag) {
+		    _dialog_print_button (dialog, " Help ", y, x + 28, FALSE);
+		}
+		_dialog_print_button (dialog, "Cancel", y, x + 14, TRUE);
+		_dialog_print_button (dialog, "  OK  ", y, x, FALSE);
+	    } else if (button == 0) { /* "Ok" button selected */
+		if (helptag) {
+		    _dialog_print_button (dialog, " Help ", y, x + 28, FALSE);
+		}
 		_dialog_print_button (dialog, "Cancel", y, x + 14, FALSE);
 		_dialog_print_button (dialog, "  OK  ", y, x, TRUE);
 	    }
