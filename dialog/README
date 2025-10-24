@@ -1,0 +1,51 @@
+The newst source code of dialog is on susix.jura.uni-sb.de in the directory
+/pub/linux/source/libc/ncurses/.
+More stable releases will be uploaded to sunsite.unc.edu into the directory
+/pub/Linux/utils/shell/.
+
+dialog-list@redhat.com is a mailinglist for the discussion about
+further development of dialog. To join the mailinglist do:
+"echo subscribe dialog-list First_Name Last_Name | mail listproc@redhat.com".
+
+dialog is typically invoked from a shell script and puts nice
+yes-no/checklist/radio-button - menues on your screen.
+(Text is just passed on as arguments to dialog.)
+
+This version of dialog should be compatible with all prior versions.
+
+Please use ncurses-1.9.4 or newer with this dialog release. It's really worth
+it. (prep.ai.mit.edu or ftp.netcom.com/pub/zm/zmbenhal/ncurses.)
+If you have problems compiling dialog, you might have to change the
+source code to use '<ncurses.h>' instead of the now used '<curses.h>'.
+
+Thanks a lot,
+
+Florian La Roche     florian@jurix.jura.uni-sb.de
+
+
+TODO:
+- don't compile code with M_EVENT, if not compiling with mouse support
+- add support for autoconf back in, but as I don't like it really, I also
+  want to keep a Makefile.old, that I will use.
+  autoconf is not really necessary for dialog to be compiled...
+- pre-selected checklists
+- have No as default in the YesNo box (inverted pre-selection)
+- better editing in input-boxes
+- have selection ala Emacs C-s in menu and checklist
+  (type in the starting letters of an item)
+- PgUp/PgDn
+- mouse-support should be checked/maybe redone. The ncurses-people will
+  add mouse support to ncurses, can we use that?
+- recheck HAVE_NCURSES. Ncurses can be compiled on lots of platforms, maybe
+  we should just support ncurses and everybody needs to install it.
+  (I'll do this, it is a good idea. Just gimme time.)
+- redo help message (didn't like 0.62, but haven't done much better yet...)
+- write an INSTALL file
+- react to SIGWINCH
+- negative sizes on commandline refer to distance from the border
+- new rc file format
+- man page for the library functions (once the interface is better)
+- better handling of errors in the textbox
+- A tk interface that selects nice X11-menues on a graphics screen and
+  textboxes on a normal textscreen.
+

@@ -103,4 +103,5 @@ supported commands, take a look at AT.txt
 The license is GPL (read the file LICENSE), but some files
 like config scripts and the firmware binaries are not GPL and
 under the copyright of Eicon Networks / Dialogic.
+The included dialog utility is GPL.
 All files are for the exclusive use with Eicon DIVA ISDN adapters only.
