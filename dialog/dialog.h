@@ -135,6 +135,8 @@ extern chtype attributes[];
 
 extern const char *backtitle;
 
+extern const char *helptag;
+
 /*
  * Function prototypes
  */

@@ -126,6 +126,9 @@ main (int argc, const char * const * argv)
 		clear_screen = 1;
 		offset++;
 	    }
+	} else if (!strcmp (argv[offset + 1], "--helptag")) {
+		helptag = argv[offset + 2];
+		offset += 2;
 	} else			/* no more common options */
 	    end_common_opts = 1;
     }
@@ -177,6 +180,7 @@ Usage (const char *name)
 \n\
 \nBox options:\
 \n\
+\n  --helptag   <file>\
 \n  --yesno     <text> <height> <width>\
 \n  --msgbox    <text> <height> <width>\
 \n  --infobox   <text> <height> <width>\

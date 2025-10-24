@@ -30,6 +30,8 @@ bool use_shadow = USE_SHADOW;
 
 const char *backtitle = NULL;
 
+const char *helptag = NULL;
+
 const char *dialog_result;
 
 /* 
