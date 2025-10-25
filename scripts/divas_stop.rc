@@ -11,7 +11,7 @@ divas_current_module_name="none"
 kernel_sver=$(uname -r 2>/dev/null)
 kernel_main=$(echo  $kernel_sver | sed -e "s/\..*\$//" - 2>/dev/null)
 kernel_major=$(echo $kernel_sver | sed -e "s/^$kernel_main\.//" -e "s/\..*$//" - 2>/dev/null)
-kernel_minor=$(echo $kernel_sver | sed -e "s/^$kernel_main\.$kernel_major\.//" -e "s/[-\.a-zA-Z].*$//" - 2>/dev/null)
+kernel_minor=$(echo $kernel_sver | sed -e "s/^$kernel_main\.$kernel_major\.//" -e "s/[-+\.a-zA-Z].*$//" - 2>/dev/null)
 
 istty=0
 tty -s 2>/dev/null
