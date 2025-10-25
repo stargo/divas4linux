@@ -332,7 +332,7 @@ dialog_checklist (const char *title, const char *prompt, int height, int width,
 	case KEY_LEFT:
 	case KEY_RIGHT:
 	    if (key == KEY_LEFT) {
-		if (button == 0) button = (helptag?3:2);
+	        if (button == 0) button = (helptag?3:2);
 	        button--;
 	    } else {
 	        button++;
