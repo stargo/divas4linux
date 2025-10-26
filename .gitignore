@@ -20,3 +20,4 @@ divactrl/load/dlistcc.c
 divactrl/tmp
 dialog/dialog
 dialog/libdialog.a
+tools/ttydsctl

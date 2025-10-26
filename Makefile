@@ -13,7 +13,7 @@ EICONDIR=/usr/lib/divas
 
 .PHONY: all clean tty_module kernel
 
-all: kernel/divas.ko tty_module/Divatty.ko divactrl/divactrl dialog/dialog
+all: kernel/divas.ko tty_module/Divatty.ko divactrl/divactrl dialog/dialog tools/ttydsctl
 	@echo
 	@echo "Build of divas4linux-melware complete."
 	@echo
@@ -60,6 +60,12 @@ dialog/dialog:
 	@make -C dialog
 	@echo
 
+tools/ttydsctl:
+	@echo "Building dialog utility ..."
+	@echo
+	@make -C tools ttydsctl
+	@echo
+
 $(KDIR)/.config:
 	@echo "Unable to find configured kernel in $(KDIR)."
 	@echo "Please provide the path to your kernel with KDIR=/path/to/kernelsources"
@@ -104,6 +110,7 @@ install: all
 	@echo "Installing diva modules to $(DESTDIR)$(EICONDIR) ..."
 	@install -m 0644 kernel/*.ko $(DESTDIR)$(EICONDIR)/.
 	@install -m 0644 tty_module/*.ko $(DESTDIR)$(EICONDIR)/.
+	@install -m 0755 tools/ttydsctl $(DESTDIR)$(EICONDIR)/.
 	@echo
 	@echo "Installation of divas4linux-melware complete."
 	@echo
@@ -141,6 +148,7 @@ clean:
 	@rm -f dialog/dialog
 	@rm -f dialog/.depend
 	@rm -f dialog/libdialog.a
+	@rm -f tools/ttydsctl
 	@echo
 	@echo "Cleaned."
 	@echo
