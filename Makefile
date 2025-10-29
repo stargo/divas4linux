@@ -11,9 +11,9 @@ DESTDIR=
 
 EICONDIR=/usr/lib/divas
 
-.PHONY: all clean tty_module kernel
+.PHONY: all clean tty_module kernel dialog divastrace
 
-all: kernel/divas.ko tty_module/Divatty.ko divactrl/divactrl dialog/dialog tools/ttydsctl
+all: kernel/divas.ko tty_module/Divatty.ko divactrl/divactrl dialog divastrace tools/ttydsctl
 	@echo
 	@echo "Build of divas4linux-melware complete."
 	@echo
@@ -22,7 +22,7 @@ all: kernel/divas.ko tty_module/Divatty.ko divactrl/divactrl dialog/dialog tools
 
 tty_module/Divatty.ko: $(KDIR)/.config tty_module
 
-tty_module: $(KDIR)/.config kernel
+tty_module: $(KDIR)/.config kernel config.h
 	@echo "Building tty kernel module using kernel from $(KDIR) ..."
 	@echo
 	@rm -f tty_module/divainclude
@@ -54,10 +54,16 @@ divactrl/divactrl:
 	  rm -rf ./dlinux;		\
 	)
 
-dialog/dialog:
+dialog:
 	@echo "Building dialog utility ..."
 	@echo
 	@make -C dialog
+	@echo
+
+divastrace:
+	@echo "Building divastrace utilities ..."
+	@echo
+	@make -C divastrace
 	@echo
 
 tools/ttydsctl:
@@ -111,6 +117,8 @@ install: all
 	@install -m 0644 kernel/*.ko $(DESTDIR)$(EICONDIR)/.
 	@install -m 0644 tty_module/*.ko $(DESTDIR)$(EICONDIR)/.
 	@install -m 0755 tools/ttydsctl $(DESTDIR)$(EICONDIR)/.
+	@install -m 0755 divastrace/bin/tracer $(DESTDIR)$(EICONDIR)/.
+	@install -m 0755 divastrace/divalogd/bin/divalogd $(DESTDIR)$(EICONDIR)/.
 	@echo
 	@echo "Installation of divas4linux-melware complete."
 	@echo
@@ -148,6 +156,11 @@ clean:
 	@rm -f dialog/dialog
 	@rm -f dialog/.depend
 	@rm -f dialog/libdialog.a
+	@rm -rf divastrace/divalogd/bin
+	@rm -rf divastrace/divalogd/obj
+	@rm -rf divastrace/src/obj
+	@rm -rf divastrace/bin
+	@rm -rf divastrace/lib
 	@rm -f tools/ttydsctl
 	@echo
 	@echo "Cleaned."

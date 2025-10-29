@@ -20,4 +20,7 @@ divactrl/load/dlistcc.c
 divactrl/tmp
 dialog/dialog
 dialog/libdialog.a
+divastrace/bin
+divastrace/divalogd/bin
+divastrace/lib
 tools/ttydsctl

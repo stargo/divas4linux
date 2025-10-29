@@ -1,0 +1,5 @@
+#define PRIMARY	"CfgLib interface" 
+#define BUILD		"0" 
+#define REVISION	"0" 
+#define COPYRIGHT	"(C) Dialogic Corporation 1991-2008" 
+#define BUILDVERSIONSTR "1.0.1.0" 
