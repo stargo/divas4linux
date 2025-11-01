@@ -250,6 +250,11 @@ AT %C[<n>]           <n>    Data compression
                             off
                      1      Turn data compression
                             on
+
+AT %E[<n>]           <n>    Retrain control
+                     0      Turn retrain off
+                     1      Turn retrain on
+
 ## AT# commands
 
 AT command           Description
