@@ -86,6 +86,13 @@ To install it, use
     sudo systemctl daemon-reload
     sudo systemctl enable divas4linux
 
+## udev rules for tty devices /dev/ttyds*
+
+udev rules are provided for managing the permissions of the
+tty devices created by Divatty. To install them, use
+
+    sudo cp divas4linux.rules /etc/udes/rules.d/
+
 ## Card status
 
 A tool is provided to show the current status of the installed DIVA Sever
