@@ -58,9 +58,9 @@ AT X<n>              <n>      Result code reporting option
 
 AT Z[<n>]            Soft reset. Drops the connection if the modem is in ESCAPE mode.
                      Resets the modem and restores the selected predefined modem
-                     configuration profile <n>. See Supported TTY Profiles on page 63
-                     for more information. See AT&F below for the list of predefined
-                     modem configuration profiles.
+                     configuration profile <n>. See Supported TTY Profiles for more
+                     information. See AT&F below for the list of predefined modem
+                     configuration profiles.
 
 AT S<r>=?            Displays the value of the selected S-register <r>.
 
