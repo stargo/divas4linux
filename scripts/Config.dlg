@@ -338,24 +338,24 @@ then
 fi
 kernel_is32bit=$(uname -m | grep x86_64 >> /dev/null; echo $?)
 
-if [ $kernel_main -gt 3 ]
-then
-  # workaround "xterm" terminal issues
-  tty_type=$(env | grep TERM | awk 'BEGIN { FS = "=" } ; { print $2 }')
-  if [ ${tty_type} = "xterm" ]
-  then
-    # this works around ncurses xterm uggliness
-    TERM=xterm-color
-  elif [ ${tty_type} = "xterm-256color" ]
-  then
-    # old static lib ncurses lacks support for xterm-256color; check first
-    ${diva_dir}/dialog --clear > /dev/null 2>&1
-    if [ $(($?)) -ne 0 ]
-    then
-      TERM=xterm-color
-    fi
-  fi
-fi
+#if [ $kernel_main -gt 3 ]
+#then
+#  # workaround "xterm" terminal issues
+#  tty_type=$(env | grep TERM | awk 'BEGIN { FS = "=" } ; { print $2 }')
+#  if [ ${tty_type} = "xterm" ]
+#  then
+#    # this works around ncurses xterm uggliness
+#    TERM=xterm-color
+#  elif [ ${tty_type} = "xterm-256color" ]
+#  then
+#    # old static lib ncurses lacks support for xterm-256color; check first
+#    ${diva_dir}/dialog --clear > /dev/null 2>&1
+#    if [ $(($?)) -ne 0 ]
+#    then
+#      TERM=xterm-color
+#    fi
+#  fi
+#fi
 
 max_softip_adapters=0
 max_softip_links=0
