@@ -279,16 +279,19 @@ int global_options = 0;
 int minors_per_major_init = 0;
 char* diva_tty_init = 0;
 char diva_tty_init_prm[64];
+int diva_tty_additional_ttys = 0;
 
 #if !defined(__KERNEL_VERSION_GT_2_4__) /* { */
 MODULE_PARM(global_options, "i");
 MODULE_PARM(minors_per_major_init, "i");
 MODULE_PARM(diva_tty_init, "s");
+MODULE_PARM(diva_tty_additional_ttys, "i");
 #else /* } { */
 #include <linux/moduleparam.h>
 module_param(global_options, uint, 0);
 module_param(minors_per_major_init, uint, 0);
 module_param_string(diva_tty_init, diva_tty_init_prm, sizeof(diva_tty_init_prm), 0);
+module_param(diva_tty_additional_ttys, uint, 0);
 #endif /* } */
 
 #ifdef MODULE_LICENSE
@@ -1930,8 +1933,10 @@ int EtSRinit(void)
 
 	/* printk (KERN_CRIT "DIVA_TTY: %d Channels found\n", Channel_Count); */
 	DBG_TRC(("DIVA_TTY: %d Channels found", Channel_Count))
-	printk (KERN_INFO "%s: Adapters=%d Channels=%d (didd=%d)\n",
-			__FUNCTION__, Adapter_Count, Channel_Count, length);
+	printk (KERN_INFO "%s: Adapters=%d Channels=%d AdditionalTTYs=%d (didd=%d)\n",
+			__FUNCTION__, Adapter_Count, Channel_Count, diva_tty_additional_ttys, length);
+
+	Channel_Count += diva_tty_additional_ttys;
 
 	/* Calculate the memory required for structures
 	* (Channel_Count+1) * sizeof device structure +

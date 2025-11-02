@@ -2805,6 +2805,12 @@ GlobalTTYATInit=""
 CGlobalTTYATInit="$GlobalTTYATInit"
 
 # ----------------------------------------------------------------------
+# Additional TTYs
+# ----------------------------------------------------------------------
+AdditionalTTYs=""
+CAdditionalTTYs="$AdditionalTTYs"
+
+# ----------------------------------------------------------------------
 # Global CAPI Group Optimization
 # ----------------------------------------------------------------------
 GlobalCapiGO=0
@@ -3012,6 +3018,7 @@ DivaTTYIgnoreNumberType="$CDivaTTYIgnoreNumberType"
 DivaTTYNoCarrier="$CDivaTTYNoCarrier"
 GlobalPiafsRTF="$CGlobalPiafsRTF"
 GlobalTTYATInit="$CGlobalTTYATInit"
+AdditionalTTYs="$CAdditionalTTYs"
 
 GlobalCapiGO="$CGlobalCapiGO"
 GlobalCallRateLimit="$CGlobalCallRateLimit"
@@ -7182,6 +7189,13 @@ else
 	diva_write_namedvar "GlobalOptions\TTY_INIT" 0 1 "GlobalOptions\TTY_INIT" "TTY Init String" ".tty"
 fi
 
+if [ ! -z "${AdditionalTTYs}" ]
+then
+	diva_write_namedvar "GlobalOptions\ADDITIONAL_TTYS" "${AdditionalTTYs}" 0 "GlobalOptions\ADDITIONAL_TTYS" "Additional TTYs" ".tty"
+else
+	diva_write_namedvar "GlobalOptions\ADDITIONAL_TTYS" 0 1 "GlobalOptions\ADDITIONAL_TTYS" "Additional TTYs" ".tty"
+fi
+
 diva_write_namedvar "GlobalOptions\DIVA_ISDN_IGNORE_NUMBER_TYPE" $((DivaTTYIgnoreNumberType)) 1 "GlobalOptions\DIVA_ISDN_IGNORE_NUMBER_TYPE" "Ignore number type" ".tty"
 
 diva_write_namedvar "GlobalOptions\DIVA_ISDN_AT_RSP_IF_RINGING" $((DivaTTYNoCarrier)) 1 "GlobalOptions\DIVA_ISDN_AT_RSP_IF_RINGING" "NO CARRIER after RING" ".tty"
@@ -9619,6 +9633,10 @@ cat ${diva_xml}.capi >> ${diva_xml}
     then
 			tty_load_options="${tty_load_options} diva_tty_init=\"${GlobalTTYATInit}\""
     fi
+		if [ ! -z ${AdditionalTTYs} ]
+    then
+			tty_load_options="${tty_load_options} diva_tty_additional_ttys=\"${AdditionalTTYs}\""
+    fi
 		if [ $((opendiva)) -eq 1 ]
 		then
 			echo "  ${driver_load} Divatty $tty_load_options > /dev/null 2>&1" >> $cfg_file
@@ -9882,6 +9900,7 @@ echo CGlobalFaxClass2OptionsSEP="\"$GlobalFaxClass2OptionsSEP\"" >> $cfg_file
 echo CGlobalFaxClass2OptionsV34Rate="\"$GlobalFaxClass2OptionsV34Rate\"" >> $cfg_file
 echo CGlobalFaxClass2OptionsHiRes="\"$GlobalFaxClass2OptionsHiRes\"" >> $cfg_file
 echo CGlobalTTYATInit="\"${GlobalTTYATInit}\"" >> $cfg_file
+echo CAdditionalTTYs="\"${AdditionalTTYs}\"" >> $cfg_file
 echo CGlobalCapiGO="\"${GlobalCapiGO}\"" >> $cfg_file
 echo CGlobalCallRateLimit="\"${GlobalCallRateLimit}\"" >> $cfg_file
 echo CVerifyCardSerialNumber="\"$VerifyCardSerialNumber\"" >> $cfg_file
@@ -13071,6 +13090,25 @@ then
 	else
 		GlobalTTYATInit=$(cat $tmp)
 	fi
+fi
+
+#
+# Set TTY interface initialiation command
+#
+if [ $((StartTTY)) -ne 0 ]
+then
+	while
+		$dialog --clear --title "Additional TTY devices" --backtitle "$backtitle" \
+			--inputbox "Please enter the number of additional TTY devices if required"  \
+			10 70 ${AdditionalTTYs} 2>$tmp
+		if [ $(($?)) -ne 0 ]
+		then
+			AdditionalTTYs=""
+		else
+			AdditionalTTYs="$(cat $tmp)"
+		fi
+		! [[ $AdditionalTTYs =~ ^[0-9]*$ ]]
+	do true; done
 fi
 
 #
