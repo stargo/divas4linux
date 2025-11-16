@@ -38,7 +38,7 @@ kernel: $(KDIR)/.config config.h
 	@make -C $(KDIR) M=`pwd`/kernel modules
 	@echo
 
-divactrl/divactrl:
+divactrl/divactrl: config.h
 	@echo
 	@echo "Build divactrl utility ..."
 	@(	\
@@ -54,19 +54,19 @@ divactrl/divactrl:
 	  rm -rf ./dlinux;		\
 	)
 
-dialog:
+dialog: config.h
 	@echo "Building dialog utility ..."
 	@echo
 	@make -C dialog
 	@echo
 
-divastrace:
+divastrace: config.h
 	@echo "Building divastrace utilities ..."
 	@echo
 	@make -C divastrace
 	@echo
 
-tools/ttydsctl:
+tools/ttydsctl: config.h
 	@echo "Building dialog utility ..."
 	@echo
 	@make -C tools ttydsctl
@@ -108,11 +108,30 @@ install: all
 	@echo "Installing firmware to $(DESTDIR)$(EICONDIR) ..."
 	@install -m 0644 firmware/* $(DESTDIR)$(EICONDIR)/.
 	@echo "Installing scripts to $(DESTDIR)$(EICONDIR) ..."
-	@if [ `id -u` -eq 0 ]; then chown 0:0 scripts/*; fi
-	@cp -p scripts/* $(DESTDIR)$(EICONDIR)/.
+	@install -m 0644 scripts/chancapi.awk $(DESTDIR)$(EICONDIR)/.
+	@install -m 0755 scripts/Config $(DESTDIR)$(EICONDIR)/.
+	@install -m 0755 scripts/Config.dlg $(DESTDIR)$(EICONDIR)/.
+	@install -m 0755 scripts/config.xml $(DESTDIR)$(EICONDIR)/.
+	@install -m 0755 scripts/diva.helper.rc $(DESTDIR)$(EICONDIR)/.
+	@install -m 0644 scripts/diva.instance.awk $(DESTDIR)$(EICONDIR)/.
+	@install -m 0644 scripts/diva.ip_list.awk $(DESTDIR)$(EICONDIR)/.
+	@install -m 0755 scripts/divaload $(DESTDIR)$(EICONDIR)/.
+	@install -m 0755 scripts/divalog $(DESTDIR)$(EICONDIR)/.
+	@install -m 0644 scripts/diva.response.awk $(DESTDIR)$(EICONDIR)/.
+	@install -m 0755 scripts/divas_status $(DESTDIR)$(EICONDIR)/.
+	@install -m 0755 scripts/divas_stop.rc $(DESTDIR)$(EICONDIR)/.
+	@install -m 0755 scripts/divas_sys_info.sh $(DESTDIR)$(EICONDIR)/.
+	@install -m 0755 scripts/divas_usermode_helper $(DESTDIR)$(EICONDIR)/.
+	@install -m 0644 scripts/diva.trace.awk $(DESTDIR)$(EICONDIR)/.
+	@install -m 0644 scripts/diva.variables.awk $(DESTDIR)$(EICONDIR)/.
+	@install -m 0644 scripts/help.txt $(DESTDIR)$(EICONDIR)/.
+	@install -m 0755 scripts/mantool $(DESTDIR)$(EICONDIR)/.
+	@install -m 0755 scripts/mlog $(DESTDIR)$(EICONDIR)/.
+	@install -m 0755 scripts/Support $(DESTDIR)$(EICONDIR)/.
+	@install -m 0755 scripts/Trace $(DESTDIR)$(EICONDIR)/.
+	@install -m 0755 scripts/xlog $(DESTDIR)$(EICONDIR)/.
 	@echo "Installing dialog to $(DESTDIR)$(EICONDIR) ..."
-	@if [ `id -u` -eq 0 ]; then chown 0:0 dialog/dialog; fi
-	@cp -p dialog/dialog $(DESTDIR)$(EICONDIR)/.
+	@install -m 0755 dialog/dialog $(DESTDIR)$(EICONDIR)/.
 	@echo "Installing diva modules to $(DESTDIR)$(EICONDIR) ..."
 	@install -m 0644 kernel/*.ko $(DESTDIR)$(EICONDIR)/.
 	@install -m 0644 tty_module/*.ko $(DESTDIR)$(EICONDIR)/.
