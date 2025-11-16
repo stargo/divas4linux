@@ -52,7 +52,7 @@ all: libdialog.a dialog
 libdialog.a: $(OBJS)
 	ar rcs libdialog.a $(OBJS)
 
-dialog: dialog.o
+dialog: dialog.o libdialog.a
 
 clean:
 	rm -f core *.o *~ dialog .depend libdialog.a
