@@ -12965,41 +12965,11 @@ then
 	fi
 	height=$((height+1))
 fi
-if [ "${hw_adapters}" != "" ]
-then
-	msg="$msg \"S\" \" - SIP-PSTN gateway (SIPcontrol)\""
-	if [ $((StartDivaSIPcontrol)) -ne 0 ]
-	then
-		msg="$msg on"
-	else
-		msg="$msg off"
-	fi
-	height=$((height+1))
-fi
 
-if [ $((max_softip_adapters)) -gt 0 ]
-then
-	msg="$msg \"I\" \" - SIP enabled CAPI (softIP 2.x)\""
-	if [ $((StartDivaSoftIP)) -ne 0 ]
-	then
-		msg="$msg on"
-	else
-		msg="$msg off"
-	fi
-	height=$((height+1))
-fi
-if [ $((ss7_found)) -eq 1 ]
-then
-	msg="$msg \"7\" \" - ITU-T SS7 support (softSS7 1.5)\""
-else
-	msg="$msg \"7\" \" - DSI SS7 for Diva\""
-fi
-if [ $((StartDivaSS7)) -ne 0 -a "${SS7_type}" = "normal" ]
-then
-  msg="$msg on"
-else
-  msg="$msg off"
-fi
+StartDivaSIPcontrol=0
+StartDivaSoftIP=0
+StartDivaSS7=0
+
 height=$((height+1))
 
 set_help_id dhlp_base_system_applications
