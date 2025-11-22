@@ -103,7 +103,7 @@ cards:
 ## AT command set
 
 The virtual ports /dev/ttyds* support the AT command set. For a list of
-supported commands, take a look at AT.txt
+supported commands, take a look at [AT.txt](AT.txt)
 
 ## License
 
