@@ -10,6 +10,64 @@ Dialogic based on the work by Cytronics & Melware.
 Support for newer kernels (tested up to 6.12 (Debian trixie)) has
 been added.
 
+## Supported hardware
+
+The following cards should be supported by this driver:
+
+* BRI:
+  * Diva BRI-CTI PCI v2
+  * Diva BRI-2FX PCI v2
+  * Diva BRI-2M PCI v1 (tested)
+  * Diva BRI-2M PCI v2 (tested)
+  * Diva BRI-2M PCIe v2 (tested)
+  * Diva 4BRI-8M PCI v1
+  * Diva 4BRI-8M PCI v2 (tested)
+  * Diva 4BRI-8M PCIe v2 (tested)
+  * Diva V-4BRI-8M PCI v1
+  * Diva UM-BRI-2 PCI v2
+  * Diva UM-BRI-2 PCIe v2
+  * Diva UM-4BRI-8 PCI v2
+  * Diva UM-4BRI-8 PCIe v2
+* PRI:
+  * Diva PRI/E1/T1-CTI PCI v3
+  * Diva PRI/E1/T1-CTI PCIe v3
+  * Diva PRI/E1/T1-8 PCI v3
+  * Diva PRI/T1-24 PCI v3
+  * Diva PRI/T1-24 PCIe v3
+  * Diva PRI/E1-30 PCI v1
+  * Diva PRI/E1-30 PCI v2
+  * Diva PRI/E1-30 PCI v3 (tested)
+  * Diva PRI/E1-30 PCIe v3 (tested)
+  * Diva UM-PRI/T1-24 PCI v3
+  * Diva UM-PRI/T1-24 PCIe v3
+  * Diva UM-PRI/E1-30 PCI v3
+  * Diva UM-PRI/E1-30 PCIe v3
+  * Diva V-PRI/T1-24 PCI v3
+  * Diva V-PRI/T1-24 PCIe v3
+  * Diva V-PRI/E1-30 PCI v2
+  * Diva V-PRI/E1-30 PCI v3
+  * Diva V-PRI/E1-30 PCIe v3
+  * Diva V-2PRI/T1-48 PCI v1
+  * Diva V-2PRI/E1-60 PCI v1
+  * Diva V-4PRI/T1-96 PCI v1
+  * Diva V-PRI/E1-120 PCI v1
+  * Diva V-1PRI/E1/T1-30 PCIe HS v1
+  * Diva V-2PRI/E1/T1-60 PCIe HS v1
+  * Diva V-4PRI/E1/T1-120 PCIe HS v1
+  * Diva V-4PRI/E1/T1-120 PCIe FS v1
+  * Diva V-8PRI/E1/T1-240 PCIe FS v1
+* Analog:
+  * Diva Analog-2 PCI v1
+  * Diva Analog-2 PCIe v1
+  * Diva Analog-4 PCI v1
+  * Diva Analog-4 PCIe v1
+  * Diva Analog-8 PCI v1
+  * Diva Analog-8 PCIe v1 (tested)
+  * Diva UM-Analog-4 PCI v1
+  * Diva UM-Analog-4 PCIe v1
+  * Diva UM-Analog-8 PCI v1
+  * Diva UM-Analog-8 PCIe v1
+
 ## Installation
 
 To compile the kernel modules and the divactrl utility just type
