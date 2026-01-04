@@ -149,7 +149,7 @@ To install it, use
 udev rules are provided for managing the permissions of the
 tty devices created by Divatty. To install them, use
 
-    sudo cp divas4linux.rules /etc/udes/rules.d/
+    sudo cp divas4linux.rules /etc/udev/rules.d/
 
 ## Card status
 
@@ -157,6 +157,9 @@ A tool is provided to show the current status of the installed DIVA Sever
 cards:
 
     /usr/lib/divas/divas_status
+
+You might need to install the perl module `Text::Table` for this to work,
+on debian it is packaged as `libtext-table-perl`.
 
 ## AT command set
 
