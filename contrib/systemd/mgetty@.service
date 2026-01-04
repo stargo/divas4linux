@@ -1,0 +1,16 @@
+[Unit]
+Description=mgetty on %I
+Documentation=man:mgetty(8)
+Requires=systemd-udev-settle.service
+After=systemd-udev-settle.service divas4linux.service
+ConditionPathExists=/dev/%i
+
+[Service]
+Type=simple
+ExecStart=-/usr/sbin/mgetty /dev/%i
+Restart=always
+RestartSec=0
+PIDFile=/var/run/mgetty.pid.%i
+
+[Install]
+WantedBy=multi-user.target
