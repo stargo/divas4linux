@@ -1,0 +1,18 @@
+lock
+debug
+modem
+noipx
+asyncmap 0
+crtscts
+hide-password
+lcp-echo-interval 30
+lcp-echo-failure 10
+
+noauth
+
+user ras
+ms-dns 8.8.8.8
+nodefaultroute
+netmask 255.255.255.255
+multilink
+noipdefault
