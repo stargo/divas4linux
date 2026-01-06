@@ -5,10 +5,11 @@ Copyright 2006-2013 Cytronics & Melware (www.melware.net)
 ## About
 
 This package is a repackaging of the source-level-RPM packages by
-Dialogic based on the work by Cytronics & Melware.
+Dialogic based on the work by Cytronics & Melware. It's currently
+based on version 9.6LINSU8 (9.6-124-26) from Sangoma.
 
-Support for newer kernels (tested up to 6.12 (Debian trixie)) has
-been added.
+Support for newer kernels (tested up to 6.12 (Debian trixie), compiles
+up to at least 6.17) has been added.
 
 ## Supported hardware
 

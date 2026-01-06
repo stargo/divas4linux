@@ -1095,7 +1095,11 @@ static void diva_os_timer_irq_wrapper (unsigned long data)
 #else
 static void diva_os_timer_irq_wrapper (struct timer_list *t)
 {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 16, 0)
+	diva_timer_irq_t *p_irq = timer_container_of(p_irq, t, t);
+#else
 	diva_timer_irq_t *p_irq = from_timer(p_irq, t, t);
+#endif
 #endif
 	if (atomic_read (&p_irq->stop) == 0) {
 		diva_entity_link_t* link;
@@ -2245,7 +2249,11 @@ out:
 	}
 	if (destroy_t_lock != 0) {
 		atomic_set (&diva_timer_irq.stop, 1);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 15, 0)
+		timer_delete_sync (&diva_timer_irq.t);
+#else
 		del_timer_sync (&diva_timer_irq.t);
+#endif
 		diva_os_destroy_spin_lock (&diva_timer_irq.irq_lock, "init");
 	}
 
@@ -2272,7 +2280,11 @@ static void DIVA_EXIT_FUNCTION divas_exit(void)
 	diva_os_destroy_spin_lock (&diva_os_usermode_proc.request_lock, "init");
 	if (use_timer_irq != 0) {
 		atomic_set (&diva_timer_irq.stop, 1);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 15, 0)
+		timer_delete_sync (&diva_timer_irq.t);
+#else
 		del_timer_sync (&diva_timer_irq.t);
+#endif
 		diva_os_destroy_spin_lock (&diva_timer_irq.irq_lock, "init");
 	}
 

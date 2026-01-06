@@ -247,10 +247,6 @@ static char	*diva_tty_drvname = "Divatty";
 
 #endif /* } */
 
-#if defined(MODULE)
-#define eicon_tty_isdn_init init_module
-#endif
-
 #define FIRST_MAJOR      (TTY_MAJOR+4)
 #define MINORS_PER_MAJOR_DEFAULT 255
 int minors_per_major = MINORS_PER_MAJOR_DEFAULT;
@@ -2195,7 +2191,7 @@ int eicon_tty_isdn_init(void) {
 
 #ifdef MODULE
 
-void cleanup_module (void) {
+void eicon_tty_isdn_cleanup (void) {
 	ISDN_ADAPTER *A;
 	ISDN_PORT_DESC	*D;
 
@@ -2967,3 +2963,6 @@ void diva_os_leave_spin_lock (void** lock,
 }
 
 #include "syslnx.c"
+
+module_init(eicon_tty_isdn_init);
+module_exit(eicon_tty_isdn_cleanup);

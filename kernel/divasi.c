@@ -611,7 +611,11 @@ void diva_um_timer_function(unsigned long data)
 #else
 void diva_um_timer_function(struct timer_list *t)
 {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 16, 0)
+	diva_um_idi_os_context_t *p_os = timer_container_of(p_os , t, diva_timer_id);
+#else
 	diva_um_idi_os_context_t *p_os = from_timer(p_os , t, diva_timer_id);
+#endif
 #endif
 
 	p_os->aborted = 1;
@@ -731,6 +735,10 @@ void diva_um_idi_stop_wdog(void *entity)
 	    ((p_os =
 	      (diva_um_idi_os_context_t *)
 	      diva_um_id_get_os_context(entity)))) {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 15, 0)
+		timer_delete(&p_os->diva_timer_id);
+#else
 		del_timer(&p_os->diva_timer_id);
+#endif
 	}
 }

@@ -345,7 +345,11 @@ void diva_shutdown_main_dpc (void) {
 	if (divas_dpc_pid != (-1)) {
 		while (atomic_read(&divas_timer_running)) {
 			atomic_set(&divas_timer_running, 0);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 15, 0)
+			timer_delete (&diva_timer_id);
+#else
 			del_timer (&diva_timer_id);
+#endif
 		}
 		atomic_set(&divas_dpc_thread_running, 0);
   	up(&divas_dpc_sem);
@@ -354,7 +358,11 @@ void diva_shutdown_main_dpc (void) {
 #else /* } { */
 	while (atomic_read(&divas_timer_running)) {
 		atomic_set(&divas_timer_running, 0);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 15, 0)
+		timer_delete (&diva_timer_id);
+#else
 		del_timer (&diva_timer_id);
+#endif
 	}
 
 	atomic_set(&divas_dpc_thread_running, 0);
