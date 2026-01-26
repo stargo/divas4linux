@@ -18,17 +18,17 @@ The following cards should be supported by this driver:
 * BRI:
   * Diva BRI-CTI PCI v2
   * Diva BRI-2FX PCI v2
-  * Diva BRI-2M PCI v1 (tested)
-  * Diva BRI-2M PCI v2 (tested)
-  * Diva BRI-2M PCIe v2 (tested)
+  * Diva BRI-2M PCI v1 (tested, 800-201-01)
+  * Diva BRI-2M PCI v2 (tested, 803-007-01, 800-683-01)
+  * Diva BRI-2M PCIe v2 (tested, 803-040-01)
   * Diva 4BRI-8M PCI v1
-  * Diva 4BRI-8M PCI v2 (tested)
-  * Diva 4BRI-8M PCIe v2 (tested)
-  * Diva V-4BRI-8M PCI v1
-  * Diva UM-BRI-2 PCI v2
-  * Diva UM-BRI-2 PCIe v2
-  * Diva UM-4BRI-8 PCI v2
-  * Diva UM-4BRI-8 PCIe v2
+  * Diva 4BRI-8M PCI v2 (tested, 803-008-03)
+  * Diva 4BRI-8M PCIe v2 (tested, 803-031-01, 50-0447-01E)
+  * Diva V-4BRI-8M PCI v1[^1]
+  * Diva UM-BRI-2 PCI v2[^2]
+  * Diva UM-BRI-2 PCIe v2[^2] (tested, 813-087-01)
+  * Diva UM-4BRI-8 PCI v2[^2]
+  * Diva UM-4BRI-8 PCIe v2[^2]
 * PRI:
   * Diva PRI/E1/T1-CTI PCI v3
   * Diva PRI/E1/T1-CTI PCIe v3
@@ -37,37 +37,40 @@ The following cards should be supported by this driver:
   * Diva PRI/T1-24 PCIe v3
   * Diva PRI/E1-30 PCI v1
   * Diva PRI/E1-30 PCI v2
-  * Diva PRI/E1-30 PCI v3 (tested)
-  * Diva PRI/E1-30 PCIe v3 (tested)
-  * Diva UM-PRI/T1-24 PCI v3
-  * Diva UM-PRI/T1-24 PCIe v3
-  * Diva UM-PRI/E1-30 PCI v3
-  * Diva UM-PRI/E1-30 PCIe v3
-  * Diva V-PRI/T1-24 PCI v3
-  * Diva V-PRI/T1-24 PCIe v3
-  * Diva V-PRI/E1-30 PCI v2
-  * Diva V-PRI/E1-30 PCI v3
-  * Diva V-PRI/E1-30 PCIe v3
-  * Diva V-2PRI/T1-48 PCI v1
-  * Diva V-2PRI/E1-60 PCI v1
-  * Diva V-4PRI/T1-96 PCI v1
-  * Diva V-PRI/E1-120 PCI v1
-  * Diva V-1PRI/E1/T1-30 PCIe HS v1
-  * Diva V-2PRI/E1/T1-60 PCIe HS v1
-  * Diva V-4PRI/E1/T1-120 PCIe HS v1
-  * Diva V-4PRI/E1/T1-120 PCIe FS v1
-  * Diva V-8PRI/E1/T1-240 PCIe FS v1
+  * Diva PRI/E1-30 PCI v3 (tested, 800-810-01)
+  * Diva PRI/E1-30 PCIe v3 (tested, 803-023-01)
+  * Diva UM-PRI/T1-24 PCI v3[^2]
+  * Diva UM-PRI/T1-24 PCIe v3[^2]
+  * Diva UM-PRI/E1-30 PCI v3[^2]
+  * Diva UM-PRI/E1-30 PCIe v3[^2]
+  * Diva V-PRI/T1-24 PCI v3[^1]
+  * Diva V-PRI/T1-24 PCIe v3[^1]
+  * Diva V-PRI/E1-30 PCI v2[^1]
+  * Diva V-PRI/E1-30 PCI v3[^1]
+  * Diva V-PRI/E1-30 PCIe v3[^1] (tested, 813-061-01)
+  * Diva V-2PRI/T1-48 PCI v1[^1]
+  * Diva V-2PRI/E1-60 PCI v1[^1]
+  * Diva V-4PRI/T1-96 PCI v1[^1]
+  * Diva V-PRI/E1-120 PCI v1[^1]
+  * Diva V-1PRI/E1/T1-30 PCIe HS v1[^1]
+  * Diva V-2PRI/E1/T1-60 PCIe HS v1[^1]
+  * Diva V-4PRI/E1/T1-120 PCIe HS v1[^1]
+  * Diva V-4PRI/E1/T1-120 PCIe FS v1[^1]
+  * Diva V-8PRI/E1/T1-240 PCIe FS v1[^1]
 * Analog:
   * Diva Analog-2 PCI v1
   * Diva Analog-2 PCIe v1
   * Diva Analog-4 PCI v1
   * Diva Analog-4 PCIe v1
   * Diva Analog-8 PCI v1
-  * Diva Analog-8 PCIe v1 (tested)
-  * Diva UM-Analog-4 PCI v1
-  * Diva UM-Analog-4 PCIe v1
-  * Diva UM-Analog-8 PCI v1
-  * Diva UM-Analog-8 PCIe v1
+  * Diva Analog-8 PCIe v1 (tested, 50-0424-01)
+  * Diva UM-Analog-4 PCI v1[^2]
+  * Diva UM-Analog-4 PCIe v1[^2]
+  * Diva UM-Analog-8 PCI v1[^2]
+  * Diva UM-Analog-8 PCIe v1[^2]
+
+[^1]: Voice only card, no support for modem and fax
+[^2]: Unified messaging card, full modem support, support for fax only on half of the available channels
 
 ## Installation
 
