@@ -16,8 +16,8 @@ up to at least 6.17) has been added.
 The following cards should be supported by this driver:
 
 * BRI:
-  * Diva BRI-CTI PCI v2
-  * Diva BRI-2FX PCI v2
+  * Diva BRI-CTI PCI v2[^3]
+  * Diva BRI-2FX PCI v2[^3]
   * Diva BRI-2M PCI v1 (tested, 800-201-01)
   * Diva BRI-2M PCI v2 (tested, 803-007-01, 800-683-01)
   * Diva BRI-2M PCIe v2 (tested, 803-040-01)
@@ -30,8 +30,8 @@ The following cards should be supported by this driver:
   * Diva UM-4BRI-8 PCI v2[^2]
   * Diva UM-4BRI-8 PCIe v2[^2]
 * PRI:
-  * Diva PRI/E1/T1-CTI PCI v3
-  * Diva PRI/E1/T1-CTI PCIe v3
+  * Diva PRI/E1/T1-CTI PCI v3[^3]
+  * Diva PRI/E1/T1-CTI PCIe v3[^3]
   * Diva PRI/E1/T1-8 PCI v3
   * Diva PRI/T1-24 PCI v3
   * Diva PRI/T1-24 PCIe v3
@@ -71,6 +71,7 @@ The following cards should be supported by this driver:
 
 [^1]: Voice only card, no support for modem and fax
 [^2]: Unified messaging card, full modem support, support for fax only on half of the available channels
+[^3]: DSP-less card with no support for modem, fax and voice
 
 ## Installation
 
