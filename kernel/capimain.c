@@ -55,6 +55,8 @@
 #include <linux/devfs_fs_kernel.h>
 #endif
 #include "local_capicmd.h"
+#else
+#include <linux/seq_file.h>
 #endif
 
 #if defined(DIVA_EICON_CAPI)
@@ -178,42 +180,17 @@ void diva_os_free_message_buffer(diva_os_message_buffer_s * dmb)
 /*
  * proc function for controller info
  */
-int proc_cnt=0;
-#if LINUX_VERSION_CODE > KERNEL_VERSION(3,9,0)
-int eof[1];
-#define PROC_RETURN(x,y) { \
-   if (!x) { \
-       x=1; \
-       return(y); \
-   } else { \
-       x=0; \
-       return(0); \
-   } \
-}
-static int diva_ctl_read_proc(struct file *filp, char *page, size_t count, loff_t *offp)
-#else
-#define PROC_RETURN(x,y) return(y)
-static int diva_ctl_read_proc(char *page, char **start, off_t off,
-			      int count, int *eof, struct capi_ctr *ctrl)
-#endif
+static int diva_ctl_proc_show(struct seq_file *m, void *v)
 {
-#if LINUX_VERSION_CODE > KERNEL_VERSION(3,9,0)
-        loff_t off = *offp;
-#endif
+	struct capi_ctr *ctrl = m->private;
 	diva_card *card = (diva_card *) ctrl->driverdata;
-	int len = 0;
 
-	len += sprintf(page + len, "%s\n", ctrl->name);
-	len += sprintf(page + len, "Serial No. : %s\n", ctrl->serial);
-	len += sprintf(page + len, "Id         : %d\n", card->Id);
-	len += sprintf(page + len, "Channels   : %d\n", card->d.channels);
+	seq_printf(m, "%s\n", ctrl->name);
+	seq_printf(m, "Serial No. : %s\n", ctrl->serial);
+	seq_printf(m, "Id         : %d\n", card->Id);
+	seq_printf(m, "Channels   : %d\n", card->d.channels);
 
-	if (off + count >= len)
-		*eof = 1;
-	if (len < off)
-		return 0;
-	*start = page + off;
-	PROC_RETURN(proc_cnt,((count < len-off) ? count : len-off));
+	return 0;
 }
 
 /*
@@ -224,7 +201,7 @@ void diva_os_set_controller_struct(struct capi_ctr *ctrl)
 	ctrl->driver_name = DRIVERLNAME;
 	ctrl->load_firmware = 0;
 	ctrl->reset_ctr = 0;
-	ctrl->ctr_read_proc = diva_ctl_read_proc;
+	ctrl->proc_show = diva_ctl_proc_show;
 	ctrl->owner = THIS_MODULE;
 }
 #endif
