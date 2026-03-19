@@ -21,7 +21,7 @@ The following cards should be supported by this driver:
   * Diva BRI-2M PCI v1 (tested, 800-201-01)
   * Diva BRI-2M PCI v2 (tested, 803-007-01, 800-683-01)
   * Diva BRI-2M PCIe v2 (tested, 803-040-01)
-  * Diva 4BRI-8M PCI v1
+  * Diva 4BRI-8M PCI v1 (tested, 800-334-02)
   * Diva 4BRI-8M PCI v2 (tested, 803-008-03)
   * Diva 4BRI-8M PCIe v2 (tested, 803-031-01, 50-0447-01E)
   * Diva V-4BRI-8M PCI v1[^1]
