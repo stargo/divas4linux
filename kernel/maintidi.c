@@ -2587,10 +2587,10 @@ static int diva_strace_read_uint (diva_man_var_header_t* pVar, dword* var) {
 	Read zero terminated ASCII string
 	*/
 static int diva_strace_read_asz  (diva_man_var_header_t* pVar, char* var) {
-	char* ptr = (char*)&pVar->path_length;
+	char* ptr = (char*)&pVar->data[0];
 	int length;
 
-	ptr += (pVar->path_length + 1);
+	ptr += pVar->path_length;
 
 	if (!(length = pVar->value_length)) {
 		length = strlen (ptr);
