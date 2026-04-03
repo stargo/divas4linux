@@ -10746,7 +10746,7 @@ set_card_defaults()
 																				else
 																					Card_PROTOCOL_SUFFIX[$current_card]="qm"
 																				fi
-																				Card_DSP_IMAGE[$current_card]="dspdload.bin.old"
+																				Card_DSP_IMAGE[$current_card]="dspdload.bin"
 																				Card_FPGA_IMAGE[$current_card]="ds4bri.bit"
 																				;;
 				    '52')
