@@ -302,7 +302,11 @@ typedef struct _diva_os_adapter_irq_info {
 int diva_os_register_irq (void* context, unsigned int irq, const char* name, int msi);
 void diva_os_remove_irq (void* context, unsigned int irq);
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6,18,0)
 #define diva_os_in_irq() in_irq()
+#else
+#define diva_os_in_irq() in_hardirq()
+#endif
 #define diva_os_spinlocks_available() (irqs_disabled() == 0)
 
 /*
