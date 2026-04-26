@@ -453,6 +453,11 @@ static void diva_timer_function (struct timer_list *t) {
 	unsigned long flags;
 
 	if (!atomic_read(&divas_timer_running)) {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,14,0)
+		mod_timer (&diva_timer_id, jiffies + diva_to);
+#else
+		mod_timer (t, jiffies + diva_to);
+#endif
 		return;
 	}
 
@@ -473,7 +478,6 @@ static void diva_timer_function (struct timer_list *t) {
 #else
 	mod_timer (t, jiffies + diva_to);
 #endif
-	atomic_set(&divas_timer_running, 1);
 }
 
 static void diva_process_timer_ticks (void) {
