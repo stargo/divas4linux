@@ -91,7 +91,7 @@ static spinlock_t diva_dpc_q_lock;
 extern void diva_tty_process_write_dpc (void);
 extern int Channel_Count;
 extern atomic_t dpc_init_complete;
-dword diva_tty_dpc_scheduler_protection_channel_count = 120;
+dword diva_tty_dpc_scheduler_protection_channel_count = 480;
 
 /*
 	LOCALS
