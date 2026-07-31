@@ -82,15 +82,17 @@ config.h:
 	  	echo ;	\
 		if ! grep -q "CONFIG_ISDN_CAPI=" $(KDIR)/.config >/dev/null 2>&1; then \
 			echo "This kernel doesn't seem to have CAPI support."; \
-			echo "The only way is to choose Diva optimized CAPI."; \
+			echo "The only way is to use Diva optimized CAPI."; \
 	  		echo ;	\
+			optimized="y"; \
+		else \
+			echo "Do you want to use the Diva optimized CAPI interface?";	\
+			echo " Note: if you say 'y' here, the common kernelcapi is not used";	\
+			echo " and therefore other CAPI cards than Diva are not usable.";	\
+			echo " If you use Diva cards only, you can say 'y'.";	\
+			echo "Your selection (y/n)[y]: \c";	\
+			read optimized;	\
 		fi; \
-	  	echo "Do you want to use the Diva optimized CAPI interface?";	\
-	  	echo " Note: if you say 'y' here, the common kernelcapi is not used";	\
-	  	echo " and therefore other CAPI cards than Diva are not usable.";	\
-		echo " If you use Diva cards only, you can say 'y'.";	\
-		echo "Your selection (y/n)[y]: \c";	\
-		read optimized;	\
 		if [ "$$optimized" = "n" ]; then	\
 			echo "No, using common kernelcapi drivers.";	\
 			cat kernel/platform.h | sed "s,.*DIVA_EICON_CAPI.*,#undef DIVA_EICON_CAPI,g" > config.h;	\

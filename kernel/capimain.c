@@ -38,9 +38,9 @@
 #endif
 #include <linux/skbuff.h>
 
+#include "platform.h"
 #include "os_capi.h"
 
-#include "platform.h"
 #include "di_defs.h"
 #include "capi20.h"
 #include "dlist.h"
