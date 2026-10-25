@@ -1933,7 +1933,7 @@ static diva_man_var_header_t* find_var (diva_man_var_header_t* pVar,
 
 	if ((nr>=0) && (c = strchr(name_str, '%'))) {
 	  pos = (int)(c-name_str);
-	  strncpy(name, name_str, c-name_str);
+	  strscpy(name, name_str, (c-name_str)+1);
 	  sprintf((char *)(name+pos), "%d%s", nr+1, (char *) (c+1));
 	} else {
 	  strcpy(name, name_str);

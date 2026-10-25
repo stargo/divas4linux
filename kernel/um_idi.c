@@ -273,7 +273,7 @@ diva_user_mode_idi_adapter_features (diva_um_idi_adapter_t* a,
     sync_req.GetName.Req = 0;
     sync_req.GetName.Rc = IDI_SYNC_REQ_GET_NAME;
     (*(a->d.request))((ENTITY *)&sync_req);
-    strncpy(features->name, sync_req.GetName.name, sizeof(features->name)-1);
+    strscpy(features->name, sync_req.GetName.name, sizeof(features->name));
 
     sync_req.GetName.Req = 0;
     sync_req.GetName.Rc = IDI_SYNC_REQ_GET_CARDTYPE;
