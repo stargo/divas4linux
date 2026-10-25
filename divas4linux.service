@@ -1,10 +1,10 @@
 [Unit]
 Description=Divas4Linux
 After=network.target
+ConditionPathExists=/usr/lib/divas/divas_cfg.rc
 
 [Service]
 Type=oneshot
-ConditionPathExists=/usr/lib/divas/divas_cfg.rc
 ExecStart=/usr/lib/divas/divas_cfg.rc
 RemainAfterExit=yes
 
